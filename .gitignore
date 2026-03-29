@@ -1,0 +1,27 @@
+# Binaries and build artifacts
+bin/
+/manager
+/storage-initializer
+.modelpack/
+.dagger/
+.cache/
+.tmp/
+.output/
+.bin/
+.dist/
+
+# Dependencies
+node_modules/
+vendor/
+
+# Test and coverage
+*.log
+*.out
+test/k6/results/*.json
+
+# Local secrets & env
+.env
+.env.local
+
+# macOS
+.DS_Store

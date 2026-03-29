@@ -1,0 +1,78 @@
+---
+# BAAI/bge-large-en-v1.5 — sentence embeddings via infinity runtime (CPU, no GPU required).
+#
+# Prerequisites:
+#   kubectl create namespace ckodex-inference
+#
+# Apply:
+#   kubectl apply -f config/samples/embeddinginferenceservice_bge.yaml
+#
+# Verify:
+#   kubectl get embsvc -n ckodex-inference
+#
+# Test:
+#   kubectl port-forward svc/bge-large-en-v1.5 7997:7997 -n ckodex-inference
+#   curl http://localhost:7997/v1/embeddings \
+#     -H "Content-Type: application/json" \
+#     -d '{"model":"BAAI/bge-large-en-v1.5","input":"The quick brown fox"}'
+apiVersion: serving.ckodex.com/v1alpha2
+kind: EmbeddingInferenceService
+metadata:
+  name: bge-large-en-v1.5
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+spec:
+  model:
+    name: bge-large-en-v1.5
+    uri: hf://BAAI/bge-large-en-v1.5
+
+  # infinity is the default runtime for sentence-transformers-compatible models.
+  runtime: infinity
+  # runtimeImage: omitted — uses michaelfeil/infinity-emb:latest-cpu
+
+  batchSize: 32
+  replicas: 1
+
+  template:
+    spec:
+      resources:
+        requests:
+          cpu: "1"
+          memory: 2Gi
+        limits:
+          cpu: "2"
+          memory: 4Gi
+
+---
+# BAAI/bge-reranker-v2-m3 — cross-encoder reranker via text-embeddings-inference runtime.
+# TEI is optimised for BERT-family models; use it for rerankers and bi-encoders.
+apiVersion: serving.ckodex.com/v1alpha2
+kind: EmbeddingInferenceService
+metadata:
+  name: bge-reranker-v2-m3
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+spec:
+  model:
+    name: bge-reranker-v2-m3
+    uri: hf://BAAI/bge-reranker-v2-m3
+    storage:
+      secretRef:
+        name: hf-credentials
+
+  runtime: text-embeddings-inference
+  # runtimeImage: omitted — uses ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+
+  replicas: 1
+
+  template:
+    spec:
+      resources:
+        requests:
+          cpu: "1"
+          memory: 2Gi
+        limits:
+          cpu: "2"
+          memory: 4Gi

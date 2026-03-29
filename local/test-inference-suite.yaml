@@ -1,0 +1,66 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LocalModelCache
+metadata:
+  name: llama3-8b-swfs
+  namespace: default
+spec:
+  sourceModelUri: s3://models/llama3-8b.bin
+  modelSize: "10Gi"
+  env:
+  - name: AWS_ACCESS_KEY_ID
+    value: "minioadmin"
+  - name: AWS_SECRET_ACCESS_KEY
+    value: "minioadmin"
+  - name: AWS_REGION
+    value: "canada-east-1"
+  - name: AWS_ENDPOINT_URL_S3
+    value: "http://seaweedfs.storage:8333"
+  - name: AWS_ENDPOINT_URL
+    value: "http://seaweedfs.storage:8333"
+  - name: AWS_USE_HTTPS
+    value: "false"
+  nodeGroup:
+    labelSelector:
+      matchLabels:
+        kubernetes.io/hostname: kserve-017-control-plane
+---
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: llama3-8b-test
+  namespace: default
+spec:
+  model:
+    name: llama3-test
+    uri: s3://models/llama3-8b.bin
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:latest
+        args:
+        - "--model"
+        - "/mnt/models/llama3-8b.bin"
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            cpu: "1"
+            memory: "2Gi"
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+  scaling:
+    minReplicas: 1
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute:
+        hostnames:
+        - llama3-test.local
+    scheduler:
+      pool:
+        selector:
+          app.kubernetes.io/instance: llama3-8b-test

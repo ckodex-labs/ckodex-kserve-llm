@@ -1,0 +1,27 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: ASRInferenceService
+metadata:
+  name: k6-asr-test
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+    test.ckodex.com/suite: k6
+spec:
+  model:
+    name: Systran/faster-whisper-tiny
+    uri: hf://Systran/faster-whisper-tiny
+  runtime: faster-whisper
+  languages:
+  - en
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: asr-server
+        resources:
+          requests:
+            cpu: "1"
+            memory: 1Gi
+          limits:
+            cpu: "2"
+            memory: 2Gi

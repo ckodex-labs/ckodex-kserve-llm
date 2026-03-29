@@ -1,0 +1,166 @@
+{{- if .Values.certManager.enabled -}}
+---
+# cert-manager Certificate — provisions the TLS secret for the webhook server.
+# The cainjector sidecar (part of cert-manager) watches for the
+# cert-manager.io/inject-ca-from annotation on webhook configs and automatically
+# populates their caBundle fields whenever the CA certificate rotates.
+#
+# Prerequisites:
+#   1. cert-manager v1.14+ installed in the cluster
+#      kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+#   2. CKODEX_FEATURE_ENABLE_WEBHOOKS=true set in the operator Deployment env
+
+{{- if eq .Values.certManager.issuerRef.name "" }}
+# Self-signed ClusterIssuer — used as the root CA when no external issuer is provided.
+# For production, replace with a proper PKI issuer (Vault, AWS ACM-PCA, etc.).
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-selfsigned
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  selfSigned: {}
+---
+# Intermediate CA Certificate — issued by the self-signed root.
+# The webhook Certificate (below) is signed by this CA.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-ca
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  isCA: true
+  commonName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-ca
+  secretName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-ca
+  duration: 87600h   # 10 years
+  renewBefore: 8760h # 1 year
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-selfsigned
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# Issuer backed by the intermediate CA — signs the webhook leaf certificate.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-issuer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  ca:
+    secretName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-ca
+{{- end }}
+---
+# Webhook leaf certificate — rotated automatically by cert-manager.
+# Stored in the Secret referenced by the Deployment's cert volume mount.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-cert
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  secretName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-cert
+  duration: 8760h    # 1 year
+  renewBefore: 720h  # Renew 30 days before expiry
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  dnsNames:
+    - {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-service
+    - {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-service.{{ .Release.Namespace }}
+    - {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-service.{{ .Release.Namespace }}.svc
+    - {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-service.{{ .Release.Namespace }}.svc.cluster.local
+  issuerRef:
+    {{- if eq .Values.certManager.issuerRef.name "" }}
+    name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-issuer
+    kind: Issuer
+    {{- else }}
+    name: {{ .Values.certManager.issuerRef.name }}
+    kind: {{ .Values.certManager.issuerRef.kind }}
+    {{- end }}
+    group: cert-manager.io
+---
+# Webhook Service — exposes the webhook server port for the API server to call.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  selector:
+    control-plane: controller-manager
+  ports:
+    - name: webhook
+      port: 443
+      targetPort: {{ .Values.webhook.port }}
+      protocol: TCP
+---
+# MutatingWebhookConfiguration — injects defaults into LLMInferenceService CRs.
+# cert-manager cainjector injects the CA bundle automatically via the annotation.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-mutating-webhook
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-cert
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+webhooks:
+  - name: mllminferenceservice.kb.io
+    admissionReviewVersions: ["v1"]
+    clientConfig:
+      service:
+        name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-service
+        namespace: {{ .Release.Namespace }}
+        path: /mutate-serving-ckodex-com-v1alpha2-llminferenceservice
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["serving.ckodex.com"]
+        apiVersions: ["v1alpha2", "v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["llminferenceservices"]
+    sideEffects: None
+---
+# ValidatingWebhookConfiguration — validates LLMInferenceService CRs.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-validating-webhook
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-cert
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+webhooks:
+  - name: vllminferenceservice.kb.io
+    admissionReviewVersions: ["v1"]
+    clientConfig:
+      service:
+        name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-service
+        namespace: {{ .Release.Namespace }}
+        path: /validate-serving-ckodex-com-v1alpha2-llminferenceservice
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["serving.ckodex.com"]
+        apiVersions: ["v1alpha2", "v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["llminferenceservices"]
+    sideEffects: None
+{{- end }}

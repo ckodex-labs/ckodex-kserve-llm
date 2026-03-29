@@ -1,0 +1,103 @@
+---
+# Qwen2-VL-7B-Instruct — vision-language model via vLLM (requires GPU).
+#
+# Prerequisites:
+#   kubectl create namespace ckodex-inference
+#   kubectl create secret generic hf-credentials \
+#     --from-literal=HF_TOKEN=<your-token> \
+#     -n ckodex-inference
+#
+# Apply:
+#   kubectl apply -f config/samples/multimodalinferenceservice_qwen_vl.yaml
+#
+# Verify:
+#   kubectl get mmsvc -n ckodex-inference
+#
+# Test (with port-forward):
+#   kubectl port-forward svc/qwen2-vl-7b 8000:8000 -n ckodex-inference
+#   curl http://localhost:8000/v1/chat/completions \
+#     -H "Content-Type: application/json" \
+#     -d '{
+#       "model": "Qwen/Qwen2-VL-7B-Instruct",
+#       "messages": [{
+#         "role": "user",
+#         "content": [
+#           {"type": "image_url", "image_url": {"url": "https://example.com/image.jpg"}},
+#           {"type": "text", "text": "Describe this image."}
+#         ]
+#       }]
+#     }'
+apiVersion: serving.ckodex.com/v1alpha2
+kind: MultimodalInferenceService
+metadata:
+  name: qwen2-vl-7b
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+spec:
+  model:
+    name: Qwen2-VL-7B-Instruct
+    uri: hf://Qwen/Qwen2-VL-7B-Instruct
+    storage:
+      secretRef:
+        name: hf-credentials
+
+  task: vision-language
+  runtime: vllm
+  # runtimeImage: omitted — uses vllm/vllm-openai:latest
+
+  # Allow up to 4 images in a single prompt (Qwen2-VL supports multi-image conversations).
+  maxImagesPerPrompt: 4
+
+  replicas: 1
+
+  template:
+    spec:
+      # GPU required for VLM inference — uncomment the appropriate block.
+      # nodeSelector:
+      #   nvidia.com/gpu.present: "true"
+      # tolerations:
+      # - key: "nvidia.com/gpu"
+      #   operator: Exists
+      #   effect: NoSchedule
+      resources:
+        requests:
+          cpu: "4"
+          memory: 20Gi
+          # nvidia.com/gpu: "1"
+        limits:
+          cpu: "8"
+          memory: 40Gi
+          # nvidia.com/gpu: "1"
+
+---
+# LLaVA-v1.6 — vision-language model via vLLM (CPU fallback for testing).
+# NOTE: LLaVA inference on CPU is very slow — use GPU for production workloads.
+apiVersion: serving.ckodex.com/v1alpha2
+kind: MultimodalInferenceService
+metadata:
+  name: llava-v1.6-mistral-7b
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+spec:
+  model:
+    name: llava-v1.6-mistral-7b-hf
+    uri: hf://llava-hf/llava-v1.6-mistral-7b-hf
+
+  task: vision-language
+  runtime: vllm
+
+  maxImagesPerPrompt: 1
+
+  replicas: 1
+
+  template:
+    spec:
+      resources:
+        requests:
+          cpu: "4"
+          memory: 16Gi
+        limits:
+          cpu: "8"
+          memory: 32Gi

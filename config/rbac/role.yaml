@@ -1,0 +1,182 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - namespaces
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - limitranges
+  - persistentvolumeclaims
+  - pods
+  - resourcequotas
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - gateways
+  - grpcroutes
+  - httproutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - serving.ckodex.com
+  resources:
+  - agents
+  - asrinferenceservices
+  - embeddinginferenceservices
+  - llminferenceservices
+  - llmloraadapters
+  - localmodelcaches
+  - modelonboardings
+  - multimodalinferenceservices
+  - skillregistries
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - serving.ckodex.com
+  resources:
+  - agents/finalizers
+  - asrinferenceservices/finalizers
+  - embeddinginferenceservices/finalizers
+  - llminferenceservices/finalizers
+  - modelonboardings/finalizers
+  - multimodalinferenceservices/finalizers
+  - skillregistries/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - serving.ckodex.com
+  resources:
+  - agents/status
+  - asrinferenceservices/status
+  - embeddinginferenceservices/status
+  - llminferenceservices/status
+  - llmloraadapters/status
+  - localmodelcaches/status
+  - modelonboardings/status
+  - multimodalinferenceservices/status
+  - skillregistries/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - serving.ckodex.io
+  resources:
+  - coactorgroups
+  - inferenceactors
+  - inferencesessions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - serving.ckodex.io
+  resources:
+  - coactorgroups/status
+  - inferenceactors/status
+  - inferencesessions/status
+  verbs:
+  - get
+  - patch
+  - update

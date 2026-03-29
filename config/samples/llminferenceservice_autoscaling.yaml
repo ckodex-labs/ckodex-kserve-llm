@@ -1,0 +1,37 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: llama3-wva-autoscaling
+  namespace: ckodex-inference
+spec:
+  model:
+    uri: hf://meta-llama/Llama-3.1-8B-Instruct
+    name: meta-llama/Llama-3.1-8B-Instruct
+  scaling:
+    minReplicas: 1
+    maxReplicas: 10
+    wva:
+      variantCost: "15.0"
+    keda:
+      pollingInterval: 30
+      cooldownPeriod: 300
+      initialCooldownPeriod: 120
+      idleReplicaCount: 0
+      fallback:
+        failureThreshold: 3
+        replicas: 2
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:latest
+        resources:
+          limits:
+            nvidia.com/gpu: "1"
+  router:
+    gateway:
+      managed: {}
+    route:
+      httpRoute: {}
+    scheduler:
+      pool: {}

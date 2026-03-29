@@ -1,0 +1,9 @@
+{
+  "model": "gpt2",
+  "messages": [
+    { "role": "system", "content": "You are a helpful assistant." },
+    { "role": "user",   "content": "Respond with one word: ready" }
+  ],
+  "max_tokens": 20,
+  "temperature": 0.0
+}

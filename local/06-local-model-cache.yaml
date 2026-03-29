@@ -1,0 +1,16 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LocalModelCache
+metadata:
+  name: llama3-8b-cache
+  namespace: default
+spec:
+  sourceModelUri: hf://meta-llama/Llama-3.1-8B-Instruct
+  nodeGroup:
+    labelSelector:
+      matchLabels:
+        kubernetes.io/hostname: ci-cache-control-plane
+status:
+  cachedNodes: 1
+  nodeStatuses:
+  - nodeName: ci-cache-control-plane
+    phase: Ready

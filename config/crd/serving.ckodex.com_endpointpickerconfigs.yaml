@@ -1,0 +1,111 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: endpointpickerconfigs.serving.ckodex.com
+spec:
+  group: serving.ckodex.com
+  names:
+    kind: EndpointPickerConfig
+    listKind: EndpointPickerConfigList
+    plural: endpointpickerconfigs
+    shortNames:
+    - epc
+    singular: endpointpickerconfig
+  scope: Namespaced
+  versions:
+  - name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: |-
+          EndpointPickerConfig defines the scheduler plugin pipeline for
+          KV-cache aware request routing. The EPP uses this to score and
+          select inference pods based on prefix cache hits and load.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: EndpointPickerConfigSpec defines the scheduler plugin pipeline.
+            properties:
+              plugins:
+                description: Plugins defines the available scheduler plugins.
+                items:
+                  description: SchedulerPlugin defines an available scheduler plugin.
+                  properties:
+                    parameters:
+                      description: |-
+                        Parameters are optional plugin-specific parameters.
+                        Supports nested structures for complex plugin configs
+                        (e.g., kvEventsConfig, indexerConfig).
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    type:
+                      description: |-
+                        Type identifies the plugin. Standard types:
+                          single-profile-handler, prefix-cache-scorer, precise-prefix-cache-scorer,
+                          load-aware-scorer, queue-scorer, kv-cache-utilization-scorer, max-score-picker.
+                        Custom plugin types are also accepted for extensibility.
+                      type: string
+                  required:
+                  - type
+                  type: object
+                type: array
+              schedulingProfiles:
+                description: SchedulingProfiles defines named profiles with weighted
+                  plugin references.
+                items:
+                  description: SchedulingProfile defines a named scheduling profile
+                    with weighted scorers.
+                  properties:
+                    name:
+                      description: Name identifies this profile.
+                      type: string
+                    plugins:
+                      description: Plugins are the weighted plugin references for
+                        this profile.
+                      items:
+                        description: WeightedPluginRef references a plugin with a
+                          scoring weight.
+                        properties:
+                          pluginRef:
+                            description: PluginRef is the plugin type to reference.
+                            type: string
+                          weight:
+                            default: "1.0"
+                            description: |-
+                              Weight is the scoring weight for this plugin (as a string, e.g. "2.0").
+                              Higher weight = more influence on final score.
+                            type: string
+                        required:
+                        - pluginRef
+                        type: object
+                      type: array
+                  required:
+                  - name
+                  - plugins
+                  type: object
+                type: array
+            required:
+            - plugins
+            - schedulingProfiles
+            type: object
+        type: object
+    served: true
+    storage: true

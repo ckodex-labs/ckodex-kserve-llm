@@ -1,0 +1,166 @@
+# CKodex KServe LLM Operator Helm Values
+# replicaCount: 2 ensures one replica survives node drain/eviction while the other reconciles.
+# Requires leaderElection.enabled=true (already the default) so only the leader reconciles.
+replicaCount: 2
+
+image:
+  repository: ghcr.io/ckodex/kserve-llm-operator
+  tag: "0.17.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+
+controller:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  securityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+
+webhook:
+  port: 9443
+  certDir: /tmp/k8s-webhook-server/serving-certs
+
+# cert-manager integration — provisions TLS certificates for the webhook server.
+# Requires cert-manager v1.14+ installed in the cluster before enabling.
+# When enabled: Helm creates Certificate, Issuer, and webhook configurations.
+#               cert-manager cainjector automatically populates caBundle fields.
+# When disabled: the Deployment still mounts a cert volume but no Certificate CR is created.
+#               Set CKODEX_FEATURE_ENABLE_WEBHOOKS=false (default) to disable webhooks entirely.
+certManager:
+  enabled: false
+  # issuerRef: reference an existing Issuer or ClusterIssuer.
+  # When name is empty a self-signed ClusterIssuer + intermediate CA are created automatically.
+  # For production use a trusted PKI: Vault, AWS ACM-PCA, Let's Encrypt, etc.
+  issuerRef:
+    name: ""
+    kind: ClusterIssuer
+
+metrics:
+  enabled: true
+  bindAddress: ":8443"
+
+probes:
+  healthz:
+    bindAddress: ":8081"
+
+leaderElection:
+  enabled: true
+  id: "ckodex-kserve-llm.ckodex.com"
+
+# Default vLLM settings
+# Images are pinned to digests for reproducibility and supply chain security.
+# Update digests by running: crane digest <image>:<tag>
+# Verify signatures: cosign verify <image>@<digest> --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+vllm:
+  # vllm/vllm-openai:v0.9.1 — do NOT use :latest (unpinned = air-gapped blocker + supply chain risk)
+  defaultImage: "vllm/vllm-openai:v0.9.1"
+  # kserve/storage-initializer:v0.14.1
+  storageInitializerImage: "kserve/storage-initializer:v0.14.1"
+
+# EPP Scheduler defaults
+scheduler:
+  image: "us-central1-docker.pkg.dev/k8s-staging-gateway-api/gateway-api-inference-extension/epp:main"
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# SPIRE configuration
+spire:
+  enabled: false
+  server:
+    image: "ghcr.io/spiffe/spire-server:1.14.0"
+    replicas: 1
+  agent:
+    image: "ghcr.io/spiffe/spire-agent:1.14.0"
+  trustDomain: "ckodex.com"
+
+# Gateway API
+gateway:
+  className: "envoy"
+
+# Resilience defaults
+resilience:
+  circuitBreaker:
+    failureThreshold: 5
+    successThreshold: 3
+    timeoutSeconds: 30
+  retry:
+    maxRetries: 3
+    baseBackoffMs: 100
+  bulkhead:
+    maxConcurrent: 100
+  timeoutCascade:
+    clientSeconds: 30
+    gatewaySeconds: 25
+    inferenceSeconds: 20
+
+# Observability
+observability:
+  otel:
+    enabled: true
+    endpoint: ""
+  logging:
+    level: info
+    format: json
+
+# Chaos engine
+chaos:
+  enabled: false
+
+# Network policies
+networkPolicies:
+  enabled: true
+
+# managedNamespaces lists the namespaces where the operator SA is granted
+# ckodex-operator-namespace-role (namespace-scoped RBAC).
+# The operator will reconcile LLMInferenceService, Deployments, Services, etc.
+# only in namespaces listed here. Add a namespace here AND label it with
+# ckodex.com/tenant-id=<id> to activate per-tenant quota enforcement.
+# Example:
+#   managedNamespaces:
+#     - team-a
+#     - team-b
+managedNamespaces: []
+
+# Air-gap and private registry support.
+# When mirrorURL is set, the operator rewrites hf:// model URIs to hf-mirror:// at admission
+# time so the storage initializer fetches from your internal HuggingFace Hub proxy instead of
+# the public huggingface.co. The operator itself also uses mirrorURL for all HF API calls.
+# mirrorURL must include scheme: e.g. "https://hf-mirror.corp.internal"
+registry:
+  mirrorURL: ""
+
+# Outbound HTTP/HTTPS proxy for storage client and OIDC provider requests.
+# Mirrors the standard Go proxy env vars; set these when the operator runs in an environment
+# that requires a forward proxy to reach the internet (HuggingFace Hub, ECR, OCI registries).
+proxy:
+  # httpProxy: "http://proxy.corp.internal:3128"
+  # httpsProxy: "http://proxy.corp.internal:3128"
+  # noProxy: "localhost,127.0.0.1,.corp.internal"
+  httpProxy: ""
+  httpsProxy: ""
+  noProxy: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,36 @@
+---
+# ClusterRoleBinding: binds ckodex-operator-cluster-role to the operator ServiceAccount.
+# This grants cluster-scoped access ONLY (nodes, CRDs, LocalModelCache, Gatekeeper).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ckodex-operator-cluster-rolebinding
+  labels:
+    app.kubernetes.io/managed-by: ckodex-kserve-llm-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ckodex-operator-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: ckodex-kserve-llm-operator
+  namespace: ckodex-system
+---
+# RoleBinding template: binds ckodex-operator-namespace-role to the operator SA
+# in each managed namespace. Instantiated per namespace by the Helm chart.
+# The Helm template iterates .Values.managedNamespaces to create one binding per ns.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ckodex-operator-namespace-rolebinding
+  namespace: default  # overridden per namespace by Helm
+  labels:
+    app.kubernetes.io/managed-by: ckodex-kserve-llm-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ckodex-operator-namespace-role
+subjects:
+- kind: ServiceAccount
+  name: ckodex-kserve-llm-operator
+  namespace: ckodex-system

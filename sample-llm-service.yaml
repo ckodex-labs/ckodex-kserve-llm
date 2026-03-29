@@ -1,0 +1,41 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: hello-world-llm
+spec:
+  model:
+    name: Qwen/Qwen2.5-0.5B-Instruct
+    uri: hf://Qwen/Qwen2.5-0.5B-Instruct
+  autoOptimize: true
+  router:
+    gateway: {}
+    route: {}
+    scheduler:
+      pool: {}
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:latest
+        args:
+        - "--model"
+        - "/mnt/models"
+        - "--host"
+        - "0.0.0.0"
+        - "--port"
+        - "8000"
+        env:
+        - name: HF_HOME
+          value: /tmp/hf
+        - name: HOME
+          value: /tmp
+        resources:
+          limits:
+            cpu: "1"
+            memory: 2Gi
+          requests:
+            cpu: "0.5"
+            memory: 1Gi
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0

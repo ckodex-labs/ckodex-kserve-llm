@@ -1,0 +1,97 @@
+---
+# CohereLabs/cohere-transcribe-03-2026 — ASR via custom transformers runtime.
+# The transformers runtime has no public canonical image; supply your own via
+# spec.runtimeImage pointing to an image that exposes /v1/audio/transcriptions
+# on port 8000.
+#
+# Prerequisites:
+#   kubectl create namespace ckodex-inference
+#   kubectl create secret generic hf-credentials \
+#     --from-literal=HF_TOKEN=<your-token> \
+#     -n ckodex-inference
+#
+# Apply:
+#   kubectl apply -f config/samples/asrinferenceservice_cohere.yaml
+#
+# Verify:
+#   kubectl get asrsvc -n ckodex-inference
+#   kubectl describe asrsvc cohere-transcribe -n ckodex-inference
+apiVersion: serving.ckodex.com/v1alpha2
+kind: ASRInferenceService
+metadata:
+  name: cohere-transcribe
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+spec:
+  model:
+    name: cohere-transcribe-03-2026
+    uri: hf://CohereLabs/cohere-transcribe-03-2026
+    storage:
+      secretRef:
+        name: hf-credentials
+
+  # transformers runtime is required for custom ASR architectures that are not
+  # Whisper-based. You must supply runtimeImage pointing to a server that
+  # exposes /v1/audio/transcriptions on port 8000.
+  runtime: transformers
+  runtimeImage: ghcr.io/ckodex-labs/asr-transformers-server:v0.1.0
+
+  # Languages to pass to the runtime (BCP-47 codes).
+  # Empty = handle all languages the model supports.
+  languages: []
+
+  replicas: 1
+
+  template:
+    spec:
+      containers: []
+      # GPU node selector — uncomment for GPU inference.
+      # nodeSelector:
+      #   nvidia.com/gpu.present: "true"
+      # tolerations:
+      # - key: "nvidia.com/gpu"
+      #   operator: Exists
+      #   effect: NoSchedule
+      resources:
+        requests:
+          cpu: "2"
+          memory: 8Gi
+        limits:
+          cpu: "4"
+          memory: 16Gi
+
+---
+# Faster-whisper example — Whisper large-v3 on CPU (no GPU required).
+# This uses the default faster-whisper runtime image automatically.
+apiVersion: serving.ckodex.com/v1alpha2
+kind: ASRInferenceService
+metadata:
+  name: whisper-large-v3
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+spec:
+  model:
+    name: whisper-large-v3
+    uri: hf://openai/whisper-large-v3
+
+  runtime: faster-whisper
+  # runtimeImage: omitted — uses ghcr.io/fedirz/faster-whisper-server:latest-cpu
+
+  languages:
+    - en
+    - fr
+    - de
+
+  replicas: 1
+
+  template:
+    spec:
+      resources:
+        requests:
+          cpu: "2"
+          memory: 4Gi
+        limits:
+          cpu: "4"
+          memory: 8Gi

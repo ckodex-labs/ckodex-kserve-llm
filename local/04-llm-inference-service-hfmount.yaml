@@ -1,0 +1,47 @@
+# LLMInferenceService using hf-mount:// — lazy HuggingFace model mounting.
+# Requires: hf-csi-driver installed (see local/02-prereqs.sh step 5).
+#
+# Key difference from hf:// (init-container download):
+#   - hf-mount:// uses the HuggingFace CSI driver to mount the repo as a filesystem
+#   - Only accessed bytes are fetched over the network (lazy loading)
+#   - No download phase — vLLM starts immediately with model files appearing on-demand
+#   - Ideal for large models where you don't want to wait for full download
+#
+# URI format: hf-mount://org/repo or hf-mount://org/repo@revision
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: qwen-hfmount
+  namespace: default
+spec:
+  model:
+    name: qwen-0.5b
+    uri: hf-mount://Qwen/Qwen2.5-0.5B-Instruct
+  autoOptimize: true
+  template:
+    spec:
+      containers:
+      - name: vllm
+        resources:
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+  scaling:
+    minReplicas: 1
+    maxReplicas: 3
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute:
+        hostnames:
+        - qwen-hfmount.ckodex.com
+    scheduler:
+      pool:
+        selector:
+          app.kubernetes.io/instance: qwen-hfmount
+      replicas: 1

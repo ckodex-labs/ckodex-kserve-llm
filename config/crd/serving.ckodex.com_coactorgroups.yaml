@@ -1,0 +1,424 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: coactorgroups.serving.ckodex.com
+spec:
+  group: serving.ckodex.com
+  names:
+    kind: CoactorGroup
+    listKind: CoactorGroupList
+    plural: coactorgroups
+    singular: coactorgroup
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.pattern
+      name: Pattern
+      type: string
+    - jsonPath: .status.activeMemberCount
+      name: Members
+      type: integer
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          CoactorGroup is the stable v1 API for collaborative actor groups.
+          A group defines prefill+decode pairs, agent ensembles, or model pipelines.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CoactorGroupSpec defines the coactor group configuration.
+            properties:
+              coordination:
+                description: Coordination defines how actors synchronize.
+                properties:
+                  aggregation:
+                    description: Aggregation configures how results from ensemble
+                      members are combined.
+                    properties:
+                      strategy:
+                        default: best-of-n
+                        description: 'Strategy is the aggregation strategy: best-of-n,
+                          voting, weighted-merge, chain.'
+                        type: string
+                    required:
+                    - strategy
+                    type: object
+                  kvTransfer:
+                    description: KVTransfer configures KV-cache transfer between prefill/decode
+                      actors.
+                    properties:
+                      method:
+                        default: nccl
+                        description: 'Method is the transfer mechanism: nccl, rdma,
+                          or tcp.'
+                        type: string
+                    required:
+                    - method
+                    type: object
+                  method:
+                    description: Method is the coordination method.
+                    type: string
+                required:
+                - method
+                type: object
+              members:
+                description: Members are the actors in this group.
+                items:
+                  description: CoactorMember defines a single member of the group.
+                  properties:
+                    actorRef:
+                      description: ActorRef references the InferenceActor.
+                      type: string
+                    dependsOn:
+                      description: DependsOn lists other members that must be active
+                        before this one.
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      description: Name identifies this member within the group.
+                      type: string
+                    role:
+                      description: Role defines the member's role (e.g., "prefill",
+                        "decode", "router", "worker").
+                      type: string
+                    weight:
+                      default: "1"
+                      description: Weight for load balancing within the group.
+                      type: string
+                  required:
+                  - actorRef
+                  - name
+                  - role
+                  type: object
+                type: array
+              pattern:
+                description: Pattern defines the collaboration pattern.
+                type: string
+              sessionAffinity:
+                default: true
+                description: SessionAffinity keeps all members colocated for a session.
+                type: boolean
+            required:
+            - coordination
+            - members
+            - pattern
+            type: object
+          status:
+            description: CoactorGroupStatus defines the observed state.
+            properties:
+              activeMemberCount:
+                description: ActiveMemberCount is the number of active members.
+                format: int32
+                type: integer
+              conditions:
+                description: Conditions track group health.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              memberStatuses:
+                description: MemberStatuses tracks each member's state.
+                items:
+                  description: MemberStatus tracks an individual member's state.
+                  properties:
+                    name:
+                      type: string
+                    ready:
+                      type: boolean
+                    role:
+                      type: string
+                    state:
+                      description: ActorState represents the actor lifecycle.
+                      type: string
+                  required:
+                  - name
+                  - ready
+                  - role
+                  - state
+                  type: object
+                type: array
+              phase:
+                description: Phase is the group lifecycle phase.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+  - additionalPrinterColumns:
+    - jsonPath: .spec.pattern
+      name: Pattern
+      type: string
+    - jsonPath: .status.activeMemberCount
+      name: Members
+      type: integer
+    name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: |-
+          CoactorGroup defines a collaborative group of actors that work together
+          on shared tasks — prefill+decode pairs, agent ensembles, or model pipelines.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CoactorGroupSpec defines the coactor group configuration.
+            properties:
+              coordination:
+                description: Coordination defines how actors synchronize.
+                properties:
+                  aggregation:
+                    description: Aggregation configures how results from ensemble
+                      members are combined.
+                    properties:
+                      strategy:
+                        default: best-of-n
+                        description: Strategy is the aggregation strategy.
+                        type: string
+                    required:
+                    - strategy
+                    type: object
+                  kvTransfer:
+                    description: KVTransfer configures KV-cache transfer between prefill/decode
+                      (for prefill-decode pattern).
+                    properties:
+                      method:
+                        default: nccl
+                        description: 'Method is the transfer mechanism: nccl, rdma,
+                          or tcp.'
+                        type: string
+                    required:
+                    - method
+                    type: object
+                  method:
+                    description: Method is the coordination method.
+                    type: string
+                required:
+                - method
+                type: object
+              members:
+                description: Members are the actors in this group.
+                items:
+                  description: CoactorMember defines a single member of the group.
+                  properties:
+                    actorRef:
+                      description: ActorRef references the InferenceActor.
+                      type: string
+                    dependsOn:
+                      description: DependsOn lists other members that must be active
+                        before this one.
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      description: Name identifies this member within the group.
+                      type: string
+                    role:
+                      description: Role defines the member's role (e.g., "prefill",
+                        "decode", "router", "worker").
+                      type: string
+                    weight:
+                      default: "1"
+                      description: Weight for load balancing within the group (for
+                        ensemble/mixture patterns).
+                      type: string
+                  required:
+                  - actorRef
+                  - name
+                  - role
+                  type: object
+                type: array
+              pattern:
+                description: Pattern defines the collaboration pattern.
+                type: string
+              sessionAffinity:
+                default: true
+                description: SessionAffinity keeps all members colocated for a session.
+                type: boolean
+            required:
+            - coordination
+            - members
+            - pattern
+            type: object
+          status:
+            description: CoactorGroupStatus defines the observed state.
+            properties:
+              activeMemberCount:
+                description: ActiveMemberCount is the number of active members.
+                format: int32
+                type: integer
+              conditions:
+                description: Conditions track group health.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              memberStatuses:
+                description: MemberStatuses tracks each member's state.
+                items:
+                  description: MemberStatus tracks an individual member's state.
+                  properties:
+                    name:
+                      type: string
+                    ready:
+                      type: boolean
+                    role:
+                      type: string
+                    state:
+                      description: ActorState represents the actor lifecycle.
+                      type: string
+                  required:
+                  - name
+                  - ready
+                  - role
+                  - state
+                  type: object
+                type: array
+              phase:
+                description: Phase is the group lifecycle phase.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}

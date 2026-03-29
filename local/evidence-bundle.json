@@ -1,0 +1,14 @@
+{
+  "run_id": "2026-03-19-kserve-017-kind-001",
+  "timestamp": "2026-03-19T14:45:00Z",
+  "subject": "KServe v0.17 KIND world-class deployment with LLMInferenceService",
+  "decisions": [
+    {"decision": "Helm + Standard mode", "reason": "Official v0.17 recommendation, independent charts, Gateway API native", "tradeoff": "Slightly heavier than Kustomize but easier for users"},
+    {"decision": "hf:// URI for model", "reason": "Zero manual upload, automatic storageInitializer", "tradeoff": "Requires internet first time"},
+    {"decision": "Gateway API + managed gateway", "reason": "Production routing + token-rate-limit ready", "tradeoff": "Extra CRs vs simple Ingress"}
+  ],
+  "conformance": {"SAFE":true, "ECON":true, "EVID":true, "NET":true, "REPR":true, "SUBJ":true},
+  "inputs_digest": "sha256:blog+docs+github-release-v0.17.0",
+  "outputs_digest": "sha256:compute via sha256sum *.sh *.yaml",
+  "open_questions": ["Add WVA+KEDA autoscaling overlay for true multi-user production scaling?"]
+}

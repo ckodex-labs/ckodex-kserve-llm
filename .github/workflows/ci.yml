@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request:
+    branches: [main]
+
+# Least-privilege: read-only by default.
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Lint + Test + Build + Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Dagger CLI
+        run: |
+          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=0.15.0 sh
+          sudo mv bin/dagger /usr/local/bin/dagger
+          dagger version
+
+      # All pipeline logic lives in ci/main.go (Go, not shell).
+      # No untrusted github.event.* context is interpolated into run: commands.
+      - name: Run pipeline (lint + test + build + scan)
+        run: go run ./ci/main.go
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.out
+          retention-days: 30
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: sbom
+          path: sbom/
+          retention-days: 90

@@ -1,0 +1,11 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMLoraAdapter
+metadata:
+  name: sql-helper
+  namespace: default
+spec:
+  targetService: llama2-7b
+  adapterName: sql-lora
+  model:
+    uri: hf://yard1/llama-2-7b-sql-lora-test
+    name: sql-lora

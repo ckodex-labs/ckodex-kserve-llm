@@ -1,0 +1,234 @@
+---
+# PrometheusRule — CKodex KServe LLM Operator
+# Install: kubectl apply -f deploy/monitoring/prometheus-rules.yaml -n monitoring
+# Requires: kube-prometheus-stack or prometheus-operator with PrometheusRule CRD.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ckodex-kserve-llm
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/managed-by: ckodex-kserve-llm-operator
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Recording rules — pre-aggregated for dashboard performance
+    # ──────────────────────────────────────────────────────────────────────────
+    - name: ckodex.recording
+      interval: 60s
+      rules:
+
+        # Per-tenant tokens per hour (chargeback denominator)
+        - record: ckodex:tokens_per_tenant_hour
+          expr: |
+            sum by (ckodex_tenant_id, ckodex_model) (
+              increase(ckodex_tenant_tokens_consumed_total[1h])
+            )
+
+        # Per-tenant active GPU-seconds per hour
+        - record: ckodex:gpu_seconds_per_tenant_hour
+          expr: |
+            sum by (ckodex_tenant_id, ckodex_model) (
+              increase(ckodex_tenant_active_gpu_seconds_total[1h])
+            )
+
+        # P99 inference latency per model (5-min window)
+        - record: ckodex:inference_latency_p99
+          expr: |
+            histogram_quantile(0.99,
+              sum by (model, le) (
+                rate(ckodex_inference_duration_seconds_bucket[5m])
+              )
+            )
+
+        # P50 inference latency per model
+        - record: ckodex:inference_latency_p50
+          expr: |
+            histogram_quantile(0.50,
+              sum by (model, le) (
+                rate(ckodex_inference_duration_seconds_bucket[5m])
+              )
+            )
+
+        # Reconcile success rate (5-min window)
+        - record: ckodex:reconcile_success_rate
+          expr: |
+            sum by (model) (rate(ckodex_reconcile_count_total{success="true"}[5m]))
+            /
+            sum by (model) (rate(ckodex_reconcile_count_total[5m]))
+
+        # GPU utilization P95 per model
+        - record: ckodex:gpu_utilization_p95
+          expr: |
+            histogram_quantile(0.95,
+              sum by (ckodex_model, ckodex_tenant_id, le) (
+                rate(ckodex_tenant_gpu_utilization_bucket[5m])
+              )
+            )
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Alerts — chargeback
+    # ──────────────────────────────────────────────────────────────────────────
+    - name: ckodex.chargeback
+      rules:
+
+        # Tenant is approaching their token budget (>80% consumed in the current hour)
+        - alert: TenantTokenBudgetNearLimit
+          expr: |
+            (
+              sum by (ckodex_tenant_id, ckodex_model) (
+                increase(ckodex_tenant_tokens_consumed_total[1h])
+              )
+              /
+              # budget_total is a gauge set by the token budget enforcer
+              sum by (ckodex_tenant_id, ckodex_model) (
+                ckodex_tenant_token_budget_total
+              )
+            ) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Tenant {{ $labels.ckodex_tenant_id }} is at {{ $value | humanizePercentage }} of token budget for model {{ $labels.ckodex_model }}"
+            runbook_url: "https://docs.ckodex.com/runbooks/token-budget"
+
+        # Tenant has exceeded their token budget (100%)
+        - alert: TenantTokenBudgetExceeded
+          expr: |
+            sum by (ckodex_tenant_id, ckodex_model) (
+              increase(ckodex_tenant_tokens_consumed_total[1h])
+            )
+            >
+            sum by (ckodex_tenant_id, ckodex_model) (
+              ckodex_tenant_token_budget_total
+            )
+          for: 1m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "Tenant {{ $labels.ckodex_tenant_id }} has exceeded their token budget for model {{ $labels.ckodex_model }}"
+            runbook_url: "https://docs.ckodex.com/runbooks/token-budget"
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Alerts — SLO / availability
+    # ──────────────────────────────────────────────────────────────────────────
+    - name: ckodex.slo
+      rules:
+
+        # P99 latency exceeds 5 seconds (SLO breach)
+        - alert: LLMServiceSLOLatencyBreach
+          expr: ckodex:inference_latency_p99 > 5
+          for: 3m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "P99 inference latency for {{ $labels.model }} is {{ $value | humanizeDuration }} (SLO: 5s)"
+            runbook_url: "https://docs.ckodex.com/runbooks/slo-breach"
+
+        # Reconcile success rate drops below 95%
+        - alert: LLMReconcileErrorRate
+          expr: ckodex:reconcile_success_rate < 0.95
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Reconcile success rate for {{ $labels.model }} is {{ $value | humanizePercentage }}"
+            runbook_url: "https://docs.ckodex.com/runbooks/reconcile-errors"
+
+        # GPU utilization sustained above 95% (capacity risk)
+        - alert: LLMGPUUtilizationHigh
+          expr: ckodex:gpu_utilization_p95 > 0.95
+          for: 10m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "P95 GPU utilization for {{ $labels.ckodex_model }} (tenant {{ $labels.ckodex_tenant_id }}) is {{ $value | humanizePercentage }}"
+            runbook_url: "https://docs.ckodex.com/runbooks/gpu-capacity"
+
+        # No replicas available (complete outage)
+        - alert: LLMServiceNoReplicas
+          expr: |
+            kube_deployment_status_replicas_available{
+              label_app_kubernetes_io_managed_by="ckodex-kserve-llm-operator"
+            } == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "LLMInferenceService {{ $labels.deployment }} has 0 available replicas"
+            runbook_url: "https://docs.ckodex.com/runbooks/no-replicas"
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Alerts — canary rollout
+    # ──────────────────────────────────────────────────────────────────────────
+    - name: ckodex.canary
+      rules:
+
+        # Canary P99 latency is worse than the stable base by >20%
+        - alert: CanaryLatencyRegression
+          expr: |
+            (
+              ckodex:inference_latency_p99{serving_ckodex_com_canary="true"}
+              /
+              ckodex:inference_latency_p99{serving_ckodex_com_canary!="true"}
+            ) > 1.2
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Canary {{ $labels.model }} P99 latency is {{ $value | humanizePercentage }} of stable baseline"
+            runbook_url: "https://docs.ckodex.com/runbooks/model-deployment"
+
+        # Canary reconcile error rate exceeds stable by a meaningful margin
+        - alert: CanaryErrorRateHigh
+          expr: |
+            sum by (model) (
+              rate(ckodex_reconcile_count_total{success="false", serving_ckodex_com_canary="true"}[5m])
+            ) > 0.05
+          for: 3m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "Canary {{ $labels.model }} error rate is above 5% — consider rolling back"
+            runbook_url: "https://docs.ckodex.com/runbooks/model-deployment"
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Alerts — security
+    # ──────────────────────────────────────────────────────────────────────────
+    - name: ckodex.security
+      rules:
+
+        # OPA Gatekeeper denied a resource (policy violation in last 5 min)
+        - alert: OPAPolicyViolation
+          expr: |
+            increase(ckodex_reconcile_count_total{success="false"}[5m]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            team: security
+          annotations:
+            summary: "Policy violation detected for model {{ $labels.model }}"
+            runbook_url: "https://docs.ckodex.com/runbooks/policy-violation"
+
+        # Vault secret rotation is overdue (> 30 days since last rotation)
+        - alert: VaultSecretRotationOverdue
+          expr: |
+            time() - ckodex_vault_secret_last_rotation_timestamp_seconds > 2592000
+          for: 1h
+          labels:
+            severity: warning
+            team: security
+          annotations:
+            summary: "Vault secret for {{ $labels.secret_path }} has not been rotated in >30 days"
+            runbook_url: "https://docs.ckodex.com/runbooks/secret-rotation"

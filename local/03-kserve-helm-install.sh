@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# OCI used now
+
+# CRDs
+helm install kserve-crd oci://ghcr.io/kserve/charts/kserve-crd --version v0.17.0
+# Resources + Standard mode + Gateway API (LLMInferenceService ready)
+helm install kserve oci://ghcr.io/kserve/charts/kserve --version v0.17.0 \
+  --set kserve.controller.deploymentMode=Standard \
+  --set kserve.controller.gateway.ingressGateway.enableGatewayApi=true \
+  --set kserve.controller.gateway.ingressGateway.kserveGateway=kserve/kserve-ingress-gateway \
+  --set kserve.controller.gateway.ingressGateway.createGateway=true
+kubectl wait --for=condition=Available deployment/kserve-controller-manager -n kserve --timeout=300s
+echo "KServe v0.17 installed in Standard mode"

@@ -1,0 +1,22 @@
+apiVersion: v2
+name: ckodex-kserve-llm-operator
+description: CKodex KServe LLM Operator — Kubernetes operator for managing LLM inference workloads
+type: application
+version: 0.1.0
+appVersion: "0.17.0"
+kubeVersion: ">=1.28.0"
+keywords:
+  - kubernetes
+  - operator
+  - llm
+  - inference
+  - kserve
+  - vllm
+  - ai
+  - ml
+home: https://github.com/ckodex-labs/kserve-llm-operator
+sources:
+  - https://github.com/ckodex-labs/kserve-llm-operator
+maintainers:
+  - name: CKodex
+    email: maintainers@ckodex.com

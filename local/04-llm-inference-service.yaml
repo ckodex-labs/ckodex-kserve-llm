@@ -1,0 +1,37 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: llama3-8b
+  namespace: default
+spec:
+  model:
+    name: qwen-0.5b
+    uri: hf://Qwen/Qwen2.5-0.5B-Instruct
+  autoOptimize: true
+  template:
+    spec:
+      containers:
+      - name: vllm
+        resources:
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+  scaling:
+    minReplicas: 1
+    maxReplicas: 3
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute:
+        hostnames:
+        - llama3-8b.ckodex.com
+    scheduler:
+      pool:
+        selector:
+          app.kubernetes.io/instance: llama3-8b
+      replicas: 1

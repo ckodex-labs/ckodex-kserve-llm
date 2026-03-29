@@ -1,0 +1,40 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: MultimodalInferenceService
+metadata:
+  name: liquid-audio-tts
+  namespace: default
+  labels:
+    app.kubernetes.io/name: multimodalinferenceservice
+    app.kubernetes.io/instance: liquid-audio-tts
+    app.kubernetes.io/part-of: ckodex-kserve-llm
+spec:
+  # Task specifies this is a text-to-speech adapter service.
+  task: text-to-speech
+  
+  # Model specifies the LiquidAI audio foundation model.
+  model:
+    uri: hf://LiquidAI/LFM2.5-Audio-1.5B
+    name: lfm2.5-audio
+    
+  # VLLM supports the audio endpoint.
+  runtime: vllm
+  
+  replicas: 1
+  
+  scaling:
+    minReplicas: 1
+    maxReplicas: 3
+    
+  template:
+    spec:
+      containers:
+      - name: runtime
+        resources:
+          requests:
+            nvidia.com/gpu: "1"
+            cpu: "4"
+            memory: "16Gi"
+          limits:
+            nvidia.com/gpu: "1"
+            cpu: "8"
+            memory: "32Gi"

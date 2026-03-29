@@ -1,0 +1,89 @@
+# Velero backup schedule for CKodex KServe LLM Operator CRs.
+#
+# Prerequisites:
+#   velero install --provider <aws|gcp|azure> --bucket <bucket> --secret-file ./credentials
+#
+# Apply:
+#   kubectl apply -f velero-backup-schedule.yaml
+#
+# Verify:
+#   velero backup get --selector velero.io/backup-name=ckodex-daily-<timestamp>
+#   velero schedule describe ckodex-daily
+#
+# Restore procedure: see docs/dr-runbook.md
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: ckodex-daily
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/managed-by: ckodex-kserve-llm-operator
+spec:
+  # Daily at 02:00 UTC — chosen to be outside peak inference windows.
+  schedule: "0 2 * * *"
+
+  template:
+    # Metadata only — model weights live in PVCs or object storage, not etcd.
+    # PVC data requires a separate block storage snapshot via the Velero CSI plugin.
+    includedNamespaces:
+      - "*"
+
+    includedResources:
+      # All CKodex CRDs
+      - llminferenceservices.serving.ckodex.com
+      - llminferenceserviceconfigs.serving.ckodex.com
+      - llmloraadapters.serving.ckodex.com
+      - inferencesessions.serving.ckodex.com
+      - localmodelcaches.serving.ckodex.com
+      # Gateway API resources managed by the operator
+      - gateways.gateway.networking.k8s.io
+      - httproutes.gateway.networking.k8s.io
+      # Operator-managed Secrets (pull secrets distributed to tenant namespaces)
+      - secrets
+
+    # Scope secrets backup to operator-managed ones only — avoids backing up SA tokens,
+    # TLS certs, and other high-churn secrets that don't need DR.
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/managed-by: ckodex-kserve-llm-operator
+
+    storageLocation: default
+    ttl: 720h0m0s  # 30 days
+
+    # Pre-backup hook: annotate the operator Deployment to signal that a backup is in
+    # progress. The operator reconciler checks this annotation and defers any in-flight
+    # promotions until the backup completes, ensuring a consistent snapshot.
+    hooks:
+      resources:
+        - name: pre-backup-quiesce
+          includedNamespaces:
+            - ckodex-system
+          labelSelector:
+            matchLabels:
+              control-plane: controller-manager
+          pre:
+            - exec:
+                container: manager
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    kubectl annotate deployment $(hostname) \
+                      ckodex.com/backup-in-progress=true \
+                      --overwrite 2>/dev/null || true
+                onError: Continue
+                timeout: 30s
+          post:
+            - exec:
+                container: manager
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    kubectl annotate deployment $(hostname) \
+                      ckodex.com/backup-in-progress- \
+                      2>/dev/null || true
+                onError: Continue
+                timeout: 30s

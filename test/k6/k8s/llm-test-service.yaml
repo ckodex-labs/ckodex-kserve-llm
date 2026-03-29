@@ -1,0 +1,27 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: k6-llm-test
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+    test.ckodex.com/suite: k6
+spec:
+  model:
+    name: gpt2
+    uri: hf://openai-community/gpt2
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.17.1
+        resources:
+          requests:
+            cpu: "2"
+            memory: 4Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi
+        ports:
+        - containerPort: 8000

@@ -1,0 +1,26 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: EmbeddingInferenceService
+metadata:
+  name: k6-embed-test
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+    test.ckodex.com/suite: k6
+spec:
+  model:
+    name: bge-large-en-v1.5
+    uri: hf://BAAI/bge-large-en-v1.5
+  runtime: infinity
+  batchSize: 32
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: embedding-server
+        resources:
+          requests:
+            cpu: "1"
+            memory: 2Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi

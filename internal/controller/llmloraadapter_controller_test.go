@@ -1,0 +1,393 @@
+/*
+Copyright 2026 CKodex Authors.
+Licensed under the Apache License, Version 2.0.
+*/
+
+package controller
+
+import (
+	"context"
+	"testing"
+
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+)
+
+func buildLoraScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	s := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(s))
+	require.NoError(t, servingv1alpha2.AddToScheme(s))
+	return s
+}
+
+// TestLLMLoraAdapter_ReconcileNotFound returns no error.
+func TestLLMLoraAdapter_ReconcileNotFound(t *testing.T) {
+	s := buildLoraScheme(t)
+	cl := fake.NewClientBuilder().WithScheme(s).Build()
+	r := &LLMLoraAdapterReconciler{
+		Client:   cl,
+		Scheme:   s,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: k8stypes.NamespacedName{Name: "missing", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, ctrl.Result{}, result)
+}
+
+// TestLLMLoraAdapter_CreatesLocalModelCache on first reconcile.
+func TestLLMLoraAdapter_CreatesLocalModelCache(t *testing.T) {
+	s := buildLoraScheme(t)
+	lora := &servingv1alpha2.LLMLoraAdapter{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-lora",
+			Namespace: "default",
+			UID:       k8stypes.UID("lora-uid"),
+		},
+		Spec: servingv1alpha2.LLMLoraAdapterSpec{
+			TargetService: "my-llm",
+			AdapterName:   "sql-helper",
+			Model: servingv1alpha2.ModelSpec{
+				URI:  "hf://org/lora-weights",
+				Name: "sql-helper",
+			},
+		},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(lora).
+		WithStatusSubresource(lora).
+		Build()
+	r := &LLMLoraAdapterReconciler{
+		Client:   cl,
+		Scheme:   s,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: k8stypes.NamespacedName{Name: "my-lora", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	// Should requeue to check cache readiness.
+	assert.True(t, result.Requeue)
+
+	var lmcList servingv1alpha2.LocalModelCacheList
+	require.NoError(t, cl.List(context.Background(), &lmcList))
+	require.Len(t, lmcList.Items, 1)
+	assert.Equal(t, "lora-my-lora", lmcList.Items[0].Name)
+}
+
+// TestLLMLoraAdapter_WaitsForCache when cache is not yet ready.
+func TestLLMLoraAdapter_WaitsForCache(t *testing.T) {
+	s := buildLoraScheme(t)
+	lora := &servingv1alpha2.LLMLoraAdapter{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-lora",
+			Namespace: "default",
+			UID:       k8stypes.UID("lora-uid"),
+		},
+		Spec: servingv1alpha2.LLMLoraAdapterSpec{
+			TargetService: "my-llm",
+			AdapterName:   "sql-helper",
+			Model: servingv1alpha2.ModelSpec{
+				URI:  "hf://org/lora-weights",
+				Name: "sql-helper",
+			},
+		},
+	}
+
+	// Pre-create cache that's not ready (no conditions).
+	cache := &servingv1alpha2.LocalModelCache{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "lora-my-lora",
+			Namespace: "default",
+		},
+		Spec: servingv1alpha2.LocalModelCacheSpec{
+			SourceModelURI: "hf://org/lora-weights",
+		},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(lora, cache).
+		WithStatusSubresource(lora).
+		Build()
+	r := &LLMLoraAdapterReconciler{
+		Client:   cl,
+		Scheme:   s,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: k8stypes.NamespacedName{Name: "my-lora", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	// Should requeue after delay waiting for cache to download.
+	assert.Greater(t, result.RequeueAfter, int64(0)*0)
+}
+
+// TestLLMLoraAdapter_TargetServiceNotReady waits when target service not ready.
+func TestLLMLoraAdapter_TargetServiceNotReady(t *testing.T) {
+	s := buildLoraScheme(t)
+	lora := &servingv1alpha2.LLMLoraAdapter{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-lora",
+			Namespace: "default",
+			UID:       k8stypes.UID("lora-uid"),
+		},
+		Spec: servingv1alpha2.LLMLoraAdapterSpec{
+			TargetService: "my-llm",
+			AdapterName:   "sql-helper",
+			Model: servingv1alpha2.ModelSpec{
+				URI:  "hf://org/lora-weights",
+				Name: "sql-helper",
+			},
+		},
+	}
+
+	// Cache is ready.
+	cache := &servingv1alpha2.LocalModelCache{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "lora-my-lora",
+			Namespace: "default",
+		},
+		Spec: servingv1alpha2.LocalModelCacheSpec{
+			SourceModelURI: "hf://org/lora-weights",
+		},
+		Status: servingv1alpha2.LocalModelCacheStatus{
+			Conditions: []metav1.Condition{
+				{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue},
+			},
+		},
+	}
+
+	// Target service exists but not ready.
+	targetSvc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-llm", Namespace: "default"},
+		Status:     servingv1alpha2.LLMInferenceServiceStatus{ModelReady: false},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(lora, cache, targetSvc).
+		WithStatusSubresource(lora).
+		Build()
+	r := &LLMLoraAdapterReconciler{
+		Client:   cl,
+		Scheme:   s,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: k8stypes.NamespacedName{Name: "my-lora", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	// Should requeue waiting for target to become ready.
+	assert.Greater(t, int64(result.RequeueAfter), int64(0))
+}
+
+// TestLLMLoraAdapter_TargetServiceMissing waits when target not found.
+func TestLLMLoraAdapter_TargetServiceMissing(t *testing.T) {
+	s := buildLoraScheme(t)
+	lora := &servingv1alpha2.LLMLoraAdapter{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-lora",
+			Namespace: "default",
+			UID:       k8stypes.UID("lora-uid"),
+		},
+		Spec: servingv1alpha2.LLMLoraAdapterSpec{
+			TargetService: "missing-llm",
+			AdapterName:   "sql-helper",
+			Model: servingv1alpha2.ModelSpec{
+				URI:  "hf://org/lora-weights",
+				Name: "sql-helper",
+			},
+		},
+	}
+
+	// Cache is ready.
+	cache := &servingv1alpha2.LocalModelCache{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "lora-my-lora",
+			Namespace: "default",
+		},
+		Status: servingv1alpha2.LocalModelCacheStatus{
+			Conditions: []metav1.Condition{
+				{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue},
+			},
+		},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(lora, cache).
+		WithStatusSubresource(lora).
+		Build()
+	r := &LLMLoraAdapterReconciler{
+		Client:   cl,
+		Scheme:   s,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: k8stypes.NamespacedName{Name: "my-lora", Namespace: "default"},
+	})
+	require.NoError(t, err)
+	// No error — returns empty result (wait for target to appear).
+	assert.Equal(t, ctrl.Result{}, result)
+}
+
+// TestRegisterWithTargetService_Success verifies that POST requests are sent to pod IPs.
+func TestRegisterWithTargetService_Success(t *testing.T) {
+	s := buildLoraScheme(t)
+
+	// Mock server to receive vLLM requests.
+	called := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called++
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "/v1/load_lora_adapter", r.URL.Path)
+
+		var body VLLMLoadLoraRequest
+		err := json.NewDecoder(r.Body).Decode(&body)
+		assert.NoError(t, err)
+		assert.Equal(t, "sql-helper", body.LoraName)
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	lora := &servingv1alpha2.LLMLoraAdapter{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-lora", Namespace: "default"},
+		Spec: servingv1alpha2.LLMLoraAdapterSpec{
+			AdapterName:   "sql-helper",
+			TargetService: "my-llm",
+		},
+	}
+	svc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-llm", Namespace: "default"},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "llm-pod",
+			Namespace: "default",
+			Labels:    map[string]string{"app.kubernetes.io/instance": "my-llm"},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			PodIP: "1.2.3.4", // dummy IP
+		},
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(pod).Build()
+
+	// Custom mock client to redirect all traffic to our mock server.
+	r := &LLMLoraAdapterReconciler{
+		Client:   cl,
+		Scheme:   s,
+		Recorder: record.NewFakeRecorder(10),
+		HTTPClient: &http.Client{
+			Transport: &roundTripperMock{targetURL: srv.URL},
+		},
+	}
+
+	err := r.registerWithTargetService(context.Background(), lora, svc)
+	require.NoError(t, err)
+	assert.Equal(t, 1, called, "Should have called vLLM API once")
+}
+
+// TestRegisterWithTargetService_NoPods verifies error when no pods match.
+func TestRegisterWithTargetService_NoPods(t *testing.T) {
+	s := buildLoraScheme(t)
+	lora := &servingv1alpha2.LLMLoraAdapter{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-lora", Namespace: "default"},
+		Spec:       servingv1alpha2.LLMLoraAdapterSpec{TargetService: "my-llm"},
+	}
+	svc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-llm", Namespace: "default"},
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(s).Build()
+	r := &LLMLoraAdapterReconciler{
+		Client:   cl,
+		Scheme:   s,
+		Recorder: record.NewFakeRecorder(10),
+	}
+
+	err := r.registerWithTargetService(context.Background(), lora, svc)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no pods found")
+}
+
+// TestRegisterWithTargetService_HTTPError verifies error handling for failed POST.
+func TestRegisterWithTargetService_HTTPError(t *testing.T) {
+	s := buildLoraScheme(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	lora := &servingv1alpha2.LLMLoraAdapter{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-lora", Namespace: "default"},
+		Spec:       servingv1alpha2.LLMLoraAdapterSpec{TargetService: "my-llm"},
+	}
+	svc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-llm", Namespace: "default"},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "llm-pod",
+			Namespace: "default",
+			Labels:    map[string]string{"app.kubernetes.io/instance": "my-llm"},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning, PodIP: "1.2.3.4"},
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(pod).Build()
+	r := &LLMLoraAdapterReconciler{
+		Client:     cl,
+		Scheme:     s,
+		Recorder: record.NewFakeRecorder(10),
+		HTTPClient: &http.Client{Transport: &roundTripperMock{targetURL: srv.URL}},
+	}
+
+	err := r.registerWithTargetService(context.Background(), lora, svc)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "vLLM returned non-OK status 500")
+}
+
+type roundTripperMock struct {
+	targetURL string
+}
+
+func (m *roundTripperMock) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Clone the request to avoid side effects.
+	newReq := req.Clone(req.Context())
+	
+	// Parse the target URL (httptest server).
+	target, _ := url.Parse(m.targetURL)
+	
+	// Override seulement Host et Scheme, garder le Path original du controller.
+	newReq.URL.Scheme = target.Scheme
+	newReq.URL.Host = target.Host
+	
+	return http.DefaultTransport.RoundTrip(newReq)
+}

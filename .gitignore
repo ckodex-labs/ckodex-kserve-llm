@@ -25,3 +25,4 @@ test/k6/results/*.json
 
 # macOS
 .DS_Store
+target/

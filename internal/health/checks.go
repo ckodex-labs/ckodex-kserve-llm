@@ -55,7 +55,7 @@ func (v *VaultHealthCheck) Check(_ *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("vault health: agent unreachable at %s: %w", v.AgentAddr, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 200 = active, 429 = standby, 473 = performance standby — all acceptable.
 	switch resp.StatusCode {
@@ -105,7 +105,7 @@ func (g *GatekeeperHealthCheck) Check(_ *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("gatekeeper health: webhook service unreachable at %s: %w", g.WebhookURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("gatekeeper health: webhook service returned status %d", resp.StatusCode)
@@ -153,7 +153,7 @@ func (s *SPIREHealthCheck) Check(_ *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("spire health: agent unreachable at %s: %w", s.AgentHealthURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("spire health: agent returned status %d", resp.StatusCode)

@@ -253,7 +253,7 @@ func (a *AnticipatoryPrefetcher) HandleIntent(ctx context.Context, intent Intent
 		if err == nil {
 			resp, err := conn.Client.Do(req)
 			if err == nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 		}
 	}()

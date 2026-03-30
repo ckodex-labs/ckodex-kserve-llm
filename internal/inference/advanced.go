@@ -281,7 +281,6 @@ type MetricsSnapshot struct {
 
 // ThroughputTracker computes tokens/second over a sliding window.
 type ThroughputTracker struct {
-	mu          sync.Mutex
 	totalTokens atomic.Int64
 	windowStart atomic.Int64
 }
@@ -369,7 +368,7 @@ func (p *ConnectionPool) WarmConnections(ctx context.Context, endpoints []string
 				errCh <- fmt.Errorf("warmup %s: %w", address, err)
 				return
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}(addr)
 	}
 

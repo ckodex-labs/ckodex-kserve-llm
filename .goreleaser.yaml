@@ -40,7 +40,8 @@ archives:
     # use zip for windows archives
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
@@ -69,23 +70,25 @@ dockers_v2:
   - id: manager
     ids:
       - manager
-    image_templates:
+    images:
       - "ghcr.io/ckodex-labs/kserve-llm-operator:{{ .Version }}"
     dockerfile: Dockerfile
     platforms:
       - linux/amd64
       - linux/arm64
+    flags:
+      - "--target=manager"
     build_args:
       VERSION: "{{ .Version }}"
 
   - id: storage-initializer
     ids:
       - storage-initializer
-    image_templates:
+    images:
       - "ghcr.io/ckodex-labs/storage-initializer:{{ .Version }}"
     dockerfile: Dockerfile
     platforms:
       - linux/amd64
       - linux/arm64
-    build_flag_templates:
+    flags:
       - "--target=storage-initializer"

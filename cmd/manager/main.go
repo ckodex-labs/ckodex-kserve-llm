@@ -124,7 +124,7 @@ func main() {
 	reconciler := &controller.LLMInferenceServiceReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("LLMInferenceService"),
+		Recorder: mgr.GetEventRecorderFor("LLMInferenceService"), //nolint:staticcheck
 	}
 
 	// gRPC — independent of gateway (controls Service port definition)
@@ -251,7 +251,7 @@ func main() {
 		Client:     mgr.GetClient(),
 		Scheme:     mgr.GetScheme(),
 		HTTPClient: &http.Client{},
-		Recorder:   mgr.GetEventRecorderFor("LLMLoraAdapter"),
+		Recorder:   mgr.GetEventRecorderFor("LLMLoraAdapter"), //nolint:staticcheck
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LLMLoraAdapter")
 		os.Exit(1)
@@ -316,7 +316,7 @@ func main() {
 	if err := (&controller.ASRInferenceServiceReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("ASRInferenceService"),
+		Recorder: mgr.GetEventRecorderFor("ASRInferenceService"), //nolint:staticcheck
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ASRInferenceService")
 		os.Exit(1)

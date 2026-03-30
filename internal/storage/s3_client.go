@@ -8,6 +8,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,7 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -113,9 +114,9 @@ func (c *S3Client) Pull(ctx context.Context, uri string, destPath string) error 
 		}
 	}
 
-	downloader := manager.NewDownloader(client, func(d *manager.Downloader) {
-		d.Concurrency = workers
-		d.PartSize = partSize
+	tmgr := transfermanager.New(client, func(o *transfermanager.Options) {
+		o.Concurrency = workers
+		o.PartSizeBytes = partSize
 	})
 
 	// For S3 "folder" download, we need to list objects first
@@ -153,11 +154,18 @@ func (c *S3Client) Pull(ctx context.Context, uri string, destPath string) error 
 			}
 
 			fmt.Printf("Downloading s3://%s/%s to %s\n", bucket, *obj.Key, destFile)
-			_, err = downloader.Download(ctx, f, &s3.GetObjectInput{
+			getOut, err := tmgr.GetObject(ctx, &transfermanager.GetObjectInput{
 				Bucket: aws.String(bucket),
 				Key:    obj.Key,
 			})
+			if err != nil {
+				_ = f.Close()
+				return fmt.Errorf("failed to initiate download for s3://%s/%s: %w", bucket, *obj.Key, err)
+			}
+
+			_, err = io.Copy(f, getOut.Body)
 			_ = f.Close()
+
 			if err != nil {
 				return fmt.Errorf("failed to download s3://%s/%s: %w", bucket, *obj.Key, err)
 			}

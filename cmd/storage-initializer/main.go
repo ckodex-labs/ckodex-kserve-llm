@@ -39,7 +39,7 @@ func main() {
 
 	// Propagate --skip-checksum to env so downstream clients can read it.
 	if skipChecksum {
-		os.Setenv("SKIP_CHECKSUM", "1")
+		_ = os.Setenv("SKIP_CHECKSUM", "1")
 	}
 
 	fmt.Printf("Starting CKodex Storage Initializer...\n")

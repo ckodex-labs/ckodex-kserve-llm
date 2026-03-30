@@ -56,7 +56,7 @@ func TestInMemoryCache_Close_NoError(t *testing.T) {
 func TestSemanticCache_InMemory_HitMiss(t *testing.T) {
 	sc, err := NewSemanticCache(context.Background(), "", time.Hour)
 	require.NoError(t, err)
-	defer sc.Close()
+	defer func() { _ = sc.Close() }()
 
 	// Miss
 	_, ok := sc.GetExact(context.Background(), "What is AI?")
@@ -72,7 +72,7 @@ func TestSemanticCache_InMemory_HitMiss(t *testing.T) {
 func TestSemanticCache_InMemory_DifferentPrompts_DifferentKeys(t *testing.T) {
 	sc, err := NewSemanticCache(context.Background(), "", time.Hour)
 	require.NoError(t, err)
-	defer sc.Close()
+	defer func() { _ = sc.Close() }()
 
 	sc.StoreExact(context.Background(), "prompt A", "response A")
 	sc.StoreExact(context.Background(), "prompt B", "response B")

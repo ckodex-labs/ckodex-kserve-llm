@@ -340,7 +340,7 @@ func (l *VectorLogger) Log(level, message string, fields map[string]any) error {
 	data, _ := json.Marshal(event)
 	_, err := fmt.Fprintf(l.conn, "%s\n", data)
 	if err != nil {
-		l.conn.Close()
+		_ = l.conn.Close()
 		l.conn = nil
 		return fmt.Errorf("write to vector: %w", err)
 	}

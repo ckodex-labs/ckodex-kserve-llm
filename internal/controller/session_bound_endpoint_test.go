@@ -13,8 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -22,7 +24,7 @@ import (
 )
 
 // TestSessionReconcile_BoundEndpointGone_Rebinds clears the bound endpoint when
-// the backing pod IP is no longer in the Endpoints resource.
+// the backing pod IP is no longer in the EndpointSlice resource.
 func TestSessionReconcile_BoundEndpointGone_Rebinds(t *testing.T) {
 	s := buildSessionScheme(t)
 
@@ -31,13 +33,19 @@ func TestSessionReconcile_BoundEndpointGone_Rebinds(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "my-model", Namespace: "default"},
 	}
 
-	// Endpoints for the model service — but the old bound IP (10.0.0.99) is gone.
-	endpoints := &corev1.Endpoints{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-model", Namespace: "default"},
-		Subsets: []corev1.EndpointSubset{
+	// EndpointSlice for the model service — but the old bound IP (10.0.0.99) is gone.
+	endpoints := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-model-1",
+			Namespace: "default",
+			Labels:    map[string]string{"kubernetes.io/service-name": "my-model"},
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+		Endpoints: []discoveryv1.Endpoint{
 			{
-				Addresses: []corev1.EndpointAddress{
-					{IP: "10.0.0.1"}, // different IP
+				Addresses: []string{"10.0.0.1"}, // different IP
+				Conditions: discoveryv1.EndpointConditions{
+					Ready: ptr.To(true),
 				},
 			},
 		},
@@ -58,9 +66,12 @@ func TestSessionReconcile_BoundEndpointGone_Rebinds(t *testing.T) {
 		},
 	}
 
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-model", Namespace: "default"},
+	}
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
-		WithObjects(session, llmSvc, endpoints).
+		WithObjects(session, llmSvc, endpoints, svc).
 		WithStatusSubresource(session).
 		Build()
 	r := &SessionReconciler{Client: cl, Scheme: s}
@@ -85,12 +96,18 @@ func TestSessionReconcile_BoundEndpointGone_Rebinds(t *testing.T) {
 func TestSessionReconcile_BoundEndpointValid_KeepsBinding(t *testing.T) {
 	s := buildSessionScheme(t)
 
-	endpoints := &corev1.Endpoints{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-model", Namespace: "default"},
-		Subsets: []corev1.EndpointSubset{
+	endpoints := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-model-1",
+			Namespace: "default",
+			Labels:    map[string]string{"kubernetes.io/service-name": "my-model"},
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+		Endpoints: []discoveryv1.Endpoint{
 			{
-				Addresses: []corev1.EndpointAddress{
-					{IP: "10.0.0.5"}, // still alive
+				Addresses: []string{"10.0.0.5"}, // still alive
+				Conditions: discoveryv1.EndpointConditions{
+					Ready: ptr.To(true),
 				},
 			},
 		},
@@ -113,9 +130,12 @@ func TestSessionReconcile_BoundEndpointValid_KeepsBinding(t *testing.T) {
 		},
 	}
 
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-model", Namespace: "default"},
+	}
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
-		WithObjects(session, endpoints).
+		WithObjects(session, endpoints, svc).
 		WithStatusSubresource(session).
 		Build()
 	r := &SessionReconciler{Client: cl, Scheme: s}
@@ -184,12 +204,18 @@ func TestSessionReconcile_UnboundSession_Binds(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "my-model", Namespace: "default"},
 	}
 
-	endpoints := &corev1.Endpoints{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-model", Namespace: "default"},
-		Subsets: []corev1.EndpointSubset{
+	endpoints := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-model-1",
+			Namespace: "default",
+			Labels:    map[string]string{"kubernetes.io/service-name": "my-model"},
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+		Endpoints: []discoveryv1.Endpoint{
 			{
-				Addresses: []corev1.EndpointAddress{
-					{IP: "10.0.0.1"},
+				Addresses: []string{"10.0.0.1"},
+				Conditions: discoveryv1.EndpointConditions{
+					Ready: ptr.To(true),
 				},
 			},
 		},
@@ -209,9 +235,12 @@ func TestSessionReconcile_UnboundSession_Binds(t *testing.T) {
 		},
 	}
 
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-model", Namespace: "default"},
+	}
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
-		WithObjects(session, llmSvc, endpoints).
+		WithObjects(session, llmSvc, endpoints, svc).
 		WithStatusSubresource(session).
 		Build()
 	r := &SessionReconciler{Client: cl, Scheme: s}

@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -81,7 +82,7 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if err := r.Create(ctx, expectedCache); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -187,7 +188,7 @@ func (r *LLMLoraAdapterReconciler) registerWithTargetService(ctx context.Context
 				"Failed to reach vLLM on pod %s: %v", pod.Name, err)
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 			r.Recorder.Eventf(lora, corev1.EventTypeWarning, "RegistrationFailed",

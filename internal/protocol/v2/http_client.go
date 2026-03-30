@@ -165,7 +165,7 @@ func (c *Client) InferWithBinary(ctx context.Context, modelName string, version 
 	if err != nil {
 		return nil, nil, fmt.Errorf("execute request: %w", err)
 	}
-	defer httpResp.Body.Close()
+	defer func() { _ = httpResp.Body.Close() }()
 
 	respBody, err := io.ReadAll(httpResp.Body)
 	if err != nil {
@@ -214,7 +214,7 @@ func (c *Client) get(ctx context.Context, path string, result any) error {
 	if err != nil {
 		return fmt.Errorf("execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -248,7 +248,7 @@ func (c *Client) post(ctx context.Context, path string, body any, result any) er
 	if err != nil {
 		return fmt.Errorf("execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

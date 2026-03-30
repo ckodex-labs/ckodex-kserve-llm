@@ -122,7 +122,7 @@ func TestMain(m *testing.M) {
 	// Bump etcd max request sizes via its native environment variable to allow
 	// our large CRDs (resulting from allowDangerousTypes=true floats) to be
 	// installed without the "request is too large" panic.
-	os.Setenv("ETCD_MAX_REQUEST_BYTES", "52428800")
+	_ = os.Setenv("ETCD_MAX_REQUEST_BYTES", "52428800")
 
 	var mgr ctrl.Manager
 	var err error

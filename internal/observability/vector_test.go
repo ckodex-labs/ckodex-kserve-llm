@@ -125,7 +125,7 @@ func TestInjectVectorSidecar_AddsVectorConfigVolume(t *testing.T) {
 	for _, v := range spec.Volumes {
 		if v.Name == "vector-config" {
 			found = true
-			assert.Equal(t, "my-vector-cm", v.VolumeSource.ConfigMap.Name)
+			assert.Equal(t, "my-vector-cm", v.ConfigMap.Name)
 		}
 	}
 	assert.True(t, found, "vector-config volume must be present")
@@ -218,7 +218,7 @@ func startEchoServer(t *testing.T) string {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		buf := make([]byte, 4096)
 		_, _ = conn.Read(buf)
 	}()

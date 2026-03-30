@@ -325,7 +325,7 @@ func TestTokenVerifier_RSA_ValidToken_WithJWKSServer(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(jwksJSON)
+		_, _ = w.Write(jwksJSON)
 	}))
 	defer server.Close()
 
@@ -395,7 +395,7 @@ func TestTokenVerifier_JWKS_KidNotFound_ReturnsError(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(jwksJSON)
+		_, _ = w.Write(jwksJSON)
 	}))
 	defer server.Close()
 
@@ -435,7 +435,7 @@ func TestTokenVerifier_JWKS_Cached_SecondCallUsesCache(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(jwksJSON)
+		_, _ = w.Write(jwksJSON)
 	}))
 	defer server.Close()
 
@@ -475,7 +475,7 @@ func TestTokenVerifier_JWKS_InvalidJSONResponse_ReturnsError(t *testing.T) {
 	skipIfNoTCP(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("not valid json"))
+		_, _ = w.Write([]byte("not valid json"))
 	}))
 	defer server.Close()
 
@@ -515,7 +515,7 @@ func TestTokenVerifier_JWKS_IssuerURL_BuildsJWKSEndpoint(t *testing.T) {
 		// Verify it's hitting the JWKS path derived from issuer
 		if r.URL.Path == "/.well-known/jwks.json" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write(jwksJSON)
+			_, _ = w.Write(jwksJSON)
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)

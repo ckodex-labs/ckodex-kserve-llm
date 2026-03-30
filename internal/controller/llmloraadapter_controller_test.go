@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -31,6 +32,7 @@ func buildLoraScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	s := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(s))
+	require.NoError(t, discoveryv1.AddToScheme(s))
 	require.NoError(t, servingv1alpha2.AddToScheme(s))
 	return s
 }
@@ -87,7 +89,7 @@ func TestLLMLoraAdapter_CreatesLocalModelCache(t *testing.T) {
 	})
 	require.NoError(t, err)
 	// Should requeue to check cache readiness.
-	assert.True(t, result.Requeue)
+	assert.True(t, result.RequeueAfter > 0)
 
 	var lmcList servingv1alpha2.LocalModelCacheList
 	require.NoError(t, cl.List(context.Background(), &lmcList))

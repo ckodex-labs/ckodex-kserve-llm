@@ -9,6 +9,11 @@ bin/
 .output/
 .bin/
 .dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
 # Dependencies
 node_modules/
@@ -18,10 +23,19 @@ vendor/
 *.log
 *.out
 test/k6/results/*.json
+coverage.txt
+profile.out
 
 # Local secrets & env
 .env
 .env.local
+.env.*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # macOS
 .DS_Store

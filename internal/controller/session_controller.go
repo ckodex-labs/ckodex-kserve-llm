@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,6 +32,7 @@ type SessionReconciler struct {
 
 // +kubebuilder:rbac:groups=serving.ckodex.io,resources=inferencesessions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=serving.ckodex.io,resources=inferencesessions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch
 
 func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("session", req.NamespacedName)
@@ -110,7 +111,7 @@ func (r *SessionReconciler) isExpired(session *servingv1alpha2.InferenceSession)
 }
 
 // validateEndpoint checks if the bound endpoint pod is still running
-// by verifying the Endpoints resource for the model service contains this address.
+// by verifying the EndpointSlice resource for the model service contains this address.
 func (r *SessionReconciler) validateEndpoint(ctx context.Context, session *servingv1alpha2.InferenceSession) error {
 	if session.Status.BoundEndpoint == "" {
 		return fmt.Errorf("no bound endpoint")
@@ -122,20 +123,29 @@ func (r *SessionReconciler) validateEndpoint(ctx context.Context, session *servi
 		host = host[:idx]
 	}
 
-	// Look up the Endpoints for the model service
-	var endpoints corev1.Endpoints
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      session.Spec.ModelRef,
-		Namespace: session.Namespace,
-	}, &endpoints); err != nil {
-		return fmt.Errorf("endpoints for %s not found: %w", session.Spec.ModelRef, err)
+	// Look up the EndpointSlices for the model service
+	var slices discoveryv1.EndpointSliceList
+	if err := r.List(ctx, &slices, client.InNamespace(session.Namespace), client.MatchingLabels{
+		"kubernetes.io/service-name": session.Spec.ModelRef,
+	}); err != nil {
+		return fmt.Errorf("endpointslices for %s not found: %w", session.Spec.ModelRef, err)
 	}
 
-	// Check if the bound address exists in any subset
-	for _, subset := range endpoints.Subsets {
-		for _, addr := range subset.Addresses {
-			if addr.IP == host || fmt.Sprintf("%s.%s.svc.cluster.local", session.Spec.ModelRef, session.Namespace) == host {
-				return nil // endpoint is valid
+	if len(slices.Items) == 0 {
+		return fmt.Errorf("no endpointslices found for service %s", session.Spec.ModelRef)
+	}
+
+	// Check if the bound address exists in any slice
+	for _, slice := range slices.Items {
+		for _, ep := range slice.Endpoints {
+			// Ready must be nil or true
+			if ep.Conditions.Ready != nil && !*ep.Conditions.Ready {
+				continue
+			}
+			for _, addr := range ep.Addresses {
+				if addr == host || fmt.Sprintf("%s.%s.svc.cluster.local", session.Spec.ModelRef, session.Namespace) == host {
+					return nil // endpoint is valid
+				}
 			}
 		}
 	}
@@ -144,7 +154,7 @@ func (r *SessionReconciler) validateEndpoint(ctx context.Context, session *servi
 }
 
 // selectEndpoint picks the best endpoint for a new session.
-// Looks up Endpoints and selects the least-loaded (by active sessions).
+// Looks up EndpointSlices and selects the least-loaded (by active sessions).
 func (r *SessionReconciler) selectEndpoint(ctx context.Context, session *servingv1alpha2.InferenceSession) (string, error) {
 	// Verify model exists
 	var llmSvc servingv1alpha2.LLMInferenceService
@@ -155,12 +165,11 @@ func (r *SessionReconciler) selectEndpoint(ctx context.Context, session *serving
 		return "", fmt.Errorf("model %s not found: %w", session.Spec.ModelRef, err)
 	}
 
-	// Look up Endpoints to find ready pod IPs
-	var endpoints corev1.Endpoints
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      session.Spec.ModelRef,
-		Namespace: session.Namespace,
-	}, &endpoints); err != nil {
+	// Look up EndpointSlices to find ready pod IPs
+	var slices discoveryv1.EndpointSliceList
+	if err := r.List(ctx, &slices, client.InNamespace(session.Namespace), client.MatchingLabels{
+		"kubernetes.io/service-name": session.Spec.ModelRef,
+	}); err != nil || len(slices.Items) == 0 {
 		// Fallback to service DNS
 		return fmt.Sprintf("%s.%s.svc.cluster.local:8000",
 			llmSvc.Name, llmSvc.Namespace), nil
@@ -183,12 +192,17 @@ func (r *SessionReconciler) selectEndpoint(ctx context.Context, session *serving
 	// Select endpoint with fewest active sessions
 	bestEndpoint := ""
 	bestLoad := int(^uint(0) >> 1) // max int
-	for _, subset := range endpoints.Subsets {
-		for _, addr := range subset.Addresses {
-			ep := fmt.Sprintf("%s:8000", addr.IP)
-			if load := loadMap[ep]; load < bestLoad {
-				bestLoad = load
-				bestEndpoint = ep
+	for _, slice := range slices.Items {
+		for _, ep := range slice.Endpoints {
+			if ep.Conditions.Ready != nil && !*ep.Conditions.Ready {
+				continue
+			}
+			for _, addr := range ep.Addresses {
+				epStr := fmt.Sprintf("%s:8000", addr)
+				if load := loadMap[epStr]; load < bestLoad {
+					bestLoad = load
+					bestEndpoint = epStr
+				}
 			}
 		}
 	}

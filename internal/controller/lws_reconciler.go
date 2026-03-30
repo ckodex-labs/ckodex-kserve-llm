@@ -23,12 +23,6 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
 
-// LeaderWorkerSet GVR for dynamic client operations.
-var lwsGVR = schema.GroupVersionResource{
-	Group:    "leaderworkerset.x-k8s.io",
-	Version:  "v1",
-	Resource: "leaderworkersets",
-}
 
 // Reconciler manages LeaderWorkerSet resources for distributed inference.
 // Maps ParallelismSpec → multi-node GPU topology.

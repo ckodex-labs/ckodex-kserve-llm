@@ -514,8 +514,8 @@ func TestInjectSidecar_AppendsCSIVolume(t *testing.T) {
 
 	require.Len(t, spec.Volumes, 1)
 	assert.Equal(t, "spiffe-workload-api", spec.Volumes[0].Name)
-	require.NotNil(t, spec.Volumes[0].VolumeSource.CSI)
-	assert.Equal(t, "spiffe.csi.spiffe.io", spec.Volumes[0].VolumeSource.CSI.Driver)
+	require.NotNil(t, spec.Volumes[0].CSI)
+	assert.Equal(t, "spiffe.csi.spiffe.io", spec.Volumes[0].CSI.Driver)
 }
 
 func TestInjectSidecar_AppendsSidecarContainer(t *testing.T) {

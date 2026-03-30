@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -98,7 +99,24 @@ func (c *S3Client) Pull(ctx context.Context, uri string, destPath string) error 
 		client = s3.NewFromConfig(cfg, s3PathStyleOption())
 	}
 
-	downloader := manager.NewDownloader(client) // nolint:staticcheck
+	// S3 Downloader configuration from environment (consistent with other clients)
+	workers := DefaultDownloadWorkers
+	if v := os.Getenv("STORAGE_DOWNLOAD_WORKERS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			workers = n
+		}
+	}
+	partSize := DefaultChunkSize
+	if v := os.Getenv("STORAGE_CHUNK_SIZE"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			partSize = n
+		}
+	}
+
+	downloader := manager.NewDownloader(client, func(d *manager.Downloader) {
+		d.Concurrency = workers
+		d.PartSize = partSize
+	})
 
 	// For S3 "folder" download, we need to list objects first
 	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
@@ -135,7 +153,7 @@ func (c *S3Client) Pull(ctx context.Context, uri string, destPath string) error 
 			}
 
 			fmt.Printf("Downloading s3://%s/%s to %s\n", bucket, *obj.Key, destFile)
-			_, err = downloader.Download(ctx, f, &s3.GetObjectInput{ // nolint:staticcheck
+			_, err = downloader.Download(ctx, f, &s3.GetObjectInput{
 				Bucket: aws.String(bucket),
 				Key:    obj.Key,
 			})

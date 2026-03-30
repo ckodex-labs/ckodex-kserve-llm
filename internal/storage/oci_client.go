@@ -88,7 +88,7 @@ func (c *OCIClient) pullInternal(ctx context.Context, artifact *ModelArtifact, d
 	if err != nil {
 		return fmt.Errorf("failed to create file store at %s: %w", destPath, err)
 	}
-	defer fs.Close()
+	defer func() { _ = fs.Close() }()
 
 	// Copy (pull) from remote to local file store.
 	tag := artifact.Reference
@@ -313,7 +313,7 @@ func (c *OCIClient) Push(ctx context.Context, artifact *ModelArtifact, srcPath s
 	if err != nil {
 		return fmt.Errorf("failed to create file store at %s: %w", srcPath, err)
 	}
-	defer fs.Close()
+	defer func() { _ = fs.Close() }()
 
 	// Copy (push) from local file store to remote.
 	tag := artifact.Reference

@@ -23,14 +23,11 @@ type GitHubClient struct {
 }
 
 // NewGitHubClient creates a new GitHubClient.
-func NewGitHubClient(ctx context.Context, token string) *GitHubClient {
-	var httpClient *http.Client
-	if token != "" {
-		// handle auth if needed
-		// httpClient = oauth2.NewClient(ctx, ...)
-	}
+func NewGitHubClient(_ context.Context, _ string) *GitHubClient {
+	// The token is currently handled in Pull() via GITHUB_TOKEN env var.
+	// This constructor can be expanded if needed for explicit OAuth2 clients.
 	return &GitHubClient{
-		client: github.NewClient(httpClient),
+		client: github.NewClient(nil),
 	}
 }
 
@@ -110,7 +107,7 @@ func (c *GitHubClient) downloadFile(ctx context.Context, downloadURL, destFile s
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to download from GitHub: %s", resp.Status)
@@ -124,7 +121,7 @@ func (c *GitHubClient) downloadFile(ctx context.Context, downloadURL, destFile s
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	_, err = io.Copy(out, resp.Body)
 	return err

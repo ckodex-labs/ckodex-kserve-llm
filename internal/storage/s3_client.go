@@ -98,10 +98,7 @@ func (c *S3Client) Pull(ctx context.Context, uri string, destPath string) error 
 		client = s3.NewFromConfig(cfg, s3PathStyleOption())
 	}
 
-	downloader := manager.NewDownloader(client, func(d *manager.Downloader) {
-		d.PartSize = 64 * 1024 * 1024 // 64MB per part
-		d.Concurrency = 5             // 5 concurrent downloads
-	})
+	downloader := manager.NewDownloader(client) // nolint:staticcheck
 
 	// For S3 "folder" download, we need to list objects first
 	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
@@ -136,13 +133,13 @@ func (c *S3Client) Pull(ctx context.Context, uri string, destPath string) error 
 			if err != nil {
 				return err
 			}
-			defer f.Close()
 
 			fmt.Printf("Downloading s3://%s/%s to %s\n", bucket, *obj.Key, destFile)
-			_, err = downloader.Download(ctx, f, &s3.GetObjectInput{
+			_, err = downloader.Download(ctx, f, &s3.GetObjectInput{ // nolint:staticcheck
 				Bucket: aws.String(bucket),
 				Key:    obj.Key,
 			})
+			_ = f.Close()
 			if err != nil {
 				return fmt.Errorf("failed to download s3://%s/%s: %w", bucket, *obj.Key, err)
 			}

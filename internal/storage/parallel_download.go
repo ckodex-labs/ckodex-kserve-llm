@@ -98,7 +98,7 @@ func (d *ParallelDownloader) DownloadFile(ctx context.Context, url, destFile, ex
 	if expectedSHA256 != "" {
 		if err := VerifyFile(destFile, expectedSHA256); err != nil {
 			// Remove the corrupt file.
-			os.Remove(destFile)
+			_ = os.Remove(destFile)
 			return err
 		}
 		fmt.Printf("Checksum verified: %s\n", filepath.Base(destFile))
@@ -119,7 +119,7 @@ func (d *ParallelDownloader) probeFile(ctx context.Context, url string) (int64, 
 	if err != nil {
 		return 0, false, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, false, fmt.Errorf("HEAD %s returned %s", url, resp.Status)
@@ -237,18 +237,18 @@ func (d *ParallelDownloader) downloadChunked(ctx context.Context, url, destFile 
 	// Assemble chunks into the final file using atomic rename.
 	tmpFile := destFile + ".tmp"
 	if err := d.assembleChunks(chunks, tmpFile); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return err
 	}
 
 	// Atomic rename.
 	if err := os.Rename(tmpFile, destFile); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to finalize file: %w", err)
 	}
 
 	// Clean up chunks directory.
-	os.RemoveAll(chunksDir)
+	_ = os.RemoveAll(chunksDir)
 
 	fmt.Printf("Assembled %d chunks into %s\n", len(chunks), filepath.Base(destFile))
 	return nil
@@ -267,7 +267,7 @@ func (d *ParallelDownloader) downloadChunk(ctx context.Context, url string, c ch
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status %s for range %d-%d", resp.Status, c.Start, c.End)
@@ -282,15 +282,15 @@ func (d *ParallelDownloader) downloadChunk(ctx context.Context, url string, c ch
 
 	// Wrap with a counting writer to track progress.
 	written, err := io.Copy(f, &countingReader{r: resp.Body, counter: counter})
-	f.Close()
+	_ = f.Close()
 	if err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return err
 	}
 
 	expectedSize := c.End - c.Start + 1
 	if written != expectedSize {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("short write: got %d, expected %d", written, expectedSize)
 	}
 
@@ -303,7 +303,7 @@ func (d *ParallelDownloader) assembleChunks(chunks []chunkDescriptor, destFile s
 	if err != nil {
 		return fmt.Errorf("failed to create assembled file: %w", err)
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	for _, c := range chunks {
 		f, err := os.Open(c.Path)
@@ -311,10 +311,10 @@ func (d *ParallelDownloader) assembleChunks(chunks []chunkDescriptor, destFile s
 			return fmt.Errorf("failed to open chunk %d: %w", c.Index, err)
 		}
 		if _, err := io.Copy(out, f); err != nil {
-			f.Close()
+			_ = f.Close()
 			return fmt.Errorf("failed to copy chunk %d: %w", c.Index, err)
 		}
-		f.Close()
+		_ = f.Close()
 	}
 
 	return nil
@@ -336,7 +336,7 @@ func (d *ParallelDownloader) downloadSimple(ctx context.Context, url, destFile s
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download %s failed: %s", url, resp.Status)
@@ -349,11 +349,11 @@ func (d *ParallelDownloader) downloadSimple(ctx context.Context, url, destFile s
 	}
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
-		f.Close()
-		os.Remove(tmpFile)
+		_ = f.Close()
+		_ = os.Remove(tmpFile)
 		return err
 	}
-	f.Close()
+	_ = f.Close()
 
 	return os.Rename(tmpFile, destFile)
 }

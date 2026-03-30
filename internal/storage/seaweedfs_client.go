@@ -99,7 +99,7 @@ func (s *SeaweedFSClient) Upload(ctx context.Context, localPath, remotePath stri
 	if err != nil {
 		return fmt.Errorf("open local file %s: %w", localPath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	url := fmt.Sprintf("%s%s%s", s.Config.FilerURL, s.Config.BasePath, remotePath)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, file)
@@ -112,7 +112,7 @@ func (s *SeaweedFSClient) Upload(ctx context.Context, localPath, remotePath stri
 	if err != nil {
 		return fmt.Errorf("upload to %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -134,7 +134,7 @@ func (s *SeaweedFSClient) Download(ctx context.Context, remotePath, localPath st
 	if err != nil {
 		return fmt.Errorf("download from %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -150,7 +150,7 @@ func (s *SeaweedFSClient) Download(ctx context.Context, remotePath, localPath st
 	if err != nil {
 		return fmt.Errorf("create local file %s: %w", localPath, err)
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		return fmt.Errorf("write to %s: %w", localPath, err)
@@ -171,7 +171,7 @@ func (s *SeaweedFSClient) Delete(ctx context.Context, remotePath string) error {
 	if err != nil {
 		return fmt.Errorf("delete %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -193,7 +193,7 @@ func (s *SeaweedFSClient) Exists(ctx context.Context, remotePath string) (bool, 
 	if err != nil {
 		return false, fmt.Errorf("head %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return resp.StatusCode == http.StatusOK, nil
 }

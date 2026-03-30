@@ -1033,7 +1033,7 @@ func TestInjectVaultSecrets_SetsEnvFromVault(t *testing.T) {
 	t.Setenv("VAULT_TOKEN", "test-token")
 
 	// Clean up injected env var after the test.
-	t.Cleanup(func() { os.Unsetenv("TEST_VAULT_KEY") })
+	t.Cleanup(func() { _ = os.Unsetenv("TEST_VAULT_KEY") })
 
 	err := InjectVaultSecrets(context.Background(), "secret/data/inject")
 	require.NoError(t, err)

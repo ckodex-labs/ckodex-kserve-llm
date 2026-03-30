@@ -161,7 +161,7 @@ func (c *HuggingFaceClient) listRepoFiles(ctx context.Context, repo, revision, t
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HF API tree returned %s for %s", resp.Status, url)

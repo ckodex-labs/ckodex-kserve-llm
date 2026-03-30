@@ -83,7 +83,7 @@ func (v *ChecksumVerifier) FetchFileChecksums(ctx context.Context, repo, revisio
 	if err != nil {
 		return nil, fmt.Errorf("checksum: failed to fetch model info: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("checksum: HF API returned %s for %s", resp.Status, url)
@@ -111,7 +111,7 @@ func VerifyFile(filePath, expectedSHA256 string) error {
 	if err != nil {
 		return fmt.Errorf("checksum: cannot open %s: %w", filePath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -156,7 +156,7 @@ func ComputeSHA256(filePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {

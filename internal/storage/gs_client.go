@@ -104,13 +104,13 @@ func (c *GSClient) downloadObject(ctx context.Context, bucket *storage.BucketHan
 	if err != nil {
 		return fmt.Errorf("failed to create GS reader for %s: %w", name, err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	f, err := os.Create(destFile)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	_, err = io.Copy(f, rc)
 	return err

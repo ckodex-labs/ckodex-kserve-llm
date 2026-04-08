@@ -45,6 +45,7 @@ const (
 	cosignVersion     = "v2.4.1"
 	trivyVersion      = "0.58.2"
 	lulaVersion       = "v0.9.3"
+	lulaImage         = "ghcr.io/defenseunicorns/lula/lula:" + lulaVersion
 	golangciLintImage = "golangci/golangci-lint:" + golangciLintVer
 
 	// Coverage thresholds — set at current actuals so any regression fails CI.
@@ -144,11 +145,12 @@ type pipeline struct {
 
 func (p *pipeline) lula(ctx context.Context) (string, error) {
 	// Lula validates security controls and generates OSCAL assessment results.
-	// We use 'lula validate' to check our manifests against lula-component.yaml.
-	return p.client.Container().
-		From(fmt.Sprintf("ghcr.io/defenseunicorns/lula:%s", lulaVersion)).
+	// We force linux/amd64 as the ARM64 image might be missing from GHCR.
+	return p.client.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).
+		From("ghcr.io/defenseunicorns/lula:" + lulaVersion).
 		WithMountedDirectory("/src", p.source).
 		WithWorkdir("/src").
+		// Static validation using mock resources
 		WithExec([]string{"lula", "validate", "-f", "lula/lula-component.yaml", "-o", "assessment-results.yaml"}).
 		Stdout(ctx)
 }

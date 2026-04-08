@@ -44,6 +44,7 @@ const (
 	syftVersion       = "v1.22.0"
 	cosignVersion     = "v2.4.1"
 	trivyVersion      = "0.58.2"
+	lulaVersion       = "v0.9.3"
 	golangciLintImage = "golangci/golangci-lint:" + golangciLintVer
 
 	// Coverage thresholds — set at current actuals so any regression fails CI.
@@ -112,6 +113,12 @@ func main() {
 		log("trivy scan passed (no CRITICAL/HIGH unfixed CVEs)")
 	}
 
+	// Lula OSCAL Validation
+	if _, err := p.lula(ctx); err != nil {
+		fatal("lula validation", err)
+	}
+	log("lula oscal validation passed")
+
 	// SBOM + Sign + Attest (Supply Chain Security)
 	if !cfg.skipScan {
 		// SBOM generation is currently disabled due to upstream Syft image issues in this environment.
@@ -131,6 +138,19 @@ type pipeline struct {
 	client *dagger.Client
 	source *dagger.Directory
 	cfg    *config
+}
+
+// --- Stage: lula ---
+
+func (p *pipeline) lula(ctx context.Context) (string, error) {
+	// Lula validates security controls and generates OSCAL assessment results.
+	// We use 'lula validate' to check our manifests against lula-component.yaml.
+	return p.client.Container().
+		From(fmt.Sprintf("ghcr.io/defenseunicorns/lula:%s", lulaVersion)).
+		WithMountedDirectory("/src", p.source).
+		WithWorkdir("/src").
+		WithExec([]string{"lula", "validate", "-f", "lula/lula-component.yaml", "-o", "assessment-results.yaml"}).
+		Stdout(ctx)
 }
 
 // --- Stage: lint ---

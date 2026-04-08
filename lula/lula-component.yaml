@@ -1,0 +1,40 @@
+component-definition:
+  uuid: c67ec05a-500b-4171-a068-9a2f643da81a
+  metadata:
+    title: KServe LLM Operator - Hardened v1.0.0
+    last-modified: 2026-04-08T14:14:00Z
+    version: 1.0.0
+    oscal-version: 1.1.2
+    parties:
+      - uuid: 11111111-1111-1111-1111-111111111111
+        type: organization
+        name: CKodex Labs
+  components:
+    - uuid: 22222222-2222-2222-2222-222222222222
+      type: software
+      title: kserve-llm-operator
+      description: Hardened KServe LLM Operator with Zero-Trust enforcement
+      purpose: Serve LLMs securely on Kubernetes
+      responsible-roles:
+        - role-id: provider
+          party-uuids:
+            - 11111111-1111-1111-1111-111111111111
+      control-implementations:
+        - uuid: 33333333-3333-3333-3333-333333333333
+          source: https://github.com/defenseunicorns/lula
+          description: NIST 800-53 security controls for containerized inference
+          implemented-requirements:
+            - uuid: 44444444-4444-4444-4444-444444444444
+              control-id: ac-6
+              description: Ensure least privilege by running containers as non-root
+              links:
+                - rel: lula-validation
+                  href: "#runAsNonRoot-validation"
+  back-matter:
+    resources:
+      - uuid: 55555555-5555-5555-5555-555555555555
+        id: runAsNonRoot-validation
+        description: Validate that all deployment containers have runAsNonRoot enabled
+        links:
+          - rel: lula-validation
+            href: "lula-validation.yaml"

@@ -145,9 +145,9 @@ type pipeline struct {
 
 func (p *pipeline) lula(ctx context.Context) (string, error) {
 	// Lula validates security controls and generates OSCAL assessment results.
-	// We force linux/amd64 as the ARM64 image might be missing from GHCR.
+	// We use 'v0.9.1' which has confirmed stable images on GHCR for most platforms.
 	return p.client.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).
-		From("ghcr.io/defenseunicorns/lula:" + lulaVersion).
+		From("ghcr.io/defenseunicorns/lula:v0.9.1").
 		WithMountedDirectory("/src", p.source).
 		WithWorkdir("/src").
 		// Static validation using mock resources

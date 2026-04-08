@@ -1,27 +1,26 @@
-name: CI
+name: CI Hardening & Compliance
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: [ main, develop ]
 
 jobs:
   dagger:
+    name: Dagger Pipeline
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Go
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
           cache: true
 
       - name: Run Dagger Pipeline
-        uses: dagger/dagger-for-github@v7
-        with:
-          version: "latest"
-          verb: run
-          args: go run ./ci/main.go
+        run: go run ./ci/main.go
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}

@@ -367,7 +367,7 @@ func TestRegisterWithTargetService_HTTPError(t *testing.T) {
 	r := &LLMLoraAdapterReconciler{
 		Client:     cl,
 		Scheme:     s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder:   record.NewFakeRecorder(10),
 		HTTPClient: &http.Client{Transport: &roundTripperMock{targetURL: srv.URL}},
 	}
 
@@ -383,13 +383,13 @@ type roundTripperMock struct {
 func (m *roundTripperMock) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Clone the request to avoid side effects.
 	newReq := req.Clone(req.Context())
-	
+
 	// Parse the target URL (httptest server).
 	target, _ := url.Parse(m.targetURL)
-	
+
 	// Override seulement Host et Scheme, garder le Path original du controller.
 	newReq.URL.Scheme = target.Scheme
 	newReq.URL.Host = target.Host
-	
+
 	return http.DefaultTransport.RoundTrip(newReq)
 }

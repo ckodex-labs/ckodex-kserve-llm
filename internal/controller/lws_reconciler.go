@@ -23,7 +23,6 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
 
-
 // Reconciler manages LeaderWorkerSet resources for distributed inference.
 // Maps ParallelismSpec → multi-node GPU topology.
 type Reconciler struct {
@@ -134,7 +133,7 @@ func (r *Reconciler) buildLWS(llmSvc *servingv1alpha2.LLMInferenceService, name 
 							"containers": []interface{}{
 								map[string]interface{}{
 									"name":  "vllm-leader",
-									"image": "vllm/vllm-openai:latest",
+									"image": DefaultVLLMImage,
 									"args":  vllmArgs,
 									"ports": []interface{}{
 										map[string]interface{}{"containerPort": int64(8000), "name": "http"},
@@ -152,7 +151,7 @@ func (r *Reconciler) buildLWS(llmSvc *servingv1alpha2.LLMInferenceService, name 
 							"containers": []interface{}{
 								map[string]interface{}{
 									"name":  "vllm-worker",
-									"image": "vllm/vllm-openai:latest",
+									"image": DefaultVLLMImage,
 									"args":  vllmArgs,
 									"env": []interface{}{
 										map[string]interface{}{"name": "ROLE", "value": "worker"},

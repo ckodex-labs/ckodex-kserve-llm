@@ -34,7 +34,7 @@ lint: golangci-lint ## Run golangci-lint
 
 .PHONY: test
 test: generate manifests envtest ## Run unit + integration tests
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use -p path 2>/dev/null)" go test ./... -coverprofile cover.out -v -race
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use -p path 2>/dev/null)" go test -p 1 ./... -coverprofile cover.out -v -race
 	@echo "Coverage:"
 	@go tool cover -func cover.out | tail -1
 

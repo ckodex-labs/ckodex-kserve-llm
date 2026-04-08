@@ -447,6 +447,10 @@ type LLMInferenceServiceStatus struct {
 	// ObservedGeneration is the most recent generation observed.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Optimized indicates whether the model is running with WellKnown optimizations applied.
+	// +optional
+	Optimized bool `json:"optimized,omitempty"`
 }
 
 // Condition types for LLMInferenceService.
@@ -465,6 +469,9 @@ const (
 
 	// ConditionModelLoaded indicates the model has been downloaded and loaded.
 	ConditionModelLoaded = "ModelLoaded"
+
+	// ConditionModelOptimized indicates model-specific optimizations (WellKnown) were applied.
+	ConditionModelOptimized = "ModelOptimized"
 )
 
 func init() {

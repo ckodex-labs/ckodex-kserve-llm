@@ -22,6 +22,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/security"
 )
 
@@ -31,19 +35,19 @@ func TestDetectHardware(t *testing.T) {
 	tests := []struct {
 		name     string
 		nodes    []corev1.Node
-		expected HardwareType
+		expected deployment.HardwareType
 	}{
 		{
 			name:     "empty node list returns Unknown",
 			nodes:    nil,
-			expected: HardwareUnknown,
+			expected: deployment.HardwareUnknown,
 		},
 		{
 			name: "ARM64 node without GPU returns AppleSilicon",
 			nodes: []corev1.Node{
 				nodeWithArch("arm64", nil, nil),
 			},
-			expected: HardwareAppleSilicon,
+			expected: deployment.HardwareAppleSilicon,
 		},
 		{
 			name: "ARM64 node with apple.com/gpu capacity returns AppleSiliconMPS",
@@ -52,7 +56,7 @@ func TestDetectHardware(t *testing.T) {
 					"apple.com/gpu": resource.MustParse("1"),
 				}, nil),
 			},
-			expected: HardwareAppleSiliconMPS,
+			expected: deployment.HardwareAppleSiliconMPS,
 		},
 		{
 			name: "ARM64 node with apple.com/gpu.present label returns AppleSiliconMPS",
@@ -61,14 +65,14 @@ func TestDetectHardware(t *testing.T) {
 					"apple.com/gpu.present": "true",
 				}),
 			},
-			expected: HardwareAppleSiliconMPS,
+			expected: deployment.HardwareAppleSiliconMPS,
 		},
 		{
 			name: "AMD64 node without GPU returns GenericX86",
 			nodes: []corev1.Node{
 				nodeWithArch("amd64", nil, nil),
 			},
-			expected: HardwareGenericX86,
+			expected: deployment.HardwareGenericX86,
 		},
 		{
 			name: "node with nvidia.com/gpu capacity returns NVIDIA",
@@ -77,7 +81,7 @@ func TestDetectHardware(t *testing.T) {
 					"nvidia.com/gpu": resource.MustParse("1"),
 				}, nil),
 			},
-			expected: HardwareNVIDIA,
+			expected: deployment.HardwareNVIDIA,
 		},
 		{
 			name: "node with nvidia.com/gpu.present label returns NVIDIA",
@@ -86,7 +90,7 @@ func TestDetectHardware(t *testing.T) {
 					"nvidia.com/gpu.present": "true",
 				}),
 			},
-			expected: HardwareNVIDIA,
+			expected: deployment.HardwareNVIDIA,
 		},
 		{
 			name: "node with amd.com/gpu capacity returns AMD",
@@ -95,7 +99,7 @@ func TestDetectHardware(t *testing.T) {
 					"amd.com/gpu": resource.MustParse("1"),
 				}, nil),
 			},
-			expected: HardwareAMD,
+			expected: deployment.HardwareAMD,
 		},
 		{
 			name: "mixed cluster ARM64 + NVIDIA picks highest priority (NVIDIA)",
@@ -105,7 +109,7 @@ func TestDetectHardware(t *testing.T) {
 					"nvidia.com/gpu": resource.MustParse("2"),
 				}, nil),
 			},
-			expected: HardwareNVIDIA,
+			expected: deployment.HardwareNVIDIA,
 		},
 		{
 			name: "mixed cluster AMD GPU + x86 CPU picks AMD",
@@ -115,17 +119,13 @@ func TestDetectHardware(t *testing.T) {
 					"amd.com/gpu": resource.MustParse("1"),
 				}, nil),
 			},
-			expected: HardwareAMD,
+			expected: deployment.HardwareAMD,
 		},
-	}
-
-	r := &LLMInferenceServiceReconciler{
-		Recorder: record.NewFakeRecorder(10),
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := r.detectHardware(tt.nodes)
+			got := deployment.DetectHardware(tt.nodes)
 			if got != tt.expected {
 				t.Errorf("detectHardware() = %v, want %v", got, tt.expected)
 			}
@@ -136,15 +136,14 @@ func TestDetectHardware(t *testing.T) {
 // --- applyHardwareOptimizations tests ---
 
 func TestApplyHardwareOptimizations_AppleSilicon(t *testing.T) {
-	r, ctx := reconcilerWithNodes(t, nodeWithArch("arm64", nil, nil))
+	ctx := context.Background()
 	podSpec := basePodSpec()
-
-	llmSvc := baseLLMInferenceService()
-	r.applyHardwareOptimizations(ctx, llmSvc, podSpec)
+	hwType := deployment.DetectHardware([]corev1.Node{nodeWithArch("arm64", nil, nil)})
+	deployment.ApplyHardwareOptimizations(ctx, hwType, podSpec)
 
 	// Image should be set to CPU ARM64 image
-	if podSpec.Containers[0].Image != VLLMCPUArm64Image {
-		t.Errorf("image = %q, want %q", podSpec.Containers[0].Image, VLLMCPUArm64Image)
+	if podSpec.Containers[0].Image != deployment.VLLMCPUArm64Image {
+		t.Errorf("image = %q, want %q", podSpec.Containers[0].Image, deployment.VLLMCPUArm64Image)
 	}
 
 	assertEnvVar(t, podSpec.Containers[0].Env, "VLLM_CPU_OMP_THREADS_BIND", "nobind")
@@ -155,14 +154,13 @@ func TestApplyHardwareOptimizations_AppleSilicon(t *testing.T) {
 }
 
 func TestApplyHardwareOptimizations_GenericX86(t *testing.T) {
-	r, ctx := reconcilerWithNodes(t, nodeWithArch("amd64", nil, nil))
+	ctx := context.Background()
 	podSpec := basePodSpec()
+	hwType := deployment.DetectHardware([]corev1.Node{nodeWithArch("amd64", nil, nil)})
+	deployment.ApplyHardwareOptimizations(ctx, hwType, podSpec)
 
-	llmSvc := baseLLMInferenceService()
-	r.applyHardwareOptimizations(ctx, llmSvc, podSpec)
-
-	if podSpec.Containers[0].Image != VLLMGenericImage {
-		t.Errorf("image = %q, want %q", podSpec.Containers[0].Image, VLLMGenericImage)
+	if podSpec.Containers[0].Image != deployment.VLLMGenericImage {
+		t.Errorf("image = %q, want %q", podSpec.Containers[0].Image, deployment.VLLMGenericImage)
 	}
 
 	assertEnvVar(t, podSpec.Containers[0].Env, "VLLM_CPU_OMP_THREADS_BIND", "auto")
@@ -172,24 +170,22 @@ func TestApplyHardwareOptimizations_GenericX86(t *testing.T) {
 }
 
 func TestApplyHardwareOptimizations_NVIDIA(t *testing.T) {
-	r, ctx := reconcilerWithNodes(t, nodeWithArch("amd64", map[corev1.ResourceName]resource.Quantity{
-		"nvidia.com/gpu": resource.MustParse("1"),
-	}, nil))
+	ctx := context.Background()
 	podSpec := basePodSpec()
-
-	llmSvc := baseLLMInferenceService()
-	r.applyHardwareOptimizations(ctx, llmSvc, podSpec)
+	hwType := deployment.DetectHardware([]corev1.Node{nodeWithArch("amd64", map[corev1.ResourceName]resource.Quantity{
+		"nvidia.com/gpu": resource.MustParse("1"),
+	}, nil)})
+	deployment.ApplyHardwareOptimizations(ctx, hwType, podSpec)
 
 	assertEnvVar(t, podSpec.Containers[0].Env, "VLLM_TARGET_DEVICE", "cuda")
 }
 
 func TestApplyHardwareOptimizations_UserImageNotOverridden(t *testing.T) {
-	r, ctx := reconcilerWithNodes(t, nodeWithArch("arm64", nil, nil))
+	ctx := context.Background()
 	podSpec := basePodSpec()
 	podSpec.Containers[0].Image = "my-custom-vllm:v1"
-
-	llmSvc := baseLLMInferenceService()
-	r.applyHardwareOptimizations(ctx, llmSvc, podSpec)
+	hwType := deployment.DetectHardware([]corev1.Node{nodeWithArch("arm64", nil, nil)})
+	deployment.ApplyHardwareOptimizations(ctx, hwType, podSpec)
 
 	if podSpec.Containers[0].Image != "my-custom-vllm:v1" {
 		t.Errorf("user image was overridden: got %q", podSpec.Containers[0].Image)
@@ -197,28 +193,26 @@ func TestApplyHardwareOptimizations_UserImageNotOverridden(t *testing.T) {
 }
 
 func TestApplyHardwareOptimizations_CUDAImageOverridden(t *testing.T) {
-	r, ctx := reconcilerWithNodes(t, nodeWithArch("arm64", nil, nil))
+	ctx := context.Background()
 	podSpec := basePodSpec()
 	podSpec.Containers[0].Image = "my-image-cuda:latest"
+	hwType := deployment.DetectHardware([]corev1.Node{nodeWithArch("arm64", nil, nil)})
+	deployment.ApplyHardwareOptimizations(ctx, hwType, podSpec)
 
-	llmSvc := baseLLMInferenceService()
-	r.applyHardwareOptimizations(ctx, llmSvc, podSpec)
-
-	if podSpec.Containers[0].Image != VLLMCPUArm64Image {
+	if podSpec.Containers[0].Image != deployment.VLLMCPUArm64Image {
 		t.Errorf("CUDA image should be overridden on ARM64: got %q, want %q",
-			podSpec.Containers[0].Image, VLLMCPUArm64Image)
+			podSpec.Containers[0].Image, deployment.VLLMCPUArm64Image)
 	}
 }
 
 func TestApplyHardwareOptimizations_UserEnvNotOverridden(t *testing.T) {
-	r, ctx := reconcilerWithNodes(t, nodeWithArch("arm64", nil, nil))
+	ctx := context.Background()
 	podSpec := basePodSpec()
 	podSpec.Containers[0].Env = []corev1.EnvVar{
 		{Name: "VLLM_CPU_OMP_THREADS_BIND", Value: "0-3"},
 	}
-
-	llmSvc := baseLLMInferenceService()
-	r.applyHardwareOptimizations(ctx, llmSvc, podSpec)
+	hwType := deployment.DetectHardware([]corev1.Node{nodeWithArch("arm64", nil, nil)})
+	deployment.ApplyHardwareOptimizations(ctx, hwType, podSpec)
 
 	assertEnvVar(t, podSpec.Containers[0].Env, "VLLM_CPU_OMP_THREADS_BIND", "0-3")
 }
@@ -250,21 +244,28 @@ func reconcilerWithNodes(t *testing.T, nodes ...corev1.Node) (*LLMInferenceServi
 	_ = corev1.AddToScheme(scheme)
 	_ = servingv1alpha2.AddToScheme(scheme)
 
-	objs := make([]runtime.Object, len(nodes))
-	for i := range nodes {
-		objs[i] = &nodes[i]
-	}
-
 	cb := fake.NewClientBuilder().WithScheme(scheme)
 	for _, n := range nodes {
 		n := n
 		cb = cb.WithObjects(&n)
 	}
 
+	cl := cb.Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
-		Client:   cb.Build(),
+		Client:   cl,
 		Scheme:   scheme,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
 	}
 	return r, context.Background()
 }
@@ -295,13 +296,6 @@ func baseLLMInferenceService() *servingv1alpha2.LLMInferenceService {
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{Name: "vllm"},
-					},
-				},
-			},
-			Router: servingv1alpha2.RouterSpec{
-				Gateway: servingv1alpha2.GatewaySpec{
-					Managed: &servingv1alpha2.ManagedGatewaySpec{
-						GatewayClassName: "envoy",
 					},
 				},
 			},
@@ -340,7 +334,7 @@ func TestBuildDeployment_HFMountCSIVolume(t *testing.T) {
 	// Should have a CSI volume with the hf-mount driver
 	var csiVol *corev1.CSIVolumeSource
 	for _, v := range podSpec.Volumes {
-		if v.Name == ModelVolumeName && v.CSI != nil {
+		if v.Name == api.ModelVolumeName && v.CSI != nil {
 			csiVol = v.CSI
 			break
 		}
@@ -348,8 +342,8 @@ func TestBuildDeployment_HFMountCSIVolume(t *testing.T) {
 	if csiVol == nil {
 		t.Fatal("expected CSI volume for hf-mount:// URI, got none")
 	}
-	if csiVol.Driver != HFMountCSIDriver {
-		t.Errorf("CSI driver = %q, want %q", csiVol.Driver, HFMountCSIDriver)
+	if csiVol.Driver != api.HFMountCSIDriver {
+		t.Errorf("CSI driver = %q, want %q", csiVol.Driver, api.HFMountCSIDriver)
 	}
 	if csiVol.VolumeAttributes["repo"] != "Qwen/Qwen2.5-0.5B-Instruct" {
 		t.Errorf("repo attr = %q, want %q", csiVol.VolumeAttributes["repo"], "Qwen/Qwen2.5-0.5B-Instruct")
@@ -368,7 +362,7 @@ func TestBuildDeployment_HFMountWithRevision(t *testing.T) {
 
 	var csiVol *corev1.CSIVolumeSource
 	for _, v := range deploy.Spec.Template.Spec.Volumes {
-		if v.Name == ModelVolumeName && v.CSI != nil {
+		if v.Name == api.ModelVolumeName && v.CSI != nil {
 			csiVol = v.CSI
 			break
 		}
@@ -396,7 +390,7 @@ func TestBuildDeployment_HFMountWithSecret(t *testing.T) {
 
 	var csiVol *corev1.CSIVolumeSource
 	for _, v := range deploy.Spec.Template.Spec.Volumes {
-		if v.Name == ModelVolumeName && v.CSI != nil {
+		if v.Name == api.ModelVolumeName && v.CSI != nil {
 			csiVol = v.CSI
 			break
 		}

@@ -1,6 +1,11 @@
 # CKodex KServe LLM Operator
 
-A production-grade Kubernetes operator for managing LLM inference workloads. Built on KServe v0.17 architecture with the V2 Open Inference Protocol, Gateway API (HTTPRoute + GRPCRoute), and comprehensive platform features.
+[![Go Report Card](https://goreportcard.com/badge/github.com/ckodex-labs/ckodex-kserve-llm)](https://goreportcard.com/report/github.com/ckodex-labs/ckodex-kserve-llm)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](docs/getting-started.md)
+[![Security Scorecard](https://img.shields.io/ossf-scorecard/github.com/ckodex-labs/ckodex-kserve-llm?label=scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/ckodex-labs/ckodex-kserve-llm)
+
+An opinionated Kubernetes operator for managing LLM inference workloads. Built on KServe v0.17 architecture with the V2 Open Inference Protocol, Gateway API (HTTPRoute + GRPCRoute), and comprehensive platform features.
 
 ## Architecture
 
@@ -101,6 +106,10 @@ kubectl get pods -l app.kubernetes.io/name=llminferenceservice
 - Model onboarding pipeline with promotion gates
 - Agent & skill registry
 - **Local Model Caching**: LRU-based eviction, warmup jobs, and source model hashing.
+- **Well-Known Model Registry**: Optimized defaults for `Llama-3.1`, `Mistral-7B`, and `Gemma-4`.
+- **TurboQuant Integration**: Support for 6x KV cache compression for long-context (128k+) stability.
+- **Strict Admission Control**: Power-of-2 parallelism enforcement and Guaranteed QoS for GPU workloads.
+- **LocalModelCache**: Zero-copy model loading via node-local storage and hostPath mounts.
 
 ### Production Hardening
 - **Guaranteed QoS**: Automatic alignment of CPU/Memory requests and limits for stable scheduling.

@@ -16,6 +16,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
 )
 
 func TestBulkController_Coverage_FinalVer2(t *testing.T) {
@@ -37,7 +40,22 @@ func TestBulkController_Coverage_FinalVer2(t *testing.T) {
 	_, _ = (&ImagePullSecretReconciler{Client: cl, Scheme: s}).Reconcile(ctx, req)
 
 	// 5. LLMInferenceService
-	_, _ = (&LLMInferenceServiceReconciler{Client: cl, Scheme: s, Recorder: record.NewFakeRecorder(10)}).Reconcile(ctx, req)
+	rec5 := record.NewFakeRecorder(10)
+	_, _ = (&LLMInferenceServiceReconciler{
+		Client:   cl,
+		Scheme:   s,
+		Recorder: rec5,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec5,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+	}).Reconcile(ctx, req)
 
 	// 6. LocalModelCache
 	_, _ = (&LocalModelCacheReconciler{Client: cl, Scheme: s, Recorder: record.NewFakeRecorder(10)}).Reconcile(ctx, req)
@@ -62,7 +80,7 @@ func TestBulkController_Coverage_FinalVer2(t *testing.T) {
 func TestSessionReconcile_EdgeCases_FinalVer2(t *testing.T) {
 	s := buildSessionScheme(t)
 	r := &SessionReconciler{Client: fake.NewClientBuilder().WithScheme(s).Build(), Scheme: s}
-	
+
 	sess0 := &servingv1alpha2.InferenceSession{
 		ObjectMeta: metav1.ObjectMeta{Name: "empty", Namespace: "default"},
 		Status:     servingv1alpha2.InferenceSessionStatus{BoundEndpoint: ""},
@@ -91,11 +109,11 @@ func TestLLMLoraAdapter_RegistrationFlow_FinalVer2(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "ready-lora", Namespace: "default"},
 		Spec: servingv1alpha2.LLMLoraAdapterSpec{
 			TargetService: "my-llm",
-			Model: servingv1alpha2.ModelSpec{URI: "hf://org/lora", Name: "sql"},
+			Model:         servingv1alpha2.ModelSpec{URI: "hf://org/lora", Name: "sql"},
 		},
 	}
 	svc := &servingv1alpha2.LLMInferenceService{ObjectMeta: metav1.ObjectMeta{Name: "my-llm", Namespace: "default"}}
-	
+
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(lora, svc).Build()
 	r := &LLMLoraAdapterReconciler{Client: cl, Scheme: s, Recorder: record.NewFakeRecorder(10)}
 

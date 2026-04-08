@@ -7,6 +7,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,15 +15,21 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
 )
 
 func buildLLMScheme(t *testing.T) *runtime.Scheme {
@@ -66,15 +73,39 @@ func makeLLMInferenceService(name, namespace string) *servingv1alpha2.LLMInferen
 	}
 }
 
+func setupReconciler(cl client.Client, s *runtime.Scheme) *LLMInferenceServiceReconciler {
+	rec := record.NewFakeRecorder(10)
+	return &LLMInferenceServiceReconciler{
+		Client:   cl,
+		Scheme:   s,
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client:     cl,
+			Scheme:     s,
+			EnableGRPC: false,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+	}
+}
+
 // TestLLMInferenceService_ReconcileNotFound returns no error when CR is missing.
 func TestLLMInferenceService_ReconcileNotFound(t *testing.T) {
 	s := buildLLMScheme(t)
 	cl := fake.NewClientBuilder().WithScheme(s).Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: k8stypes.NamespacedName{Name: "missing", Namespace: "default"},
@@ -94,11 +125,7 @@ func TestLLMInferenceService_ReconcileCreatesDeploymentServicePDB(t *testing.T) 
 		WithObjects(llmSvc).
 		WithStatusSubresource(llmSvc).
 		Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: k8stypes.NamespacedName{Name: "my-llm", Namespace: "default"},
@@ -148,11 +175,7 @@ func TestLLMInferenceService_ReconcileDeletion(t *testing.T) {
 	// Mark for deletion by calling Delete on the fake client (sets DeletionTimestamp).
 	require.NoError(t, cl.Delete(context.Background(), llmSvc))
 
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
 	result, err := r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: k8stypes.NamespacedName{Name: "my-llm", Namespace: "default"},
@@ -167,11 +190,7 @@ func TestReconcileDeployment_CreatesNew(t *testing.T) {
 	llmSvc := makeLLMInferenceService("my-llm", "default")
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc).Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
 	err := r.reconcileDeployment(context.Background(), llmSvc)
 	require.NoError(t, err)
@@ -181,6 +200,35 @@ func TestReconcileDeployment_CreatesNew(t *testing.T) {
 		Name: "my-llm", Namespace: "default",
 	}, &deploy))
 	assert.Equal(t, "my-llm", deploy.Name)
+}
+
+// TestReconcileDeployment_Gemma4WellKnown verifies that Gemma-4 gets optimized defaults.
+func TestReconcileDeployment_Gemma4WellKnown(t *testing.T) {
+	s := buildLLMScheme(t)
+	llmSvc := makeLLMInferenceService("gemma-svc", "default")
+	llmSvc.Spec.Model.URI = "hf://google/gemma-4-E2B-it"
+
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc).Build()
+	r := setupReconciler(cl, s)
+
+	err := r.reconcileDeployment(context.Background(), llmSvc)
+	require.NoError(t, err)
+
+	var deploy appsv1.Deployment
+	require.NoError(t, cl.Get(context.Background(), k8stypes.NamespacedName{
+		Name: "gemma-svc", Namespace: "default",
+	}, &deploy))
+
+	// Verify vLLM args from WellKnown config
+	vllmContainer := deploy.Spec.Template.Spec.Containers[0]
+	args := strings.Join(vllmContainer.Args, " ")
+	assert.Contains(t, args, "--max-model-len 131072")
+	assert.Contains(t, args, "--trust-remote-code")
+	assert.Contains(t, args, "--enable-turboquant")
+
+	// Verify resources from WellKnown config (requests match our defined defaults)
+	assert.Equal(t, resource.MustParse("8"), vllmContainer.Resources.Requests[corev1.ResourceCPU])
+	assert.Equal(t, resource.MustParse("32Gi"), vllmContainer.Resources.Requests[corev1.ResourceMemory])
 }
 
 // TestReconcileDeployment_UpdatesExisting exercises the update path.
@@ -205,11 +253,7 @@ func TestReconcileDeployment_UpdatesExisting(t *testing.T) {
 	}
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc, existingDeploy).Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
 	err := r.reconcileDeployment(context.Background(), llmSvc)
 	require.NoError(t, err)
@@ -221,13 +265,9 @@ func TestReconcileService_CreatesNew(t *testing.T) {
 	llmSvc := makeLLMInferenceService("my-llm", "default")
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc).Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
-	err := r.reconcileService(context.Background(), llmSvc)
+	err := r.ServiceReconciler.Reconcile(context.Background(), llmSvc)
 	require.NoError(t, err)
 
 	var svc corev1.Service
@@ -243,9 +283,10 @@ func TestReconcileService_GRPCPortAdded(t *testing.T) {
 	llmSvc := makeLLMInferenceService("my-llm", "default")
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc).Build()
-	r := &LLMInferenceServiceReconciler{Client: cl, Scheme: s, EnableGRPC: true}
+	r := setupReconciler(cl, s)
+	r.ServiceReconciler.EnableGRPC = true
 
-	err := r.reconcileService(context.Background(), llmSvc)
+	err := r.ServiceReconciler.Reconcile(context.Background(), llmSvc)
 	require.NoError(t, err)
 
 	var svc corev1.Service
@@ -262,13 +303,9 @@ func TestReconcilePDB_CreatesNew(t *testing.T) {
 	llmSvc := makeLLMInferenceService("my-llm", "default")
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc).Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
-	err := r.reconcilePDB(context.Background(), llmSvc)
+	err := r.PDBReconciler.Reconcile(context.Background(), llmSvc)
 	require.NoError(t, err)
 
 	var pdb policyv1.PodDisruptionBudget
@@ -288,13 +325,9 @@ func TestUpdateStatus_NoDeployment(t *testing.T) {
 		WithObjects(llmSvc).
 		WithStatusSubresource(llmSvc).
 		Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
-	err := r.updateStatus(context.Background(), llmSvc, llmSvc.DeepCopy())
+	err := r.StatusReconciler.Update(context.Background(), llmSvc, llmSvc.DeepCopy(), false)
 	require.NoError(t, err)
 	assert.Equal(t, int32(0), llmSvc.Status.Replicas)
 	assert.False(t, llmSvc.Status.ModelReady)
@@ -316,13 +349,9 @@ func TestUpdateStatus_WithReadyDeployment(t *testing.T) {
 		WithObjects(llmSvc, deploy).
 		WithStatusSubresource(llmSvc).
 		Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
-	err := r.updateStatus(context.Background(), llmSvc, llmSvc.DeepCopy())
+	err := r.StatusReconciler.Update(context.Background(), llmSvc, llmSvc.DeepCopy(), false)
 	require.NoError(t, err)
 	assert.Equal(t, readyReplicas, llmSvc.Status.Replicas)
 	assert.True(t, llmSvc.Status.ModelReady)
@@ -332,11 +361,7 @@ func TestUpdateStatus_WithReadyDeployment(t *testing.T) {
 func TestCleanupResources_NoSPIRE(t *testing.T) {
 	s := buildLLMScheme(t)
 	cl := fake.NewClientBuilder().WithScheme(s).Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
 	llmSvc := makeLLMInferenceService("my-llm", "default")
 	err := r.cleanupResources(context.Background(), llmSvc)
@@ -345,42 +370,30 @@ func TestCleanupResources_NoSPIRE(t *testing.T) {
 
 // TestVolumesEqual_SameMounts returns true for identical volume mounts.
 func TestVolumesEqual_SameMounts(t *testing.T) {
-	r := &LLMInferenceServiceReconciler{
-		Recorder: record.NewFakeRecorder(10),
-	}
 	mounts := []corev1.VolumeMount{
 		{Name: "model-store", MountPath: "/mnt/models"},
 	}
-	assert.True(t, r.volumesEqual(mounts, mounts))
+	assert.True(t, reconciler.VolumeMountsEqual(mounts, mounts))
 }
 
 // TestVolumesEqual_DifferentMounts returns false for different volume mounts.
 func TestVolumesEqual_DifferentMounts(t *testing.T) {
-	r := &LLMInferenceServiceReconciler{
-		Recorder: record.NewFakeRecorder(10),
-	}
 	mounts1 := []corev1.VolumeMount{{Name: "vol1", MountPath: "/a"}}
 	mounts2 := []corev1.VolumeMount{{Name: "vol1", MountPath: "/b"}}
-	assert.False(t, r.volumesEqual(mounts1, mounts2))
+	assert.False(t, reconciler.VolumeMountsEqual(mounts1, mounts2))
 }
 
 // TestContainersEqual_SameContainers returns true.
 func TestContainersEqual_SameContainers(t *testing.T) {
-	r := &LLMInferenceServiceReconciler{
-		Recorder: record.NewFakeRecorder(10),
-	}
 	containers := []corev1.Container{{Name: "vllm", Image: "vllm:latest"}}
-	assert.True(t, r.containersEqual(containers, containers))
+	assert.True(t, reconciler.ContainersEqual(containers, containers))
 }
 
 // TestContainersEqual_DifferentImages returns false.
 func TestContainersEqual_DifferentImages(t *testing.T) {
-	r := &LLMInferenceServiceReconciler{
-		Recorder: record.NewFakeRecorder(10),
-	}
 	c1 := []corev1.Container{{Name: "vllm", Image: "vllm:v1"}}
 	c2 := []corev1.Container{{Name: "vllm", Image: "vllm:v2"}}
-	assert.False(t, r.containersEqual(c1, c2))
+	assert.False(t, reconciler.ContainersEqual(c1, c2))
 }
 
 // TestPtrToHostPath returns a valid HostPathType pointer.
@@ -407,11 +420,7 @@ func TestMapLocalModelCacheToInferenceServices_MatchingModel(t *testing.T) {
 	}
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc1, llmSvc2, lmc).Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
 	requests := r.mapLocalModelCacheToInferenceServices(context.Background(), lmc)
 	require.Len(t, requests, 1)
@@ -435,13 +444,9 @@ func TestReconcileService_UpdatesExisting(t *testing.T) {
 	}
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc, existingSvc).Build()
-	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
-	}
+	r := setupReconciler(cl, s)
 
-	err := r.reconcileService(context.Background(), llmSvc)
+	err := r.ServiceReconciler.Reconcile(context.Background(), llmSvc)
 	require.NoError(t, err)
 
 	var svc corev1.Service

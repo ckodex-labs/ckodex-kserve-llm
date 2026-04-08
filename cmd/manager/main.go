@@ -55,6 +55,7 @@ func main() {
 		probeAddr            string
 		enableLeaderElection bool
 		webhookPort          int
+		developmentMode      bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8091", "The address the metric endpoint binds to.")
@@ -62,7 +63,9 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "Webhook server port.")
 
-	opts := zap.Options{Development: true}
+	flag.BoolVar(&developmentMode, "development", false, "Enable development-mode logging (console output, DPanic, no sampling). Production defaults to JSON.")
+
+	opts := zap.Options{Development: developmentMode}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 

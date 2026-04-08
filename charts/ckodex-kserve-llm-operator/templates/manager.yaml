@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-manager
+  labels:
+    {{- include "ckodex-kserve-llm-operator.labels" . | nindent 4 }}
+    control-plane: controller-manager
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ckodex-kserve-llm-operator.selectorLabels" . | nindent 6 }}
+      control-plane: controller-manager
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "ckodex-kserve-llm-operator.selectorLabels" . | nindent 8 }}
+        control-plane: controller-manager
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: manager
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - /manager
+        args:
+        - --health-probe-bind-address=:8081
+        - --metrics-bind-address=127.0.0.1:8080
+        - --leader-elect
+        env:
+        - name: CKODEX_FEATURE_ENABLE_SCHEDULER
+          value: {{ .Values.featureGates.enableScheduler | quote }}
+        - name: CKODEX_FEATURE_ENABLE_GATEWAY
+          value: {{ .Values.featureGates.enableGateway | quote }}
+        - name: CKODEX_FEATURE_ENABLE_AUTOSCALER
+          value: {{ .Values.featureGates.enableAutoscaler | quote }}
+        - name: CKODEX_FEATURE_ENABLE_SECURITY
+          value: {{ .Values.featureGates.enableSecurity | quote }}
+        - name: CKODEX_FEATURE_ENABLE_LOCAL_MODEL_CACHE
+          value: {{ .Values.featureGates.enableLocalModelCache | quote }}
+        - name: CKODEX_RUNTIME_IMAGE
+          value: {{ .Values.runtime.defaultImage | quote }}
+        - name: CKODEX_GEMMA4_IMAGE
+          value: {{ .Values.runtime.gemma4Image | quote }}
+        - name: CKODEX_HF_MIRROR_URL
+          value: {{ .Values.config.hfMirror | quote }}
+        - name: CKODEX_OTEL_ENDPOINT
+          value: {{ .Values.config.otelEndpoint | quote }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -21,6 +21,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
 )
 
 // ---- buildStorageInitializer -----------------------------------------------
@@ -29,10 +33,29 @@ import (
 func TestBuildStorageInitializer_EmptyURI_ReturnsNil(t *testing.T) {
 	s := buildLLMScheme(t)
 	cl := fake.NewClientBuilder().WithScheme(s).Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
 		Client:   cl,
 		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
 	}
 
 	llmSvc := makeLLMInferenceService("my-llm", "default")
@@ -46,10 +69,29 @@ func TestBuildStorageInitializer_EmptyURI_ReturnsNil(t *testing.T) {
 func TestBuildStorageInitializer_ModelpackURI_ReturnsNil(t *testing.T) {
 	s := buildLLMScheme(t)
 	cl := fake.NewClientBuilder().WithScheme(s).Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
 		Client:   cl,
 		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
 	}
 
 	llmSvc := makeLLMInferenceService("my-llm", "default")
@@ -63,10 +105,29 @@ func TestBuildStorageInitializer_ModelpackURI_ReturnsNil(t *testing.T) {
 func TestBuildStorageInitializer_HFMountURI_ReturnsNil(t *testing.T) {
 	s := buildLLMScheme(t)
 	cl := fake.NewClientBuilder().WithScheme(s).Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
 		Client:   cl,
 		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
 	}
 
 	llmSvc := makeLLMInferenceService("my-llm", "default")
@@ -80,10 +141,29 @@ func TestBuildStorageInitializer_HFMountURI_ReturnsNil(t *testing.T) {
 func TestBuildStorageInitializer_HFUri_ReturnsContainer(t *testing.T) {
 	s := buildLLMScheme(t)
 	cl := fake.NewClientBuilder().WithScheme(s).Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
 		Client:   cl,
 		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
 	}
 
 	llmSvc := makeLLMInferenceService("my-llm", "default")
@@ -98,10 +178,29 @@ func TestBuildStorageInitializer_HFUri_ReturnsContainer(t *testing.T) {
 func TestBuildStorageInitializer_ZeroCopyReadyLMC_ReturnsNil(t *testing.T) {
 	s := buildLLMScheme(t)
 	cl := fake.NewClientBuilder().WithScheme(s).Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
 		Client:   cl,
 		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
 	}
 
 	llmSvc := makeLLMInferenceService("my-llm", "default")
@@ -126,10 +225,29 @@ func TestBuildStorageInitializer_ZeroCopyReadyLMC_ReturnsNil(t *testing.T) {
 func TestBuildStorageInitializer_WithSecretRef(t *testing.T) {
 	s := buildLLMScheme(t)
 	cl := fake.NewClientBuilder().WithScheme(s).Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
 		Client:   cl,
 		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
 	}
 
 	llmSvc := makeLLMInferenceService("my-llm", "default")
@@ -148,10 +266,29 @@ func TestBuildStorageInitializer_WithSecretRef(t *testing.T) {
 func TestBuildStorageInitializer_WithVaultRef(t *testing.T) {
 	s := buildLLMScheme(t)
 	cl := fake.NewClientBuilder().WithScheme(s).Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
 		Client:   cl,
 		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
 	}
 
 	llmSvc := makeLLMInferenceService("my-llm", "default")
@@ -196,13 +333,32 @@ func TestReconcilePDB_UpdatesExisting(t *testing.T) {
 	}
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc, existingPDB).Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
 		Client:   cl,
 		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
 	}
 
-	err := r.reconcilePDB(context.Background(), llmSvc)
+	err := r.PDBReconciler.Reconcile(context.Background(), llmSvc)
 	require.NoError(t, err)
 
 	// Verify the PDB was updated (MinAvailable should now be set).
@@ -234,13 +390,32 @@ func TestReconcilePDB_NoUpdateWhenSpecIdentical(t *testing.T) {
 	}
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc, existingPDB).Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
 		Client:   cl,
 		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
 	}
 
-	err := r.reconcilePDB(context.Background(), llmSvc)
+	err := r.PDBReconciler.Reconcile(context.Background(), llmSvc)
 	require.NoError(t, err) // idempotent — no error, no update needed
 }
 
@@ -260,9 +435,7 @@ func TestLLMInferenceService_Reconcile_WithLocalModelCache(t *testing.T) {
 			Namespace: "default",
 			UID:       k8stypes.UID("lmc-uid"),
 		},
-		Spec: servingv1alpha2.LocalModelCacheSpec{
-			SourceModelURI: "hf://meta-llama/Llama-3-8B",
-		},
+		Spec:       servingv1alpha2.LocalModelCacheSpec{SourceModelURI: "hf://meta-llama/Llama-3-8B"},
 		Status: servingv1alpha2.LocalModelCacheStatus{
 			NodeStatuses: []servingv1alpha2.NodeCacheStatus{
 				{NodeName: "gpu-node-1", Phase: "Ready"},
@@ -275,10 +448,29 @@ func TestLLMInferenceService_Reconcile_WithLocalModelCache(t *testing.T) {
 		WithObjects(llmSvc, lmc).
 		WithStatusSubresource(llmSvc).
 		Build()
+	rec := record.NewFakeRecorder(10)
 	r := &LLMInferenceServiceReconciler{
 		Client:   cl,
 		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Recorder: rec,
+		DeploymentBuilder: &deployment.Builder{
+			Client:   cl,
+			Recorder: rec,
+		},
+		StatusReconciler: &status.Reconciler{
+			Client: cl,
+		},
+		CleanupReconciler: &cleanup.Reconciler{
+			Client: cl,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: s,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: s,
+		},
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{

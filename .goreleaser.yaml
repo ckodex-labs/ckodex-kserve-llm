@@ -92,3 +92,20 @@ dockers_v2:
       - linux/arm64
     flags:
       - "--target=storage-initializer"
+
+# Image Signing (Cosign)
+signs:
+  - id: cosign
+    cmd: cosign
+    artifacts: images
+    args:
+      - "sign"
+      - "--key"
+      - "env://COSIGN_PRIVATE_KEY"
+      - "${artifact}"
+    env:
+      - COSIGN_PASSWORD= # Set in CI secrets if needed
+
+# SLSA Provenance
+provenance:
+  enabled: true

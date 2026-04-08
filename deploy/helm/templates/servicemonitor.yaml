@@ -1,0 +1,19 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
+      path: /metrics
+{{- end }}

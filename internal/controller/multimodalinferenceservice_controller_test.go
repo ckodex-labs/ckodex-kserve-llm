@@ -235,6 +235,7 @@ func TestDefaultMultimodalRuntimeImage(t *testing.T) {
 		servingv1alpha2.DefaultMultimodalRuntimeImage(servingv1alpha2.MultimodalRuntimeVLLM),
 	)
 }
+
 // TestBuildMultimodalContainer_TTS_LiquidAI verifies trust-remote-code for LiquidAI models.
 func TestBuildMultimodalContainer_TTS_LiquidAI(t *testing.T) {
 	r := &MultimodalInferenceServiceReconciler{}

@@ -1,0 +1,13 @@
+# Global owners
+*       @ckodex-labs/maintainers
+
+# API changes require approval from the architecture team
+/api/   @ckodex-labs/architects
+
+# Controller logic
+/internal/controller/ @ckodex-labs/maintainers
+
+# CI/CD and deployment
+/.github/workflows/ @ckodex-labs/devops
+/config/ @ckodex-labs/devops
+/charts/ @ckodex-labs/devops

@@ -252,6 +252,7 @@ func TestDefaultEmbeddingRuntimeImage(t *testing.T) {
 		servingv1alpha2.DefaultEmbeddingRuntimeImage(servingv1alpha2.EmbeddingRuntimeTextEmbeddingsInference),
 	)
 }
+
 // TestEmbeddingReconcile_UpdateExistingDeployment verifies the deployment update path.
 func TestEmbeddingReconcile_UpdateExistingDeployment(t *testing.T) {
 	scheme := newEmbeddingScheme(t)

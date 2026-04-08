@@ -8812,6 +8812,11 @@ spec:
                     items:
                       type: string
                     type: array
+                  enableTurboQuant:
+                    description: |-
+                      EnableTurboQuant activates 6x KV cache compression for long-context stability.
+                      Requires a vllm-turboquant compatible image.
+                    type: boolean
                   image:
                     default: vllm/vllm-openai:latest
                     description: Image is the default vLLM container image.
@@ -8875,6 +8880,10 @@ spec:
                           More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                         type: object
                     type: object
+                  turboquantMetadataPath:
+                    description: TurboQuantMetadataPath is the path to the quantization
+                      metadata in the container.
+                    type: string
                 type: object
               worker:
                 description: Worker provides default worker spec for distributed inference.

@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -428,6 +429,7 @@ func multimodalLabels(name string) map[string]string {
 // SetupWithManager registers the controller with the manager.
 func (r *MultimodalInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		For(&servingv1alpha2.MultimodalInferenceService{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).

@@ -103,6 +103,15 @@ type VLLMDefaultsSpec struct {
 	// Resources are default resource requirements.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// EnableTurboQuant activates 6x KV cache compression for long-context stability.
+	// Requires a vllm-turboquant compatible image.
+	// +optional
+	EnableTurboQuant bool `json:"enableTurboQuant,omitempty"`
+
+	// TurboQuantMetadataPath is the path to the quantization metadata in the container.
+	// +optional
+	TurboQuantMetadataPath string `json:"turboquantMetadataPath,omitempty"`
 }
 
 func init() {

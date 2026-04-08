@@ -65,11 +65,11 @@ func TestModelURIHash_DifferentURIs(t *testing.T) {
 
 func TestPVCNameForNode(t *testing.T) {
 	hash := ModelURIHash("hf://test/model")
-	name := pvcNameForNode(hash, "node-1")
+	name := PVCNameForNode(hash, "node-1")
 	assert.NotEmpty(t, name)
 	assert.Equal(t, "lmc-", name[:4])
-	assert.Equal(t, name, pvcNameForNode(hash, "node-1"))
-	assert.NotEqual(t, name, pvcNameForNode(hash, "node-2"))
+	assert.Equal(t, name, PVCNameForNode(hash, "node-1"))
+	assert.NotEqual(t, name, PVCNameForNode(hash, "node-2"))
 	assert.LessOrEqual(t, len(name), 63)
 }
 
@@ -116,12 +116,19 @@ func TestLocalModelCacheReconcile_WithWarmNode(t *testing.T) {
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(lmc, node).WithStatusSubresource(lmc).Build()
 	r := &LocalModelCacheReconciler{
-		Client:   cl,
-		Scheme:   s,
-		Recorder: record.NewFakeRecorder(10),
+		Client:    cl,
+		Scheme:    s,
+		Recorder:  record.NewFakeRecorder(10),
+		APIReader: cl,
 	}
 
 	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: k8stypes.NamespacedName{Name: "my-cache", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Second pass: Job creation
+	_, err = r.Reconcile(context.Background(), ctrl.Request{
 		NamespacedName: k8stypes.NamespacedName{Name: "my-cache", Namespace: "default"},
 	})
 	require.NoError(t, err)
@@ -179,7 +186,12 @@ func TestResolveTargetNodes_UnschedulableNodes(t *testing.T) {
 	}
 
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(&nodes[0], &nodes[1]).Build()
-	r := &LocalModelCacheReconciler{Client: cl, Scheme: s, Recorder: record.NewFakeRecorder(10)}
+	r := &LocalModelCacheReconciler{
+		Client:    cl,
+		Scheme:    s,
+		Recorder:  record.NewFakeRecorder(10),
+		APIReader: cl,
+	}
 
 	lmc := &servingv1alpha2.LocalModelCache{Spec: servingv1alpha2.LocalModelCacheSpec{SourceModelURI: "hf://org/model"}}
 	result, err := r.resolveTargetNodes(context.Background(), lmc)

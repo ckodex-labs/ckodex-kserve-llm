@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"sort"
 	"time"
+	"github.com/google/uuid"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -18,10 +19,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"k8s.io/utils/ptr"
@@ -37,14 +42,15 @@ const (
 	// defaultCacheNamespace is where cache PVCs are created for cluster-scoped resources.
 	defaultCacheNamespace = "default"
 	// warmupJobPrefix is the prefix for cache-warming Jobs.
-	warmupJobPrefix = "warmup"
+	warmupJobPrefix       = "lmc-warmup"
 )
 
 // LocalModelCacheReconciler reconciles a LocalModelCache object
 type LocalModelCacheReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme    *runtime.Scheme
+	Recorder  record.EventRecorder
+	APIReader client.Reader
 }
 
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=localmodelcaches,verbs=get;list;watch;create;update;patch;delete
@@ -56,8 +62,9 @@ type LocalModelCacheReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *LocalModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	logger.Info("Reconciling LocalModelCache", "name", req.Name, "namespace", req.Namespace)
+	reconcileID := k8stypes.UID(uuid.New().String())
+	logger := log.FromContext(ctx).WithValues("reconcileID", reconcileID, "name", req.Name, "namespace", req.Namespace)
+	logger.Info("Reconciling LocalModelCache")
 
 	lmc := &servingv1alpha2.LocalModelCache{}
 	if err := r.Get(ctx, req.NamespacedName, lmc); err != nil {
@@ -146,6 +153,10 @@ func IsNamespaceAllowed(lmc *servingv1alpha2.LocalModelCache, namespace string) 
 // resolveTargetNodes returns a deduplicated list of node names from
 // both the NodeGroup label selector and the WarmNodes list.
 func (r *LocalModelCacheReconciler) resolveTargetNodes(ctx context.Context, lmc *servingv1alpha2.LocalModelCache) ([]string, error) {
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client // Fallback for unit tests where APIReader isn't set
+	}
 	seen := map[string]bool{}
 	var result []string
 
@@ -153,7 +164,7 @@ func (r *LocalModelCacheReconciler) resolveTargetNodes(ctx context.Context, lmc 
 	if lmc.Spec.NodeGroup != nil && lmc.Spec.NodeGroup.LabelSelector != nil {
 		nodes := &corev1.NodeList{}
 		ls, _ := metav1.LabelSelectorAsSelector(lmc.Spec.NodeGroup.LabelSelector)
-		if err := r.List(ctx, nodes, &client.ListOptions{LabelSelector: ls}); err != nil {
+		if err := reader.List(ctx, nodes, &client.ListOptions{LabelSelector: ls}); err != nil {
 			return nil, fmt.Errorf("listing nodes by selector: %w", err)
 		}
 		for _, n := range nodes.Items {
@@ -168,9 +179,9 @@ func (r *LocalModelCacheReconciler) resolveTargetNodes(ctx context.Context, lmc 
 	// references this model yet.
 	for _, name := range lmc.Spec.WarmNodes {
 		if !seen[name] {
-			// Verify node exists.
+			// Verify node exists using APIReader to bypass potential cache delays in envtest.
 			node := &corev1.Node{}
-			if err := r.Get(ctx, client.ObjectKey{Name: name}, node); err != nil {
+			if err := reader.Get(ctx, client.ObjectKey{Name: name}, node); err != nil {
 				if errors.IsNotFound(err) {
 					log.FromContext(ctx).Info("WarmNode not found, skipping", "node", name)
 					continue
@@ -185,7 +196,7 @@ func (r *LocalModelCacheReconciler) resolveTargetNodes(ctx context.Context, lmc 
 	// If neither selector nor warmNodes is set, select all schedulable nodes.
 	if lmc.Spec.NodeGroup == nil && len(lmc.Spec.WarmNodes) == 0 {
 		nodes := &corev1.NodeList{}
-		if err := r.List(ctx, nodes); err != nil {
+		if err := reader.List(ctx, nodes); err != nil {
 			return nil, fmt.Errorf("listing all nodes: %w", err)
 		}
 		for _, n := range nodes.Items {
@@ -206,8 +217,8 @@ func ModelURIHash(uri string) string {
 	return fmt.Sprintf("%x", h[:8]) // 16-char hex
 }
 
-// pvcNameForNode returns the content-addressable PVC name for a model on a node.
-func pvcNameForNode(modelHash, nodeName string) string {
+// PVCNameForNode returns the content-addressable PVC name for a model on a node.
+func PVCNameForNode(modelHash, nodeName string) string {
 	// Keep the PVC name deterministic and within the 63-char DNS label limit.
 	nodeHash := fmt.Sprintf("%x", sha256.Sum256([]byte(nodeName)))[:8]
 	return fmt.Sprintf("lmc-%s-%s", modelHash, nodeHash)
@@ -222,10 +233,15 @@ func (r *LocalModelCacheReconciler) reconcileNodeCache(
 	now metav1.Time,
 ) (servingv1alpha2.NodeCacheStatus, error) {
 
-	pvcName := pvcNameForNode(modelHash, nodeName)
+	pvcName := PVCNameForNode(modelHash, nodeName)
 	targetNamespace := lmc.Namespace
 	if targetNamespace == "" {
 		targetNamespace = defaultCacheNamespace
+	}
+
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
 	}
 
 	status := servingv1alpha2.NodeCacheStatus{
@@ -235,27 +251,40 @@ func (r *LocalModelCacheReconciler) reconcileNodeCache(
 		ModelURIHash: modelHash,
 	}
 
-	// --- PVC ---
+	// --- Job Name ---
+	// jobName is content-addressable and node-specific.
+	jobName := fmt.Sprintf("%s-%s-%s", warmupJobPrefix, modelHash, fmt.Sprintf("%x", sha256.Sum256([]byte(nodeName)))[:8])
+
+	// --- 1. PVC ---
 	pvc := &corev1.PersistentVolumeClaim{}
-	err := r.Get(ctx, client.ObjectKey{Namespace: targetNamespace, Name: pvcName}, pvc)
-	if errors.IsNotFound(err) {
-		pvc = r.buildCachePVC(lmc, pvcName, targetNamespace, nodeName, modelHash)
-		if err := ctrl.SetControllerReference(lmc, pvc, r.Scheme); err != nil {
+	err := reader.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: targetNamespace}, pvc)
+	if err != nil && errors.IsNotFound(err) {
+		// PVC is gone! Delete the Job too so it re-warms from scratch.
+		orphanJob := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: jobName, Namespace: targetNamespace}}
+		_ = r.Delete(ctx, orphanJob, client.PropagationPolicy(metav1.DeletePropagationForeground))
+
+		desiredPVC := r.buildCachePVC(lmc, pvcName, targetNamespace, nodeName, modelHash)
+		log.FromContext(ctx).Info("Creating new cache PVC", "node", nodeName, "pvc", pvcName)
+		if err := ctrl.SetControllerReference(lmc, desiredPVC, r.Scheme); err != nil {
 			return status, fmt.Errorf("setting owner ref on PVC: %w", err)
 		}
-		if err := r.Create(ctx, pvc); err != nil {
+		if err := r.Create(ctx, desiredPVC); err != nil {
 			return status, fmt.Errorf("creating PVC %s: %w", pvcName, err)
 		}
-		r.Recorder.Eventf(lmc, corev1.EventTypeNormal, "PVCCreated",
-			"Created cache PVC %s on node %s", pvcName, nodeName)
+		status.LastTransitionTime = &now
+		return status, nil // Re-reconcile to create Job fresh
 	} else if err != nil {
 		return status, fmt.Errorf("getting PVC %s: %w", pvcName, err)
 	}
 
-	// --- Warm-up Job ---
-	jobName := fmt.Sprintf("%s-%s-%s", warmupJobPrefix, modelHash, fmt.Sprintf("%x", sha256.Sum256([]byte(nodeName)))[:8])
+	// --- 2. Warm-up Job ---
 	job := &batchv1.Job{}
-	err = r.Get(ctx, client.ObjectKey{Namespace: targetNamespace, Name: jobName}, job)
+	err = reader.Get(ctx, client.ObjectKey{Namespace: targetNamespace, Name: jobName}, job)
+	if err == nil && job.DeletionTimestamp != nil {
+		// Job is being deleted. Wait for it to be gone before re-creating.
+		log.FromContext(ctx).Info("Waiting for old Job deletion to complete", "job", jobName)
+		return status, nil
+	}
 	if errors.IsNotFound(err) {
 		job = r.buildWarmupJob(lmc, jobName, pvcName, targetNamespace, nodeName)
 		if err := ctrl.SetControllerReference(lmc, job, r.Scheme); err != nil {
@@ -525,7 +554,7 @@ func (r *LocalModelCacheReconciler) buildCachedModelsStatus(
 		return nil, total
 	}
 
-	pvcName := pvcNameForNode(ModelURIHash(lmc.Spec.SourceModelURI), nodeNames[0])
+	pvcName := PVCNameForNode(ModelURIHash(lmc.Spec.SourceModelURI), nodeNames[0])
 
 	models := []servingv1alpha2.CachedModelStatus{
 		{
@@ -540,10 +569,30 @@ func (r *LocalModelCacheReconciler) buildCachedModelsStatus(
 	return models, total
 }
 
+// SetupWithManager sets up the controller with the Manager.
 func (r *LocalModelCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.APIReader = mgr.GetAPIReader()
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		For(&servingv1alpha2.LocalModelCache{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&batchv1.Job{}).
+		Watches(&corev1.Node{}, handler.EnqueueRequestsFromMapFunc(r.mapNodeToLMC)).
 		Complete(r)
+}
+
+// mapNodeToLMC enqueues all LocalModelCache objects when a Node changes.
+// This ensures that node label updates (e.g. warm-node) trigger cache assignments.
+func (r *LocalModelCacheReconciler) mapNodeToLMC(ctx context.Context, obj client.Object) []reconcile.Request {
+	var lmcList servingv1alpha2.LocalModelCacheList
+	if err := r.List(ctx, &lmcList); err != nil {
+		return nil
+	}
+	var requests []reconcile.Request
+	for _, lmc := range lmcList.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&lmc),
+		})
+	}
+	return requests
 }

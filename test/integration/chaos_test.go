@@ -84,7 +84,7 @@ func TestResilience_PodKill_SelfHealing(t *testing.T) {
 		if err := suite.client.Get(ctx, client.ObjectKeyFromObject(llm), &s); err != nil {
 			return false
 		}
-		
+
 		// Let's patch the Deployment to 0 ready replicas to simulate the disruption.
 		var deploy appsv1.Deployment
 		if err := suite.client.Get(ctx, client.ObjectKey{Name: name, Namespace: testNamespace}, &deploy); err == nil {
@@ -92,7 +92,7 @@ func TestResilience_PodKill_SelfHealing(t *testing.T) {
 			deploy.Status.ReadyReplicas = 0
 			_ = suite.client.Status().Patch(ctx, &deploy, patch)
 		}
-		
+
 		return !s.Status.ModelReady
 	}, eventuallyTimeout, eventuallyInterval, "Status should become NotReady after Pod kill")
 
@@ -107,7 +107,7 @@ func TestResilience_PodKill_SelfHealing(t *testing.T) {
 		Spec: pod.Spec,
 	}
 	require.NoError(t, suite.client.Create(ctx, newPod))
-	
+
 	// Also restore deployment status
 	var deploy appsv1.Deployment
 	require.NoError(t, suite.client.Get(ctx, client.ObjectKey{Name: name, Namespace: testNamespace}, &deploy))
@@ -133,25 +133,27 @@ func TestResilience_PodKill_SelfHealing(t *testing.T) {
 func TestResilience_LocalModelCache_NodeEviction(t *testing.T) {
 	ctx := suite.ctx
 	name := fmt.Sprintf("resilience-evict-%d", uniqueID())
+	nodeName := fmt.Sprintf("node-chaos-%d", uniqueID())
 
 	// 1. Create a Node and a LocalModelCache
-	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-chaos"}}
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: nodeName}}
 	require.NoError(t, suite.client.Create(ctx, node))
 	defer func() { _ = suite.client.Delete(ctx, node) }()
 
 	lmc := &servingv1alpha2.LocalModelCache{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
 		Spec: servingv1alpha2.LocalModelCacheSpec{
-			SourceModelURI: "hf://org/model-chaos",
+			SourceModelURI: "hf://org/model-chaos-" + fmt.Sprintf("%d", uniqueID()),
 			ModelSize:      "1Gi",
-			WarmNodes:      []string{"node-chaos"},
+			WarmNodes:      []string{nodeName},
 		},
 	}
 	require.NoError(t, suite.client.Create(ctx, lmc))
 
 	// 2. Wait for Job to be created and set it to Ready
 	modelHash := controller.ModelURIHash(lmc.Spec.SourceModelURI)
-	jobName := fmt.Sprintf("lmc-warmup-%s-%s", modelHash, fmt.Sprintf("%x", sha256.Sum256([]byte("node-chaos")))[:8])
+	nodeHash := fmt.Sprintf("%x", sha256.Sum256([]byte(nodeName)))[:8]
+	jobName := fmt.Sprintf("lmc-warmup-%s-%s", modelHash, nodeHash)
 
 	var job batchv1.Job
 	assert.Eventually(t, func() bool {
@@ -172,15 +174,25 @@ func TestResilience_LocalModelCache_NodeEviction(t *testing.T) {
 		return s.Status.CachedNodes > 0
 	}, eventuallyTimeout, eventuallyInterval)
 
-	// 3. Inject Chaos: Delete the Job (simulating node failure/eviction of the workspace)
+	// 3. Inject Chaos: Delete the PVC and the Job
+	// We delete both because envtest does not have a GarbageCollector to clean up the Job.
+	pvcName := controller.PVCNameForNode(modelHash, nodeName)
+	var pvc corev1.PersistentVolumeClaim
+	require.NoError(t, suite.client.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: testNamespace}, &pvc))
+	require.NoError(t, suite.client.Delete(ctx, &pvc))
 	require.NoError(t, suite.client.Delete(ctx, &job))
 
-	// 4. Verify the Operator re-creates the Job to restore the cache
+	// 4. Verify the Operator re-creates both resources to restore the cache
 	assert.Eventually(t, func() bool {
 		var newJob batchv1.Job
 		err := suite.client.Get(ctx, client.ObjectKey{Name: jobName, Namespace: testNamespace}, &newJob)
-		return err == nil && newJob.UID != job.UID
-	}, eventuallyTimeout, eventuallyInterval, "Job should be re-created after deletion")
+		if err != nil {
+			return false
+		}
+		// In envtest, a new Job will have a new UID immediately after the old one is gone.
+		// We use UID change to confirm re-creation.
+		return newJob.UID != job.UID && newJob.DeletionTimestamp == nil
+	}, eventuallyTimeout, 500*time.Millisecond, "New Job should be re-created after PVC and Job deletion")
 }
 
 func TestResilience_LoRA_API_Failure(t *testing.T) {

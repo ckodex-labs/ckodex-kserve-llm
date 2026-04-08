@@ -52359,6 +52359,10 @@ spec:
                 description: ObservedGeneration is the most recent generation observed.
                 format: int64
                 type: integer
+              optimized:
+                description: Optimized indicates whether the model is running with
+                  WellKnown optimizations applied.
+                type: boolean
               replicas:
                 description: Replicas is the current number of ready replicas.
                 format: int32

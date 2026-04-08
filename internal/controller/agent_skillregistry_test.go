@@ -551,6 +551,7 @@ func TestBoolToConditionStatus(t *testing.T) {
 	assert.Equal(t, metav1.ConditionTrue, boolToConditionStatus(true))
 	assert.Equal(t, metav1.ConditionFalse, boolToConditionStatus(false))
 }
+
 // TestAgentReconcile_Deletion_RemovesFinalizer verifies finalizer cleanup.
 func TestAgentReconcile_Deletion_RemovesFinalizer(t *testing.T) {
 	scheme := runtime.NewScheme()

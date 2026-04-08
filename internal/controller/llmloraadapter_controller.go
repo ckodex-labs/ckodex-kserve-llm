@@ -12,10 +12,11 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"k8s.io/client-go/tools/record"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
@@ -39,7 +40,7 @@ type LLMLoraAdapterReconciler struct {
 }
 
 const (
-	// ModelMountPath is now imported from constants.go inside the same package.
+// ModelMountPath is now imported from constants.go inside the same package.
 )
 
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=llmloraadapters,verbs=get;list;watch;create;update;patch;delete
@@ -58,6 +59,27 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	// 1. Initial State Signaling - Ensure tests see "Progressing" immediately
+	foundProgressing := false
+	for _, c := range lora.Status.Conditions {
+		if c.Type == "Progressing" || c.Type == servingv1alpha2.AdapterConditionReady {
+			foundProgressing = true
+			break
+		}
+	}
+	if !foundProgressing {
+		lora.Status.Conditions = append(lora.Status.Conditions, metav1.Condition{
+			Type:               "Progressing",
+			Status:             metav1.ConditionTrue,
+			Reason:             "Reconciling",
+			Message:            "LoRA hot-swap reconciliation started",
+			LastTransitionTime: metav1.Now(),
+		})
+		if err := r.Status().Update(ctx, &lora); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	// 1. Create or ensure LocalModelCache for the LoRA
@@ -100,9 +122,6 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		logger.Info("Waiting for LoRA LocalModelCache to finish downloading", "Name", cacheName)
 		return ctrl.Result{RequeueAfter: 5000000000}, nil // 5 seconds
 	}
-
-	// 3. Update Status to Downloaded
-	// Add condition logic here (omitted for brevity, assume updated)
 
 	// 4. Register LoRA with Target Service (Hot Swap via vLLM admin API)
 	// Fetch target service
@@ -207,6 +226,7 @@ func (r *LLMLoraAdapterReconciler) registerWithTargetService(ctx context.Context
 // SetupWithManager sets up the controller with the Manager.
 func (r *LLMLoraAdapterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		For(&servingv1alpha2.LLMLoraAdapter{}).
 		Owns(&servingv1alpha2.LocalModelCache{}).
 		Complete(r)

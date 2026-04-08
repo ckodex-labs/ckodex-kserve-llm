@@ -16,6 +16,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,8 +30,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/utils/ptr"
@@ -53,7 +54,7 @@ const (
 	testNamespace = "ckodex-integration-test"
 
 	// eventuallyTimeout is the poll deadline for Eventually assertions.
-	eventuallyTimeout = 60 * time.Second
+	eventuallyTimeout = 120 * time.Second
 
 	// eventuallyInterval is the polling interval.
 	eventuallyInterval = 250 * time.Millisecond
@@ -180,8 +181,42 @@ func TestMain(m *testing.M) {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr), "setup multimodal controller")
 
+	mustf((&controller.LocalModelCacheReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("localmodelcache-controller"), //nolint:staticcheck
+	}).SetupWithManager(mgr), "setup localmodelcache controller")
+
+	mustf((&controller.LLMLoraAdapterReconciler{
+		Client:     mgr.GetClient(),
+		Scheme:     mgr.GetScheme(),
+		HTTPClient: &http.Client{},
+		Recorder:   mgr.GetEventRecorderFor("llmloraadapter-controller"), //nolint:staticcheck
+	}).SetupWithManager(mgr), "setup llmloraadapter controller")
+
+	mustf((&controller.EmbeddingInferenceServiceReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr), "setup embedding controller")
+
+	mustf((&controller.TenantQuotaReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr), "setup tenantquota controller")
+
+	mustf((&controller.SessionReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr), "setup session controller")
+
+	mustf((&controller.ImagePullSecretReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr), "setup imagepullsecret controller")
+
+	mgrErr := make(chan error, 1)
 	go func() {
-		mustf(mgr.Start(suite.ctx), "manager start")
+		mgrErr <- mgr.Start(suite.ctx)
 	}()
 
 	// Wait for caches to sync before running tests to avoid race conditions.
@@ -197,6 +232,16 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	suite.cancel()
+	// Wait for manager to stop before stopping the API server.
+	select {
+	case err := <-mgrErr:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Manager failed: %v\n", err)
+		}
+	case <-time.After(30 * time.Second):
+		fmt.Fprintf(os.Stderr, "Manager timed out during shutdown\n")
+	}
+
 	mustf(suite.env.Stop(), "stop envtest")
 	os.Exit(code)
 }

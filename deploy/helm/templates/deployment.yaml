@@ -19,7 +19,7 @@ spec:
         control-plane: controller-manager
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8443"
+        prometheus.io/port: "8091"
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets: {{ toYaml . | nindent 8 }}
@@ -43,7 +43,7 @@ spec:
             - containerPort: {{ .Values.webhook.port }}
               name: webhook-server
               protocol: TCP
-            - containerPort: 8443
+            - containerPort: 8091
               name: metrics
               protocol: TCP
           livenessProbe:

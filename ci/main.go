@@ -264,23 +264,6 @@ func (p *pipeline) build(ctx context.Context) (string, error) {
 	return ref, err
 }
 
-// --- Stage: push ---
-
-func (p *pipeline) push(ctx context.Context, imageRef string) (string, error) {
-	registryUser := os.Getenv("REGISTRY_USERNAME")
-	registryToken := os.Getenv("REGISTRY_TOKEN")
-
-	ctr := p.client.Container().From(distrolessImage)
-	if registryToken != "" {
-		ctr = ctr.WithRegistryAuth(
-			registryHostFrom(imageRef),
-			registryUser,
-			p.client.SetSecret("registry-token", registryToken),
-		)
-	}
-	return ctr.Publish(ctx, imageRef)
-}
-
 // --- Stage: scan (Trivy) ---
 
 func (p *pipeline) scan(ctx context.Context) (string, error) {
@@ -509,15 +492,6 @@ func (p *pipeline) dockerImageLocal(ctx context.Context) *dagger.Container {
 		WithFile("/manager", binary).
 		WithUser("65532:65532").
 		WithEntrypoint([]string{"/manager"})
-}
-
-func registryHostFrom(imageRef string) string {
-	// e.g. ghcr.io/ckodex/foo:tag → ghcr.io
-	parts := strings.SplitN(imageRef, "/", 2)
-	if len(parts) > 1 && strings.Contains(parts[0], ".") {
-		return parts[0]
-	}
-	return "index.docker.io"
 }
 
 func parseFlags() *config {

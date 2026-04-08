@@ -9,8 +9,11 @@ import (
 	"context"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,6 +28,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/security"
 )
@@ -242,6 +246,9 @@ func reconcilerWithNodes(t *testing.T, nodes ...corev1.Node) (*LLMInferenceServi
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 	_ = servingv1alpha2.AddToScheme(scheme)
 
 	cb := fake.NewClientBuilder().WithScheme(scheme)
@@ -265,6 +272,14 @@ func reconcilerWithNodes(t *testing.T, nodes ...corev1.Node) (*LLMInferenceServi
 		},
 		CleanupReconciler: &cleanup.Reconciler{
 			Client: cl,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: scheme,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: scheme,
 		},
 	}
 	return r, context.Background()
@@ -471,5 +486,5 @@ func TestCleanupResources(t *testing.T) {
 
 	// 3. Verify CM is deleted
 	err = cl.Get(ctx, k8stypes.NamespacedName{Name: cmName, Namespace: security.SPIRERegistrationNamespace}, &foundCM)
-	assert.True(t, errors.IsNotFound(err), "ConfigMap should have been deleted by cleanupResources")
+	assert.True(t, apierrors.IsNotFound(err), "ConfigMap should have been deleted by cleanupResources")
 }

@@ -43,7 +43,7 @@ func TestBuilder_Build(t *testing.T) {
 	}
 
 	// Test Build with default hardware type
-	dep := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA)
+	dep := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA, nil)
 	require.NotNil(t, dep)
 
 	assert.Equal(t, "test-model", dep.Name)

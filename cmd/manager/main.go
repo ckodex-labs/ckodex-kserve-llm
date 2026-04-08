@@ -255,8 +255,19 @@ func main() {
 		Scheme:     mgr.GetScheme(),
 		HTTPClient: &http.Client{},
 		Recorder:   mgr.GetEventRecorderFor("LLMLoraAdapter"), //nolint:staticcheck
+		Audit:      reconciler.Audit,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LLMLoraAdapter")
+		os.Exit(1)
+	}
+
+	// Set up LLM Evaluation controller
+	if err := (&controller.LLMEvaluationReconciler{
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		AuditLogger: reconciler.Audit,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LLMEvaluation")
 		os.Exit(1)
 	}
 

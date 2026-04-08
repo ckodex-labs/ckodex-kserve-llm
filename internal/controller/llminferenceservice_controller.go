@@ -15,12 +15,14 @@ import (
 import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -65,6 +67,7 @@ type LLMInferenceServiceReconciler struct {
 	AuthMiddleware    *auth.Middleware               // nil when EnableAuth=false
 	BudgetEnforcer    *auth.TokenBudgetEnforcer      // nil when EnableAuth=false
 	Recorder          record.EventRecorder
+	APIReader         client.Reader
 	EnableGRPC        bool
 
 	// Modular sub-reconcilers
@@ -90,6 +93,7 @@ type LLMInferenceServiceReconciler struct {
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;httproutes;grpcroutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile implements the main reconcile loop.
 func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
@@ -124,8 +128,8 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 			if err := r.cleanupResources(ctx, &llmSvc); err != nil {
 				return ctrl.Result{}, fmt.Errorf("cleanup resources: %w", err)
 			}
-			controllerutil.RemoveFinalizer(&llmSvc, FinalizerName)
-			if err := r.Update(ctx, &llmSvc); err != nil {
+			controllerutil.RemoveFinalizer(&llmSvc, api.FinalizerName)
+			if err := r.Patch(ctx, &llmSvc, client.MergeFrom(llmSvcBeforePatch)); err != nil {
 				return ctrl.Result{}, fmt.Errorf("remove finalizer: %w", err)
 			}
 		}
@@ -152,15 +156,29 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// Add finalizer if not present
 	if !controllerutil.ContainsFinalizer(&llmSvc, FinalizerName) {
-		controllerutil.AddFinalizer(&llmSvc, FinalizerName)
-		if err := r.Update(ctx, &llmSvc); err != nil {
+		controllerutil.AddFinalizer(&llmSvc, api.FinalizerName)
+		if err := r.Patch(ctx, &llmSvc, client.MergeFrom(llmSvcBeforePatch)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("add finalizer: %w", err)
 		}
 	}
 
 	// 3. Reconcile Deployment
-	if err := r.reconcileDeployment(ctx, &llmSvc); err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconcile deployment: %w", err)
+	// Fetch associated LoRA adapters to inject volumes/args
+	var loraList servingv1alpha2.LLMLoraAdapterList
+	activeLoras := []servingv1alpha2.LLMLoraAdapter{}
+	if err := r.List(ctx, &loraList, client.InNamespace(llmSvc.Namespace)); err == nil {
+		for _, lora := range loraList.Items {
+			if lora.Spec.TargetService == llmSvc.Name {
+				activeLoras = append(activeLoras, lora)
+			}
+		}
+		if err := r.reconcileDeployment(ctx, &llmSvc, activeLoras); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile deployment: %w", err)
+		}
+	} else {
+		if err := r.reconcileDeployment(ctx, &llmSvc, nil); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile deployment: %w", err)
+		}
 	}
 
 	// 3b. Reconcile PodDisruptionBudget
@@ -191,6 +209,11 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	if r.NetworkPolicy != nil {
 		if err := r.NetworkPolicy.ReconcileNetworkPolicies(ctx, &llmSvc); err != nil {
 			return ctrl.Result{}, fmt.Errorf("reconcile network policies: %w", err)
+		}
+	} else {
+		// Default internal tool-surface isolation
+		if err := r.reconcileToolSurfaceNetworkPolicy(ctx, &llmSvc, activeLoras); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile tool surface network policy: %w", err)
 		}
 	}
 
@@ -261,7 +284,7 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 }
 
 // reconcileDeployment creates or updates the vLLM Deployment.
-func (r *LLMInferenceServiceReconciler) reconcileDeployment(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
+func (r *LLMInferenceServiceReconciler) reconcileDeployment(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, loras []servingv1alpha2.LLMLoraAdapter) error {
 	logger := log.FromContext(ctx)
 
 	// Apply WellKnown configuration defaults if not already set (e.g. for Gemma 4)
@@ -275,7 +298,7 @@ func (r *LLMInferenceServiceReconciler) reconcileDeployment(ctx context.Context,
 	}
 
 	hwType := r.getCachedHardware(ctx)
-	desired := r.DeploymentBuilder.Build(ctx, llmSvc, replicas, hwType)
+	desired := r.DeploymentBuilder.Build(ctx, llmSvc, replicas, hwType, loras)
 
 	// Set owner reference for garbage collection
 	if err := controllerutil.SetControllerReference(llmSvc, desired, r.Scheme); err != nil {
@@ -379,7 +402,7 @@ func (r *LLMInferenceServiceReconciler) cleanupResources(ctx context.Context, ll
 // buildDeployment is a wrapper for tests.
 func (r *LLMInferenceServiceReconciler) buildDeployment(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32) *appsv1.Deployment {
 	hwType := r.getCachedHardware(ctx)
-	return r.DeploymentBuilder.Build(ctx, llmSvc, replicas, hwType)
+	return r.DeploymentBuilder.Build(ctx, llmSvc, replicas, hwType, nil)
 }
 
 // buildStorageInitializer is a wrapper for tests.
@@ -388,8 +411,95 @@ func (r *LLMInferenceServiceReconciler) buildStorageInitializer(ctx context.Cont
 	return r.DeploymentBuilder.BuildStorageInitializer(ctx, llmSvc, hwType, lmc)
 }
 
+func (r *LLMInferenceServiceReconciler) reconcileToolSurfaceNetworkPolicy(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, activeLoras []servingv1alpha2.LLMLoraAdapter) error {
+	logger := log.FromContext(ctx)
+	
+	labels := map[string]string{
+		"app.kubernetes.io/instance": llmSvc.Name,
+	}
+
+	// 1. Aggregate Tool Surfaces
+	var egressRules []networkingv1.NetworkPolicyEgressRule
+	
+	var apis []string
+	var cidrs []string
+	
+	if llmSvc.Spec.ToolSurface != nil {
+		apis = append(apis, llmSvc.Spec.ToolSurface.AllowedAPIs...)
+		cidrs = append(cidrs, llmSvc.Spec.ToolSurface.AllowedCIDRs...)
+	}
+	
+	for _, lora := range activeLoras {
+		if lora.Spec.ToolSurface != nil {
+			apis = append(apis, lora.Spec.ToolSurface.AllowedAPIs...)
+			_ = apis
+			cidrs = append(cidrs, lora.Spec.ToolSurface.AllowedCIDRs...)
+		}
+	}
+
+	// Internal traffic (DNS)
+	egressRules = append(egressRules, networkingv1.NetworkPolicyEgressRule{
+		Ports: []networkingv1.NetworkPolicyPort{
+			{Protocol: ptrToProtocol(corev1.ProtocolUDP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 53}},
+			{Protocol: ptrToProtocol(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 53}},
+		},
+	})
+
+	// Add CIDR-based rules
+	for _, c := range cidrs {
+		egressRules = append(egressRules, networkingv1.NetworkPolicyEgressRule{
+			To: []networkingv1.NetworkPolicyPeer{
+				{IPBlock: &networkingv1.IPBlock{CIDR: c}},
+			},
+		})
+	}
+	
+	// Note: FQDN-based isolation typically requires a specialized CNI or sidecar proxy.
+	// For standard Kubernetes NetworkPolicy, we only implement CIDR-based protection here.
+
+	desired := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-tool-isolation", llmSvc.Name),
+			Namespace: llmSvc.Namespace,
+			Labels:    labels,
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{MatchLabels: labels},
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
+			Egress:      egressRules,
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(llmSvc, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	var existing networkingv1.NetworkPolicy
+	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
+	if apierrors.IsNotFound(err) {
+		logger.Info("creating tool-isolation NetworkPolicy", "name", desired.Name)
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+
+	if !equality.Semantic.DeepEqual(existing.Spec, desired.Spec) {
+		logger.Info("updating tool-isolation NetworkPolicy", "name", desired.Name)
+		existing.Spec = desired.Spec
+		return r.Update(ctx, &existing)
+	}
+
+	return nil
+}
+
+func ptrToProtocol(p corev1.Protocol) *corev1.Protocol {
+	return &p
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.APIReader = mgr.GetAPIReader()
 	r.DeploymentBuilder = &deployment.Builder{
 		Client:   mgr.GetClient(),
 		Recorder: mgr.GetEventRecorderFor("ckodex-llm-operator"), //nolint:staticcheck
@@ -412,7 +522,7 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		WithOptions(controller.Options{MaxConcurrentReconciles: 3}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
 		For(&servingv1alpha2.LLMInferenceService{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
@@ -425,7 +535,27 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 			&servingv1alpha2.LocalModelCache{},
 			handler.EnqueueRequestsFromMapFunc(r.mapLocalModelCacheToInferenceServices),
 		).
+		Watches(
+			&servingv1alpha2.LLMLoraAdapter{},
+			handler.EnqueueRequestsFromMapFunc(r.mapLoraAdapterToInferenceService),
+		).
 		Complete(r)
+}
+
+// mapLoraAdapterToInferenceService maps an LLMLoraAdapter to its target LLMInferenceService.
+func (r *LLMInferenceServiceReconciler) mapLoraAdapterToInferenceService(ctx context.Context, obj client.Object) []reconcile.Request {
+	lora, ok := obj.(*servingv1alpha2.LLMLoraAdapter)
+	if !ok {
+		return nil
+	}
+	return []reconcile.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Name:      lora.Spec.TargetService,
+				Namespace: lora.Namespace,
+			},
+		},
+	}
 }
 
 // mapLocalModelCacheToInferenceServices maps a LocalModelCache to all LLMInferenceServices using that model.
@@ -497,7 +627,11 @@ func (r *LLMInferenceServiceReconciler) getCachedHardware(ctx context.Context) d
 	}
 
 	var nodeList corev1.NodeList
-	if err := r.List(ctx, &nodeList); err != nil {
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	if err := reader.List(ctx, &nodeList); err != nil {
 		log.FromContext(ctx).Error(err, "unable to list nodes for hardware detection, using cached value")
 		return r.cachedHardware
 	}

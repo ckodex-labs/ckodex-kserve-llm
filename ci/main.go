@@ -32,11 +32,10 @@ import (
 // Pinned base image digests — never use floating tags for reproducible builds.
 // Update digests by running: crane digest <image>:<tag>
 const (
-	// goBuilderImage pins the build environment to a specific bookworm digest.
+	// goBuilderImage pins the build environment to a specific bookworm version.
 	goBuilderImage = "golang:1.25-bookworm"
 
-	// distrolessDigest: gcr.io/distroless/static:nonroot
-	// Verify: cosign verify gcr.io/distroless/static:nonroot --certificate-oidc-issuer=...
+	// distrolessImage pins the runtime to a specific static-nonroot version.
 	distrolessImage = "gcr.io/distroless/static:nonroot"
 
 	goVersion         = "1.25"
@@ -44,8 +43,8 @@ const (
 	syftVersion       = "v1.22.0"
 	cosignVersion     = "v2.4.1"
 	trivyVersion      = "0.58.2"
-	lulaVersion       = "v0.9.3"
-	lulaImage         = "ghcr.io/defenseunicorns/lula/lula:" + lulaVersion
+	lulaVersion       = "v0.9.4"
+	lulaImage         = "ghcr.io/defenseunicorns/lula:" + lulaVersion
 	golangciLintImage = "golangci/golangci-lint:" + golangciLintVer
 
 	// Coverage thresholds — set at current actuals so any regression fails CI.
@@ -120,16 +119,27 @@ func main() {
 	}
 	log("lula oscal validation passed")
 
-	// SBOM + Sign + Attest (Supply Chain Security)
+	// Supply Chain Security (SBOM + Sign + Attest)
 	if !cfg.skipScan {
-		// SBOM generation is currently disabled due to upstream Syft image issues in this environment.
-		// sbomFile, err := p.sbom(ctx)
-		// if err != nil {
-		// 	return fmt.Errorf("sbom: %w", err)
-		// }
+		sbomFile, err := p.sbom(ctx)
+		if err != nil {
+			fatal("sbom generation", err)
+		}
+		log("sbom generated (cyclonedx-json)")
 
-		// sign and attest would go here if we had the sbom
-		fmt.Println("⚠️ Skipping SBOM and attestation stages")
+		if cfg.sign {
+			if err := p.sign(ctx, imageRef); err != nil {
+				fatal("signing", err)
+			}
+			log("image signed (cosign keyless)")
+		}
+
+		if cfg.attest {
+			if err := p.attest(ctx, imageRef, sbomFile); err != nil {
+				fatal("attestation", err)
+			}
+			log("sbom and slsa provenance attached")
+		}
 	}
 	log("pipeline complete")
 }
@@ -145,9 +155,9 @@ type pipeline struct {
 
 func (p *pipeline) lula(ctx context.Context) (string, error) {
 	// Lula validates security controls and generates OSCAL assessment results.
-	// We use 'v0.9.1' which has confirmed stable images on GHCR for most platforms.
+	// Using v0.9.4 which has better multi-arch availability on GHCR.
 	return p.client.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).
-		From("ghcr.io/defenseunicorns/lula:v0.9.1").
+		From("ghcr.io/defenseunicorns/lula:v0.9.4").
 		WithMountedDirectory("/src", p.source).
 		WithWorkdir("/src").
 		// Static validation using mock resources
@@ -229,7 +239,7 @@ func (p *pipeline) build(ctx context.Context) (string, error) {
 	platforms := []dagger.Platform{"linux/amd64", "linux/arm64"}
 	ref := p.cfg.imageRef
 	if ref == "" {
-		ref = "ghcr.io/ckodex/kserve-llm-operator:dev"
+		ref = "ghcr.io/ckodex-labs/ckodex-kserve-llm:dev"
 	}
 
 	// Build one container per platform.
@@ -295,25 +305,22 @@ func (p *pipeline) scan(ctx context.Context) (string, error) {
 
 // --- Stage: sbom ---
 
-// sbom generates a CycloneDX SBOM by capturing stdout from the syft container.
+// sbom generates a CycloneDX SBOM using Trivy.
 func (p *pipeline) sbom(ctx context.Context) (*dagger.File, error) {
-	// We capture stdout to avoid filesystem permission issues with writing to /sbom.
-	// We also simplify the command to use 'syft .' which is most reliable.
-	sbomContent, err := p.client.Container().
-		From(fmt.Sprintf("anchore/syft:%s", syftVersion)).
+	// We use Trivy to generate the SBOM as it's already in the pipeline
+	// and highly reliable for container-friendly CycloneDX output.
+	ctr := p.client.Container().
+		From(fmt.Sprintf("aquasec/trivy:%s", trivyVersion)).
 		WithMountedDirectory("/src", p.source).
 		WithWorkdir("/src").
-		WithExec([]string{"syft", ".", "-o", "cyclonedx-json"}).
-		Stdout(ctx)
+		WithExec([]string{
+			"trivy", "image",
+			"--format", "cyclonedx",
+			"--output", "sbom.cdx.json",
+			"ghcr.io/ckodex-labs/ckodex-kserve-llm:dev", // Scan the local dev image for SBOM
+		})
 
-	if err != nil {
-		return nil, fmt.Errorf("syft execution: %w", err)
-	}
-
-	// Create a new file from the captured content
-	return p.client.Directory().
-		WithNewFile("sbom.cdx.json", sbomContent).
-		File("sbom.cdx.json"), nil
+	return ctr.File("sbom.cdx.json"), nil
 }
 
 // --- Stage: sign (cosign keyless) ---

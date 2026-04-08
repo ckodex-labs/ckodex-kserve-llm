@@ -50,6 +50,36 @@ type LLMLoraAdapterSpec struct {
 
 	// Model specifies the LoRA weights to serve.
 	Model ModelSpec `json:"model"`
+
+	// Behavior defines the expected impact of this adapter on core behavior axes.
+	// +optional
+	Behavior *BehaviorMetadata `json:"behavior,omitempty"`
+
+	// PolicyEnvelope constrains allowed loading and tool use for this adapter.
+	// +optional
+	PolicyEnvelope *PolicyEnvelope `json:"policyEnvelope,omitempty"`
+
+	// ToolSurface declares reachable APIs and external connectors for this adapter.
+	// +optional
+	ToolSurface *ToolSurface `json:"toolSurface,omitempty"`
+}
+
+// BehaviorMetadata defines declared attributes of the adapter.
+type BehaviorMetadata struct {
+	// Safety level (0-10) where 10 is safest.
+	Safety int `json:"safety,omitempty"`
+	// Refusal fidelity (strength of system prompt adherence).
+	Refusal string `json:"refusal,omitempty"`
+	// ToolPropensity - declared intensity of tool usage ('conservative', 'moderate', 'aggressive').
+	ToolPropensity string `json:"toolPropensity,omitempty"`
+}
+
+// PolicyEnvelope defines constraints on adapter usage.
+type PolicyEnvelope struct {
+	// Domain restrictions (e.g. 'coding', 'general').
+	AllowedDomains []string `json:"allowedDomains,omitempty"`
+	// Required trust levels for execution.
+	MinTrustLevel string `json:"minTrustLevel,omitempty"`
 }
 
 // LLMLoraAdapterStatus defines the observed state of LLMLoraAdapter.
@@ -61,6 +91,35 @@ type LLMLoraAdapterStatus struct {
 	// ActiveRevision tracks the generation that was successfully loaded.
 	// +optional
 	ActiveRevision int64 `json:"activeRevision,omitempty"`
+
+	// StatePlanes represents the governed composite state of the model system.
+	// +optional
+	StatePlanes StatePlanes `json:"statePlanes,omitempty"`
+
+	// EvidenceBundle stores receipts, attestations and provenance data.
+	// +optional
+	EvidenceBundle EvidenceBundle `json:"evidenceBundle,omitempty"`
+}
+
+// StatePlanes represents orthogonal views of the system's state.
+type StatePlanes struct {
+	Lifecycle   string `json:"lifecycle,omitempty"`
+	Trust       string `json:"trust,omitempty"`
+	Binding     string `json:"binding,omitempty"`
+	Composition string `json:"composition,omitempty"`
+	Risk        string `json:"risk,omitempty"`
+}
+
+// EvidenceBundle stores verification data for the model system.
+type EvidenceBundle struct {
+	// SLSA attestation URI.
+	AttestationURI string `json:"attestationUri,omitempty"`
+	// Cosign signature digest.
+	SignatureDigest string `json:"signatureDigest,omitempty"`
+	// CycloneDX SBOM digest.
+	SBOMDigest string `json:"sbomDigest,omitempty"`
+	// Last verification timestamp.
+	LastVerifiedAt *metav1.Time `json:"lastVerifiedAt,omitempty"`
 }
 
 const (

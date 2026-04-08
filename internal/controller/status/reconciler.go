@@ -81,12 +81,15 @@ func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInfe
 	}
 	r.setCondition(&llmSvc.Status.Conditions, optCondition)
 
-	// 5. Final Patch
+	// 5. Final CAS-compliant update
 	if !equality.Semantic.DeepEqual(&llmSvcBeforePatch.Status, &llmSvc.Status) {
-		err := r.Client.Status().Patch(ctx, llmSvc, client.MergeFrom(llmSvcBeforePatch))
+		// Standardize on Update with ResourceVersion (CAS) for high-integrity states.
+		// controller-runtime handles the ResourceVersion check during Update.
+		err := r.Client.Status().Update(ctx, llmSvc)
 		if err != nil {
 			if apierrors.IsConflict(err) {
-				return nil // Benign conflict
+				// Return the error to trigger a requeue and Refetch
+				return fmt.Errorf("conflict during status CAS update: %w", err)
 			}
 			return err
 		}

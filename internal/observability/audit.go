@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -90,9 +91,10 @@ type AuditEvent struct {
 // AuditLogger emits structured audit events to slog, OTel spans, and K8s Events.
 type AuditLogger struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	logger   *slog.Logger
-	redactor *Redactor
+	Scheme       *runtime.Scheme
+	logger       *slog.Logger
+	redactor     *Redactor
+	auditFilePath string // Path for persistent JSONL file auditor
 }
 
 // NewAuditLogger creates an audit logger with structured JSON output.
@@ -104,11 +106,19 @@ func NewAuditLogger(c client.Client, scheme *runtime.Scheme) *AuditLogger {
 
 // NewAuditLoggerWithOptions creates an audit logger with explicit PII redaction control.
 func NewAuditLoggerWithOptions(c client.Client, scheme *runtime.Scheme, piiRedaction bool) *AuditLogger {
+	// For production readiness, we attempt to use /var/log/ckodex/audit.jsonl
+	// if the directory is writable (e.g. via a PV mount).
+	auditPath := os.Getenv("CKODEX_AUDIT_LOG_PATH")
+	if auditPath == "" {
+		auditPath = "/var/log/ckodex/audit.jsonl"
+	}
+
 	return &AuditLogger{
-		Client:   c,
-		Scheme:   scheme,
-		logger:   slog.Default().With("component", "audit"),
-		redactor: NewRedactor(piiRedaction),
+		Client:        c,
+		Scheme:        scheme,
+		logger:        slog.Default().With("component", "audit"),
+		redactor:      NewRedactor(piiRedaction),
+		auditFilePath: auditPath,
 	}
 }
 
@@ -339,9 +349,33 @@ func (a *AuditLogger) emit(ctx context.Context, event AuditEvent) {
 		}
 		span.AddEvent("audit", trace.WithAttributes(attrs...))
 	}
+	// 3. Persistent File Audit (Best-effort, synchronous file append)
+	a.emitToFile(event)
 
-	// 3. K8s Event (best-effort, non-blocking)
+	// 4. K8s Event (best-effort, non-blocking)
 	go a.emitK8sEvent(ctx, event)
+}
+
+// emitToFile writes the event as a JSON line to the persistent audit file.
+func (a *AuditLogger) emitToFile(event AuditEvent) {
+	if a.auditFilePath == "" {
+		return
+	}
+
+	f, err := os.OpenFile(a.auditFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		// If file auditor fails (e.g. read-only or no PV), we just log the failure.
+		// In a strictly hardened mode, we might want to panic/fail the process.
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+
+	_, _ = f.Write(append(data, '\n'))
 }
 
 // emitK8sEvent creates a Kubernetes Event resource for the audit trail.

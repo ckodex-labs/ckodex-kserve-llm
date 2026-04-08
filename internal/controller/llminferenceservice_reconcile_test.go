@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,6 +27,7 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
@@ -38,6 +40,7 @@ func buildLLMScheme(t *testing.T) *runtime.Scheme {
 	require.NoError(t, corev1.AddToScheme(s))
 	require.NoError(t, appsv1.AddToScheme(s))
 	require.NoError(t, policyv1.AddToScheme(s))
+	require.NoError(t, networkingv1.AddToScheme(s))
 	require.NoError(t, servingv1alpha2.AddToScheme(s))
 	require.NoError(t, gwapiv1.Install(s))
 	return s
@@ -156,7 +159,7 @@ func TestLLMInferenceService_ReconcileCreatesDeploymentServicePDB(t *testing.T) 
 	require.NoError(t, cl.Get(context.Background(), k8stypes.NamespacedName{
 		Name: "my-llm", Namespace: "default",
 	}, &updated))
-	assert.Contains(t, updated.Finalizers, FinalizerName)
+	assert.Contains(t, updated.Finalizers, api.FinalizerName)
 }
 
 // TestLLMInferenceService_ReconcileDeletion exercises the finalizer cleanup path.
@@ -164,7 +167,7 @@ func TestLLMInferenceService_ReconcileDeletion(t *testing.T) {
 	s := buildLLMScheme(t)
 	// Create the object first without a deletion timestamp, then patch it.
 	llmSvc := makeLLMInferenceService("my-llm", "default")
-	llmSvc.Finalizers = []string{FinalizerName}
+	llmSvc.Finalizers = []string{api.FinalizerName}
 
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
@@ -192,7 +195,7 @@ func TestReconcileDeployment_CreatesNew(t *testing.T) {
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc).Build()
 	r := setupReconciler(cl, s)
 
-	err := r.reconcileDeployment(context.Background(), llmSvc)
+	err := r.reconcileDeployment(context.Background(), llmSvc, nil)
 	require.NoError(t, err)
 
 	var deploy appsv1.Deployment
@@ -211,7 +214,7 @@ func TestReconcileDeployment_Gemma4WellKnown(t *testing.T) {
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc).Build()
 	r := setupReconciler(cl, s)
 
-	err := r.reconcileDeployment(context.Background(), llmSvc)
+	err := r.reconcileDeployment(context.Background(), llmSvc, nil)
 	require.NoError(t, err)
 
 	var deploy appsv1.Deployment
@@ -255,7 +258,7 @@ func TestReconcileDeployment_UpdatesExisting(t *testing.T) {
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc, existingDeploy).Build()
 	r := setupReconciler(cl, s)
 
-	err := r.reconcileDeployment(context.Background(), llmSvc)
+	err := r.reconcileDeployment(context.Background(), llmSvc, nil)
 	require.NoError(t, err)
 }
 

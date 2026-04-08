@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	"encoding/json"
 	"net/http"
@@ -89,7 +90,7 @@ func TestLLMLoraAdapter_CreatesLocalModelCache(t *testing.T) {
 	})
 	require.NoError(t, err)
 	// Should requeue to check cache readiness.
-	assert.True(t, result.RequeueAfter > 0)
+	assert.Greater(t, result.RequeueAfter, time.Duration(0))
 
 	var lmcList servingv1alpha2.LocalModelCacheList
 	require.NoError(t, cl.List(context.Background(), &lmcList))
@@ -143,7 +144,7 @@ func TestLLMLoraAdapter_WaitsForCache(t *testing.T) {
 	})
 	require.NoError(t, err)
 	// Should requeue after delay waiting for cache to download.
-	assert.Greater(t, result.RequeueAfter, int64(0)*0)
+	assert.Greater(t, result.RequeueAfter, time.Duration(0))
 }
 
 // TestLLMLoraAdapter_TargetServiceNotReady waits when target service not ready.
@@ -163,6 +164,16 @@ func TestLLMLoraAdapter_TargetServiceNotReady(t *testing.T) {
 				Name: "sql-helper",
 			},
 		},
+		Status: servingv1alpha2.LLMLoraAdapterStatus{
+			StatePlanes: servingv1alpha2.StatePlanes{
+				Lifecycle: "active",
+			},
+			EvidenceBundle: servingv1alpha2.EvidenceBundle{
+				SignatureDigest: "sha256:dummy",
+				AttestationURI:  "https://dummy/attestation",
+				SBOMDigest:      "sha256:dummy-sbom",
+			},
+		},
 	}
 
 	// Cache is ready.
@@ -176,7 +187,7 @@ func TestLLMLoraAdapter_TargetServiceNotReady(t *testing.T) {
 		},
 		Status: servingv1alpha2.LocalModelCacheStatus{
 			Conditions: []metav1.Condition{
-				{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue},
+				{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: "Downloaded", LastTransitionTime: metav1.Now()},
 			},
 		},
 	}
@@ -203,7 +214,7 @@ func TestLLMLoraAdapter_TargetServiceNotReady(t *testing.T) {
 	})
 	require.NoError(t, err)
 	// Should requeue waiting for target to become ready.
-	assert.Greater(t, int64(result.RequeueAfter), int64(0))
+	assert.Greater(t, result.RequeueAfter, time.Duration(0))
 }
 
 // TestLLMLoraAdapter_TargetServiceMissing waits when target not found.
@@ -233,7 +244,7 @@ func TestLLMLoraAdapter_TargetServiceMissing(t *testing.T) {
 		},
 		Status: servingv1alpha2.LocalModelCacheStatus{
 			Conditions: []metav1.Condition{
-				{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue},
+				{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: "Downloaded", LastTransitionTime: metav1.Now()},
 			},
 		},
 	}

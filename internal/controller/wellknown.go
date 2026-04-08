@@ -36,6 +36,8 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 					"--trust-remote-code",
 					"--enforce-eager",
 					"--enable-turboquant",
+					"--gpu-memory-utilization", "0.95",
+					"--max-num-seqs", "256",
 				},
 				EnableTurboQuant: true,
 				Resources: &corev1.ResourceRequirements{
@@ -62,6 +64,8 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 					"--trust-remote-code",
 					"--enforce-eager",
 					"--enable-turboquant",
+					"--gpu-memory-utilization", "0.95",
+					"--max-num-seqs", "128",
 				},
 				EnableTurboQuant: true,
 				Resources: &corev1.ResourceRequirements{

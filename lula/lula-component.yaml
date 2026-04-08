@@ -24,12 +24,12 @@ component-definition:
           source: https://github.com/defenseunicorns/lula
           description: NIST 800-53 security controls for containerized inference
           implemented-requirements:
-            - uuid: 44444444-4444-4444-4444-444444444444
-              control-id: ac-6
-              description: Ensure least privilege by running containers as non-root
+            - uuid: 44444444-4444-4444-4444-444444444445
+              control-id: ac-4
+              description: Ensure information flow enforcement via NetworkPolicies
               links:
                 - rel: lula-validation
-                  href: "#runAsNonRoot-validation"
+                  href: "#network-policy-validation"
   back-matter:
     resources:
       - uuid: 55555555-5555-5555-5555-555555555555
@@ -38,3 +38,9 @@ component-definition:
         links:
           - rel: lula-validation
             href: "lula-validation.yaml"
+      - uuid: 55555555-5555-5555-5555-555555555556
+        id: network-policy-validation
+        description: Validate presence of NetworkPolicies for inference services
+        links:
+          - rel: lula-validation
+            href: "network-policy-validation.yaml"

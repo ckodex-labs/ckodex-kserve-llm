@@ -112,6 +112,27 @@ type LLMInferenceServiceSpec struct {
 	// HTTPRoute with two weighted backends instead of a single backend.
 	// +optional
 	Canary *CanarySpec `json:"canary,omitempty"`
+
+	// Engine specifies the inference engine to use.
+	// Defaults to 'vllm'. Supported: 'vllm', 'quant-cpp'.
+	// +kubebuilder:default="vllm"
+	// +optional
+	Engine string `json:"engine,omitempty"`
+
+	// ToolSurface declares reachable APIs and external connectors for this service.
+	// +optional
+	ToolSurface *ToolSurface `json:"toolSurface,omitempty"`
+}
+
+// ToolSurface defines allowed external reachability.
+type ToolSurface struct {
+	// AllowedAPIs is a list of FQDNs that the model is permitted to reach.
+	// +optional
+	AllowedAPIs []string `json:"allowedApis,omitempty"`
+
+	// AllowedCIDRs is a list of network ranges the model is permitted to reach.
+	// +optional
+	AllowedCIDRs []string `json:"allowedCidrs,omitempty"`
 }
 
 // SLOSpec declares the service level objectives for an LLMInferenceService.

@@ -31,7 +31,7 @@ type Builder struct {
 }
 
 // Build constructs the desired Deployment spec.
-func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32, hwType HardwareType) *appsv1.Deployment {
+func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32, hwType HardwareType, loras []servingv1alpha2.LLMLoraAdapter) *appsv1.Deployment {
 	labels := map[string]string{
 		"app.kubernetes.io/name":       "llminferenceservice",
 		"app.kubernetes.io/instance":   llmSvc.Name,
@@ -69,6 +69,13 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 	b.ensureModelVolumeMount(podSpec)
 	b.ensureHealthProbes(podSpec)
 	b.ensureSecurityContext(podSpec)
+
+	if len(loras) > 0 {
+		b.applyLoraAdapters(loras, podSpec)
+	}
+
+	b.applyEngineSelection(llmSvc, podSpec)
+
 	b.ensureVLLMEnv(podSpec)
 
 	if b.SPIRE != nil {
@@ -444,4 +451,110 @@ func (b *Builder) buildAnnotations(llmSvc *servingv1alpha2.LLMInferenceService) 
 		ann["ckodex.com/canary-weight"] = fmt.Sprintf("%d", llmSvc.Spec.Canary.Weight)
 	}
 	return ann
+}
+
+// applyLoraAdapters injects --enable-lora and mounts PVCs for all active adapters.
+func (b *Builder) applyLoraAdapters(loras []servingv1alpha2.LLMLoraAdapter, podSpec *corev1.PodSpec) {
+	if len(podSpec.Containers) == 0 {
+		return
+	}
+	c := &podSpec.Containers[0]
+
+	// 1. Ensure --enable-lora and --lora-modules (if we want to pre-load)
+	// We only set --enable-lora as the hot-swap controller handles the dynamic registration.
+	foundEnabledLora := false
+	for _, arg := range c.Args {
+		if arg == "--enable-lora" {
+			foundEnabledLora = true
+			break
+		}
+	}
+	if !foundEnabledLora {
+		c.Args = append(c.Args, "--enable-lora")
+	}
+
+	// 2. Add Volumes and VolumeMounts for each adapter's LocalModelCache
+	for _, lora := range loras {
+		volName := fmt.Sprintf("lora-%s", lora.Name)
+		pvcName := fmt.Sprintf("lora-%s", lora.Name) // Matches adapter controller naming
+
+		// Add Volume (using same HostPath bypass as base LMC for zero-copy performance)
+		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+			Name: volName,
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: fmt.Sprintf("/tmp/ckodex/models/%s", pvcName),
+					Type: ptr.To(corev1.HostPathDirectoryOrCreate),
+				},
+			},
+		})
+
+		// Add Mount
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      volName,
+			MountPath: fmt.Sprintf("%s/lora-%s", api.ModelMountPath, lora.Name),
+			ReadOnly:  true,
+		})
+	}
+}
+
+// applyEngineSelection selects the container image and arguments based on the engine.
+func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
+	if len(podSpec.Containers) == 0 {
+		return
+	}
+	c := &podSpec.Containers[0]
+
+	engine := llmSvc.Spec.Engine
+	if engine == "" {
+		engine = "vllm"
+	}
+
+	switch engine {
+	case "quant-cpp":
+		c.Image = api.QuantCppImage
+		b.ensureQuantCppArgs(llmSvc, c)
+	default:
+		// Default to vllm image if not already set by template
+		if c.Image == "" {
+			c.Image = api.VLLMImage
+		}
+		// vLLM args are typically handled by applying WellKnown config or user spec.
+		// If no args provided, we add safe defaults.
+		if len(c.Args) == 0 {
+			c.Args = []string{
+				"--model", api.ModelMountPath,
+				"--host", "0.0.0.0",
+				"--port", "8000",
+			}
+		}
+	}
+}
+
+// ensureQuantCppArgs configures arguments for the llama.cpp / quant-cpp engine.
+func (b *Builder) ensureQuantCppArgs(llmSvc *servingv1alpha2.LLMInferenceService, c *corev1.Container) {
+	modelPath := api.ModelMountPath
+	
+	foundModelArg := false
+	for _, arg := range c.Args {
+		if arg == "-m" || arg == "--model" {
+			foundModelArg = true
+			break
+		}
+	}
+
+	if !foundModelArg {
+		c.Args = append(c.Args, "-m", modelPath)
+	}
+
+	foundHost := false
+	for _, arg := range c.Args {
+		if arg == "--host" {
+			foundHost = true
+			break
+		}
+	}
+	if !foundHost {
+		c.Args = append(c.Args, "--host", "0.0.0.0", "--port", "8000")
+	}
 }

@@ -681,12 +681,12 @@ func TestReconcileNetworkPolicies_AllowEgressCreated_DNSAndSPIRE(t *testing.T) {
 		types.NamespacedName{Name: "llama3-allow-egress", Namespace: "default"}, &policy))
 
 	assert.Contains(t, policy.Spec.PolicyTypes, networkingv1.PolicyTypeEgress)
-	require.Len(t, policy.Spec.Egress, 2, "must have DNS rule + SPIRE Agent rule")
+	require.Len(t, policy.Spec.Egress, 2, "must have DNS+HTTPS rule + SPIRE Agent rule")
 
-	// DNS rule: port 53, no To selector
+	// DNS/HTTPS rule: ports 53 and 443, no To selector
 	dnsPorts := policy.Spec.Egress[0].Ports
-	require.Len(t, dnsPorts, 2)
-	assert.Equal(t, int32(53), dnsPorts[0].Port.IntVal, "first DNS rule must be port 53")
+	require.Len(t, dnsPorts, 3)
+	assert.Equal(t, int32(53), dnsPorts[0].Port.IntVal, "first rule must be port 53")
 
 	// SPIRE rule: port 8081, scoped to spire-agent pod selector
 	spirePorts := policy.Spec.Egress[1].Ports
@@ -694,7 +694,7 @@ func TestReconcileNetworkPolicies_AllowEgressCreated_DNSAndSPIRE(t *testing.T) {
 	assert.Equal(t, int32(8081), spirePorts[0].Port.IntVal, "SPIRE egress must be port 8081")
 }
 
-func TestReconcileNetworkPolicies_ThreePoliciesCreated(t *testing.T) {
+func TestReconcileNetworkPolicies_FourPoliciesCreated(t *testing.T) {
 	scheme := secScheme(t)
 	svc := minimalLLMSvc("mistral", "prod")
 
@@ -707,7 +707,7 @@ func TestReconcileNetworkPolicies_ThreePoliciesCreated(t *testing.T) {
 
 	var list networkingv1.NetworkPolicyList
 	require.NoError(t, np.List(context.Background(), &list))
-	assert.Len(t, list.Items, 3)
+	assert.Len(t, list.Items, 4)
 }
 
 func TestReconcileNetworkPolicies_Idempotent(t *testing.T) {
@@ -724,7 +724,7 @@ func TestReconcileNetworkPolicies_Idempotent(t *testing.T) {
 
 	var list networkingv1.NetworkPolicyList
 	require.NoError(t, np.List(context.Background(), &list))
-	assert.Len(t, list.Items, 3, "idempotent — no duplicate policies created")
+	assert.Len(t, list.Items, 4, "idempotent — no duplicate policies created")
 }
 
 // ---- EbpfReconciler.ReconcileEbpfPolicy ------------------------------------

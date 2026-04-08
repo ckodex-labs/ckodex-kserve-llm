@@ -82,6 +82,18 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 				"upload the model to an authorized registry and use oci://, s3://, or pvc:// instead")
 		}
 
+		uriLower := strings.ToLower(llmSvc.Spec.Model.URI)
+		
+		// Security Hardening: block credential smuggling inside URIs
+		if strings.Contains(llmSvc.Spec.Model.URI, "@") && (strings.HasPrefix(uriLower, "http://") || strings.HasPrefix(uriLower, "https://")) {
+			errs = append(errs, "spec.model.uri containing embedded credentials (user:pass@...) is forbidden to prevent SSRF")
+		}
+
+		// Security Hardening: block unsafe tensor formats
+		if strings.HasSuffix(uriLower, ".pkl") || strings.HasSuffix(uriLower, ".bin") || strings.HasSuffix(uriLower, ".pt") {
+			errs = append(errs, "spec.model.uri pointing to unsafe formats (.pkl, .bin, .pt) is forbidden; use .safetensors")
+		}
+
 		validSchemes := []string{"hf://", "hf-mirror://", "s3://", "gs://", "pvc://", "oci://", "seaweedfs://", "http://", "https://"}
 		valid := false
 		for _, scheme := range validSchemes {
@@ -273,9 +285,11 @@ func (d *LLMInferenceServiceDefaulter) Default(_ context.Context, llmSvc *servin
 		if c.SecurityContext == nil {
 			c.SecurityContext = &corev1.SecurityContext{}
 		}
-		// NOTE: Do NOT set RunAsNonRoot here — the controller forces runAsUser=0
-		// for vLLM containers (getpwuid() requirement). Setting RunAsNonRoot=true
-		// here would contradict the controller and cause pod admission failures.
+		// Security hardening: enforce runAsNonRoot to prevent container escape
+		if c.SecurityContext.RunAsNonRoot == nil {
+			t := true
+			c.SecurityContext.RunAsNonRoot = &t
+		}
 		if c.SecurityContext.AllowPrivilegeEscalation == nil {
 			f := false
 			c.SecurityContext.AllowPrivilegeEscalation = &f

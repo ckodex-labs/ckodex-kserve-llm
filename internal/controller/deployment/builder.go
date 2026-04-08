@@ -369,6 +369,7 @@ func (b *Builder) ensureModelVolumeMount(podSpec *corev1.PodSpec) {
 	c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
 		Name:      api.ModelVolumeName,
 		MountPath: api.ModelMountPath,
+		ReadOnly:  true,
 	})
 }
 
@@ -404,8 +405,8 @@ func (b *Builder) ensureSecurityContext(podSpec *corev1.PodSpec) {
 	c := &podSpec.Containers[0]
 	if c.SecurityContext == nil {
 		c.SecurityContext = &corev1.SecurityContext{
-			RunAsUser:    ptr.To(int64(0)),
-			RunAsNonRoot: ptr.To(false),
+			RunAsUser:    ptr.To(int64(10001)),
+			RunAsNonRoot: ptr.To(true),
 		}
 	}
 }

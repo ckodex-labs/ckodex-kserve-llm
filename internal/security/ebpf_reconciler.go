@@ -95,9 +95,10 @@ func (r *EbpfReconciler) ReconcileEbpfPolicy(ctx context.Context, llmSvc *servin
 		}
 	}
 
-	// Network syscall policy: traces sys_connect and sys_accept for egress/ingress audit.
-	// Always reconciled regardless of whether the security policy was created or updated.
-	return r.reconcileNetworkPolicy(ctx, llmSvc)
+	if err := r.reconcileNetworkPolicy(ctx, llmSvc); err != nil {
+		return err
+	}
+	return r.reconcileMemoryPolicy(ctx, llmSvc)
 }
 
 // reconcileNetworkPolicy creates a Tetragon TracingPolicy that traces network syscalls.
@@ -174,5 +175,83 @@ func (r *EbpfReconciler) reconcileNetworkPolicy(ctx context.Context, llmSvc *ser
 
 	desired.SetResourceVersion(existing.GetResourceVersion())
 	logger.Info("updating Tetragon network TracingPolicy", "name", name)
+	return r.Update(ctx, desired)
+}
+
+// reconcileMemoryPolicy creates a Tetragon TracingPolicy that mitigates dynamic memory injection.
+func (r *EbpfReconciler) reconcileMemoryPolicy(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
+	logger := log.FromContext(context.Background()).WithValues("component", "ebpf")
+	name := llmSvc.Name + "-memory-policy"
+
+	desired := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "isovalent.com/v1alpha1",
+			"kind":       "TracingPolicy",
+			"metadata": map[string]interface{}{
+				"name":      name,
+				"namespace": llmSvc.Namespace,
+				"labels": map[string]interface{}{
+					"app.kubernetes.io/managed-by": "ckodex-kserve-llm-operator",
+					"app.kubernetes.io/instance":   llmSvc.Name,
+				},
+			},
+			"spec": map[string]interface{}{
+				"podSelector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"app.kubernetes.io/instance": llmSvc.Name,
+					},
+				},
+				"kprobes": []interface{}{
+					map[string]interface{}{
+						"call":    "sys_ptrace",
+						"syscall": true,
+						"args": []interface{}{
+							map[string]interface{}{"index": int64(0), "type": "int"},
+						},
+						"selectors": []interface{}{
+							map[string]interface{}{
+								"matchActions": []interface{}{
+									map[string]interface{}{"action": "Sigkill"},
+								},
+							},
+						},
+					},
+					map[string]interface{}{
+						"call":    "sys_mprotect",
+						"syscall": true,
+						"args": []interface{}{
+							map[string]interface{}{"index": int64(0), "type": "int"},
+							map[string]interface{}{"index": int64(1), "type": "int"},
+							map[string]interface{}{"index": int64(2), "type": "int"},
+						},
+						"selectors": []interface{}{
+							map[string]interface{}{
+								"matchActions": []interface{}{
+									map[string]interface{}{"action": "Post"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(llmSvc, desired, r.Scheme); err != nil {
+		return fmt.Errorf("set owner reference on memory policy: %w", err)
+	}
+
+	var existing unstructured.Unstructured
+	existing.SetGroupVersionKind(desired.GroupVersionKind())
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: llmSvc.Namespace}, &existing); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("creating Tetragon memory TracingPolicy", "name", name)
+			return r.Create(ctx, desired)
+		}
+		return err
+	}
+
+	desired.SetResourceVersion(existing.GetResourceVersion())
+	logger.Info("updating Tetragon memory TracingPolicy", "name", name)
 	return r.Update(ctx, desired)
 }

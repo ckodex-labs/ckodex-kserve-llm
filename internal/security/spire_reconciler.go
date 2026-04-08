@@ -211,12 +211,13 @@ func (np *NetworkPolicyReconciler) ReconcileNetworkPolicies(ctx context.Context,
 		},
 	}
 
-	// 3. Egress: DNS resolution + SPIRE Agent.
-	// Without DNS egress vLLM cannot resolve huggingface.co or any external hostname.
+	// 3. Egress: DNS resolution + HTTPS payload fetches + SPIRE Agent.
+	// Without DNS/HTTPS egress vLLM cannot resolve/download from huggingface.co or mirrors.
 	// Without SPIRE egress the pod cannot obtain a SVID for mTLS.
 	protoUDP := corev1.ProtocolUDP
 	dnsPort := intstr.FromInt32(53)
 	spirePort := intstr.FromInt32(8081)
+	httpsPort := intstr.FromInt32(443)
 	egress := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: llmSvc.Name + "-allow-egress", Namespace: llmSvc.Namespace,
@@ -226,10 +227,11 @@ func (np *NetworkPolicyReconciler) ReconcileNetworkPolicies(ctx context.Context,
 			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
 			Egress: []networkingv1.NetworkPolicyEgressRule{
 				{
-					// DNS over UDP (standard) and TCP (large responses / DoT fallback)
+					// DNS (UDP+TCP) and HTTPS (TCP) for artifact downloads
 					Ports: []networkingv1.NetworkPolicyPort{
 						{Port: &dnsPort, Protocol: &protoUDP},
 						{Port: &dnsPort, Protocol: &protoTCP},
+						{Port: &httpsPort, Protocol: &protoTCP},
 					},
 				},
 				{
@@ -247,7 +249,33 @@ func (np *NetworkPolicyReconciler) ReconcileNetworkPolicies(ctx context.Context,
 		},
 	}
 
-	for _, policy := range []*networkingv1.NetworkPolicy{deny, allow, egress} {
+	// 4. Intra-cluster LWS (LeaderWorkerSet): allow pod-to-pod communication within the same deployment.
+	// Required for NCCL/MPI tensor parallel gradient exchanges.
+	allowIntra := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: llmSvc.Name + "-allow-lws-intra", Namespace: llmSvc.Namespace,
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: podSelector,
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress},
+			Ingress: []networkingv1.NetworkPolicyIngressRule{
+				{
+					From: []networkingv1.NetworkPolicyPeer{
+						{PodSelector: &podSelector},
+					},
+				},
+			},
+			Egress: []networkingv1.NetworkPolicyEgressRule{
+				{
+					To: []networkingv1.NetworkPolicyPeer{
+						{PodSelector: &podSelector},
+					},
+				},
+			},
+		},
+	}
+
+	for _, policy := range []*networkingv1.NetworkPolicy{deny, allow, egress, allowIntra} {
 		if err := controllerutil.SetControllerReference(llmSvc, policy, np.Scheme); err != nil {
 			return fmt.Errorf("set owner reference on %s: %w", policy.Name, err)
 		}
@@ -261,7 +289,7 @@ func (np *NetworkPolicyReconciler) ReconcileNetworkPolicies(ctx context.Context,
 		}
 	}
 
-	logger.Info("network policies reconciled", "policies", 3)
+	logger.Info("network policies reconciled", "policies", 4)
 	return nil
 }
 

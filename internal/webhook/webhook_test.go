@@ -323,10 +323,9 @@ func TestDefaulter_Default_SecurityContextInjected(t *testing.T) {
 	require.NoError(t, err)
 	sc := svc.Spec.Template.Spec.Containers[0].SecurityContext
 	require.NotNil(t, sc)
-	// RunAsNonRoot is NOT set by the webhook — the controller manages it
-	// because vLLM images may require root (getpwuid). Setting it here
-	// would contradict the controller's runAsUser=0 override.
-	assert.Nil(t, sc.RunAsNonRoot, "webhook must not set RunAsNonRoot (controller responsibility)")
+	// RunAsNonRoot IS set by the webhook for security hardening
+	require.NotNil(t, sc.RunAsNonRoot)
+	assert.True(t, *sc.RunAsNonRoot, "webhook must default RunAsNonRoot to true")
 	require.NotNil(t, sc.AllowPrivilegeEscalation)
 	assert.False(t, *sc.AllowPrivilegeEscalation)
 }

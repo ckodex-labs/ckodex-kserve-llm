@@ -19,12 +19,12 @@ featureGates:
   enableScheduler: true
   enableGateway: true
   enableAutoscaler: true
-  enableSecurity: false
-  enableLocalModelCache: false
+  enableSecurity: true
+  enableLocalModelCache: true
 
 runtime:
   # Default vLLM image
-  defaultImage: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.17.1"
+  defaultImage: "vllm/vllm-openai-cpu:v0.19.0"
   # Gemma-specific image
   gemma4Image: "vllm/vllm-openai:gemma4"
 

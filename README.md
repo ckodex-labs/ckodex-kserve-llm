@@ -11,32 +11,64 @@ An opinionated Kubernetes operator for managing LLM inference workloads. Built o
 
 ```mermaid
 graph TD
-    subgraph CP["Control Plane"]
+    subgraph CP["Control Plane (Hardened)"]
         direction TB
         CM["Controller Manager"]
         WH["Webhooks (V+M)"]
+        RT["ToolSurface Reconciler<br/>(Istio DPI)"]
         GR["Gateway Reconciler<br/>(HTTPRoute+GRPCRoute)"]
         
         AS["Autoscaler<br/>(HPA/KEDA)"]
         SS["SPIRE Server"]
-        ES["EPP Scheduler<br/>(KV-Cache Aware)"]
-        
-        CM --> AS
-        GR --> ES
     end
 
-    subgraph DP["Data Plane"]
+    subgraph OP["Observability Plane"]
+        CON["Next.js Console"]
+        AUD["Shared Audit Log<br/>(jsonl)"]
+        PROM["Prometheus"]
+    end
+
+    subgraph DP["Data Plane (Governed)"]
         direction LR
-        V1["vLLM Pod 1<br/>(V2+gRPC)"]
-        V2["vLLM Pod 2<br/>(V2+gRPC)"]
-        VN["vLLM Pod N<br/>(V2+gRPC)"]
-        LWS["LeaderWorkerSet (LWS)<br/>(Multi-GPU)"]
+        V1["vLLM Pod 1<br/>(Istio Sidecar)"]
+        V2["vLLM Pod 2<br/>(Istio Sidecar)"]
+        LWS["LeaderWorkerSet<br/>(Multi-GPU)"]
     end
 
-    CP --> DP
+    CM --> RT
+    RT --> DP
+    CM --> AS
+    CM --> AUD
+    CON --> AUD
+    GR --> DP
 ```
 
+## Production Hardening Features
+
+### Governed State Planes (L|T|R)
+The operator implements a **Governed Composite State Machine** that aggregates safety and compliance metadata across the model system:
+- **Lifecycle (L)**: `pending` → `active` → `quarantined`. Tracks the operational readiness of the model.
+- **Trust (T)**: `unknown` → `asserted` → `verified`. Cryptographically verified identity (SPIFFE) and network isolation (DPI).
+- **Risk (R)**: `normal` → `evaluating` → `high`. Real-time risk assessment based on behavioral declared intent and tool usage.
+
+### Deep Packet Inspection (DPI)
+Models requiring external tool access (`ToolSurface.AllowedAPIs`) are isolated via **Istio Egress Filtering**:
+- Automatic `ServiceEntry` and `VirtualService` generation for FQDN targets.
+- Sidecar-level egress isolation prevents unauthorized data exfiltration.
+- Moves the model trust state to **`verified`** upon successful DPI verification.
+
+### Real-time Monitoring Console
+A built-in Next.js dashboard provides a unified view of the governed fleet:
+- **Lattice Visualization**: Real-time status of `L|T|R` state planes for every model.
+- **Live Audit Feed**: Event-driven streaming of operator and inference decisions.
+- **Shared Audit Plane**: Uses a high-performance persistent volume for real-time log ingestion.
+
+### Supply Chain Security
+- **0-Vulnerability Posture**: All core dependencies (OpenTelemetry, Distribution, Go-Git) are remediated against known CVEs.
+- **Verifiable Evidence**: Every model status includes evidence bundles with SLSA attestation and SBOM digests.
+
 ## Operational Guides
+...
 
 Comprehensive documentation for the lifecycle of models, tenants, and agents:
 

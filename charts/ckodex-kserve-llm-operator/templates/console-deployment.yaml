@@ -1,0 +1,56 @@
+{{- if .Values.console.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-console
+  labels:
+    {{- include "ckodex-kserve-llm-operator.labels" . | nindent 4 }}
+    component: console
+spec:
+  replicas: {{ .Values.console.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ckodex-kserve-llm-operator.selectorLabels" . | nindent 6 }}
+      component: console
+  template:
+    metadata:
+      labels:
+        {{- include "ckodex-kserve-llm-operator.selectorLabels" . | nindent 8 }}
+        component: console
+    spec:
+      containers:
+      - name: console
+        image: "{{ .Values.console.image.repository }}:{{ .Values.console.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.console.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        env:
+        - name: CKODEX_AUDIT_LOG_PATH
+          value: "/var/log/ckodex/audit.jsonl"
+        volumeMounts:
+        - name: audit-logs
+          mountPath: /var/log/ckodex
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: audit-logs
+        {{- if .Values.audit.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-audit
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+{{- end }}

@@ -448,6 +448,10 @@ type ConfigReference struct {
 
 // LLMInferenceServiceStatus defines the observed state of LLMInferenceService.
 type LLMInferenceServiceStatus struct {
+	// StatePlanes represents the governed composite state of the model system.
+	// +optional
+	StatePlanes StatePlanes `json:"statePlanes,omitempty"`
+
 	// Conditions represent the latest available observations.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

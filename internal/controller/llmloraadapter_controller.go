@@ -250,7 +250,7 @@ func (r *LLMLoraAdapterReconciler) registerWithTargetService(ctx context.Context
 	if r.CircuitBreaker == nil {
 		r.CircuitBreaker = NewDefaultCircuitBreaker(CircuitBreakerSettings{
 			Name: "vllm-adapter-load",
-		})
+		}, r.Recorder, lora)
 	}
 
 	// 1. Find all pods for the target service
@@ -319,7 +319,7 @@ func (r *LLMLoraAdapterReconciler) unloadFromTargetService(ctx context.Context, 
 	if r.CircuitBreaker == nil {
 		r.CircuitBreaker = NewDefaultCircuitBreaker(CircuitBreakerSettings{
 			Name: "vllm-adapter-unload",
-		})
+		}, r.Recorder, lora)
 	}
 
 	// Find the target service to get its pods

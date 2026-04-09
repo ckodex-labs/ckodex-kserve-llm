@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -362,10 +363,18 @@ func (a *AuditLogger) emitToFile(event AuditEvent) {
 		return
 	}
 
+	// Ensure directory exists
+	dir := filepath.Dir(a.auditFilePath)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			a.logger.Error("Failed to create audit log directory", "path", dir, "error", err)
+			return
+		}
+	}
+
 	f, err := os.OpenFile(a.auditFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
-		// If file auditor fails (e.g. read-only or no PV), we just log the failure.
-		// In a strictly hardened mode, we might want to panic/fail the process.
+		a.logger.Error("Failed to open audit log file", "path", a.auditFilePath, "error", err)
 		return
 	}
 	defer func() { _ = f.Close() }()
@@ -375,7 +384,9 @@ func (a *AuditLogger) emitToFile(event AuditEvent) {
 		return
 	}
 
-	_, _ = f.Write(append(data, '\n'))
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		a.logger.Error("Failed to write to audit log file", "path", a.auditFilePath, "error", err)
+	}
 }
 
 // emitK8sEvent creates a Kubernetes Event resource for the audit trail.

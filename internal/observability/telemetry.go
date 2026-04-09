@@ -75,6 +75,26 @@ var (
 	)
 )
 
+var (
+	// ResilienceCircuitBreakerState tracks the current state of a circuit breaker (0=Closed, 1=HalfOpen, 2=Open).
+	ResilienceCircuitBreakerState = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "ckodex_resilience_circuit_breaker_state",
+			Help: "Current state of the circuit breaker (0=Closed, 1=HalfOpen, 2=Open).",
+		},
+		[]string{"name"},
+	)
+
+	// ResilienceCircuitBreakerTripped tracks the total number of times a circuit breaker has tripped (moved to Open).
+	ResilienceCircuitBreakerTripped = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ckodex_resilience_circuit_breaker_tripped_total",
+			Help: "Total number of times the circuit breaker has tripped (entered Open state).",
+		},
+		[]string{"name"},
+	)
+)
+
 func init() {
 	// Register custom metrics with the global prometheus registry
 	metrics.Registry.MustRegister(
@@ -85,5 +105,7 @@ func init() {
 		QuarantineIncidents,
 		ContextUtilization,
 		KVCachePressure,
+		ResilienceCircuitBreakerState,
+		ResilienceCircuitBreakerTripped,
 	)
 }

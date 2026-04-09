@@ -37,7 +37,7 @@ spec:
         - /manager
         args:
         - --health-probe-bind-address=:8081
-        - --metrics-bind-address=127.0.0.1:8080
+        - --metrics-bind-address=:8080
         - --leader-elect
         env:
         - name: CKODEX_FEATURE_ENABLE_SCHEDULER
@@ -58,6 +58,11 @@ spec:
           value: {{ .Values.config.hfMirror | quote }}
         - name: CKODEX_OTEL_ENDPOINT
           value: {{ .Values.config.otelEndpoint | quote }}
+        - name: CKODEX_AUDIT_LOG_PATH
+          value: "/var/log/ckodex/audit.jsonl"
+        volumeMounts:
+        - name: audit-logs
+          mountPath: /var/log/ckodex
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         livenessProbe:
@@ -72,6 +77,14 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
+      volumes:
+      - name: audit-logs
+        {{- if .Values.audit.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-audit
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

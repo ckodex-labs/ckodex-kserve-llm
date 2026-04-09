@@ -1,0 +1,19 @@
+{{- if .Values.console.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-console
+  labels:
+    {{- include "ckodex-kserve-llm-operator.labels" . | nindent 4 }}
+    component: console
+spec:
+  type: {{ .Values.console.service.type }}
+  ports:
+    - port: {{ .Values.console.service.port }}
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "ckodex-kserve-llm-operator.selectorLabels" . | nindent 4 }}
+    component: console
+{{- end }}

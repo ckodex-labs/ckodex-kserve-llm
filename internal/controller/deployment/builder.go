@@ -74,7 +74,7 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 		b.applyLoraAdapters(loras, podSpec)
 	}
 
-	b.applyEngineSelection(llmSvc, podSpec)
+	b.applyEngineSelection(llmSvc, podSpec, hwType)
 
 	b.ensureVLLMEnv(podSpec)
 
@@ -444,12 +444,17 @@ func (b *Builder) ensureVLLMEnv(podSpec *corev1.PodSpec) {
 
 func (b *Builder) buildAnnotations(llmSvc *servingv1alpha2.LLMInferenceService) map[string]string {
 	ann := make(map[string]string)
-	if llmSvc.Spec.SLO != nil {
-		ann["ckodex.com/slo-p99-latency-ms"] = fmt.Sprintf("%d", llmSvc.Spec.SLO.TargetP99LatencyMs)
-	}
 	if llmSvc.Spec.Canary != nil {
 		ann["ckodex.com/canary-weight"] = fmt.Sprintf("%d", llmSvc.Spec.Canary.Weight)
 	}
+
+	// Phase 5: Istio Sidecar Injection for ToolSurface DPI
+	if llmSvc.Spec.ToolSurface != nil && (len(llmSvc.Spec.ToolSurface.AllowedAPIs) > 0 || len(llmSvc.Spec.ToolSurface.AllowedCIDRs) > 0) {
+		ann["sidecar.istio.io/inject"] = "true"
+		ann["sidecar.istio.io/rewriteAppHTTPProbers"] = "true"
+		ann["sidecar.istio.io/discoveryNamespaces"] = llmSvc.Namespace
+	}
+
 	return ann
 }
 
@@ -499,7 +504,7 @@ func (b *Builder) applyLoraAdapters(loras []servingv1alpha2.LLMLoraAdapter, podS
 }
 
 // applyEngineSelection selects the container image and arguments based on the engine.
-func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
+func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec, hwType HardwareType) {
 	if len(podSpec.Containers) == 0 {
 		return
 	}
@@ -513,7 +518,7 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 	switch engine {
 	case "quant-cpp":
 		c.Image = api.QuantCppImage
-		b.ensureQuantCppArgs(llmSvc, c)
+		b.ensureQuantCppArgs(llmSvc, c, hwType)
 	default:
 		// Default to vllm image if not already set by template
 		if c.Image == "" {
@@ -532,9 +537,9 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 }
 
 // ensureQuantCppArgs configures arguments for the llama.cpp / quant-cpp engine.
-func (b *Builder) ensureQuantCppArgs(llmSvc *servingv1alpha2.LLMInferenceService, c *corev1.Container) {
+func (b *Builder) ensureQuantCppArgs(llmSvc *servingv1alpha2.LLMInferenceService, c *corev1.Container, hwType HardwareType) {
 	modelPath := api.ModelMountPath
-	
+
 	foundModelArg := false
 	for _, arg := range c.Args {
 		if arg == "-m" || arg == "--model" {
@@ -545,6 +550,26 @@ func (b *Builder) ensureQuantCppArgs(llmSvc *servingv1alpha2.LLMInferenceService
 
 	if !foundModelArg {
 		c.Args = append(c.Args, "-m", modelPath)
+	}
+
+	// Long-context support: check annotations for ctx-size
+	if ctxSize, ok := llmSvc.Annotations["ckodex.com/ctx-size"]; ok {
+		c.Args = append(c.Args, "--ctx-size", ctxSize)
+	}
+
+	// Apple Silicon Optimization: auto-detect GPU layers if not specified
+	if hwType == HardwareAppleSilicon {
+		foundNGL := false
+		for _, arg := range c.Args {
+			if arg == "-ngl" || arg == "--n-gpu-layers" {
+				foundNGL = true
+				break
+			}
+		}
+		if !foundNGL {
+			// On Apple Silicon, we typically want max GPU layers (Metal)
+			c.Args = append(c.Args, "--n-gpu-layers", "99")
+		}
 	}
 
 	foundHost := false

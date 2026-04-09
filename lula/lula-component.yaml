@@ -30,6 +30,18 @@ component-definition:
               links:
                 - rel: lula-validation
                   href: "#network-policy-validation"
+            - uuid: 44444444-4444-4444-4444-444444444446
+              control-id: au-2
+              description: Ensure audit events are captured and persistent
+              links:
+                - rel: lula-validation
+                  href: "#audit-validation"
+            - uuid: 44444444-4444-4444-4444-444444444447
+              control-id: si-7
+              description: Ensure software and information integrity via state machine
+              links:
+                - rel: lula-validation
+                  href: "#integrity-validation"
   back-matter:
     resources:
       - uuid: 55555555-5555-5555-5555-555555555555
@@ -44,3 +56,15 @@ component-definition:
         links:
           - rel: lula-validation
             href: "network-policy-validation.yaml"
+      - uuid: 55555555-5555-5555-5555-555555555557
+        id: audit-validation
+        description: Validate presence of persistent audit logging condition
+        links:
+          - rel: lula-validation
+            href: "governance-validation.yaml"
+      - uuid: 55555555-5555-5555-5555-555555555558
+        id: integrity-validation
+        description: Validate composite integrity state via status conditions
+        links:
+          - rel: lula-validation
+            href: "governance-validation.yaml"

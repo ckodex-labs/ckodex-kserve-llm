@@ -62,6 +62,22 @@ type LLMLoraAdapterSpec struct {
 	// ToolSurface declares reachable APIs and external connectors for this adapter.
 	// +optional
 	ToolSurface *ToolSurface `json:"toolSurface,omitempty"`
+
+	// Sandbox enables header-based virtual routing for this adapter.
+	// When enabled, requests with 'x-ckodex-adapter: <headerValue>' are
+	// matched against this adapter.
+	// +optional
+	Sandbox *SandboxConfig `json:"sandbox,omitempty"`
+}
+
+// SandboxConfig defines virtual routing parameters for developer sandboxes.
+type SandboxConfig struct {
+	// Enable activates the sandbox route in the associated Gateway HTTPRoute.
+	Enable bool `json:"enable,omitempty"`
+
+	// HeaderValue is the value to match in the 'x-ckodex-adapter' header.
+	// Example: 'sql-test-v1'
+	HeaderValue string `json:"headerValue,omitempty"`
 }
 
 // BehaviorMetadata defines declared attributes of the adapter.

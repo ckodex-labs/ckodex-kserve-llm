@@ -21,7 +21,7 @@ type Reconciler struct {
 }
 
 // Update updates the LLMInferenceService status based on the underlying deployment and well-known configs.
-func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, llmSvcBeforePatch *servingv1alpha2.LLMInferenceService, isOptimized bool) error {
+func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, llmSvcBeforePatch *servingv1alpha2.LLMInferenceService, isOptimized bool, metrics *servingv1alpha2.AdaptiveMetrics) error {
 	// 1. Check Deployment Readiness
 	var deploy appsv1.Deployment
 	err := r.Client.Get(ctx, types.NamespacedName{Name: llmSvc.Name, Namespace: llmSvc.Namespace}, &deploy)
@@ -102,6 +102,11 @@ func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInfe
 		optCondition.Message = "WellKnown optimizations (e.g. TurboQuant) applied"
 	}
 	r.setCondition(&llmSvc.Status.Conditions, optCondition)
+
+	// 5. Set Adaptive Metrics (M3 Vision)
+	if metrics != nil {
+		llmSvc.Status.AdaptiveMetrics = metrics
+	}
 
 	// 5. Final CAS-compliant update
 	if !equality.Semantic.DeepEqual(&llmSvcBeforePatch.Status, &llmSvc.Status) {

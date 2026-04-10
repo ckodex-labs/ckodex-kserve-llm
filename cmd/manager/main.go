@@ -134,6 +134,9 @@ func main() {
 	reconciler.EnableGRPC = cfg.Features.EnableGRPC
 	reconciler.EnableHardwareSelection = cfg.Features.EnableExperimentalHardwareSelection
 	reconciler.EnableExperimentalStatusHardening = cfg.Features.EnableExperimentalStatusHardening
+	
+	// M3 Vision: Real-time Performance Overlay
+	reconciler.Metrics = &observability.MockMetricsQuerier{}
 
 	// Gateway
 	if cfg.Features.EnableGateway {

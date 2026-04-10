@@ -117,20 +117,32 @@ func (r *Reconciler) reconcileGateway(ctx context.Context, llmSvc *servingv1alph
 
 // reconcileHTTPRoute creates or updates the HTTPRoute. When spec.canary is set,
 // a weighted two-backend route is built; otherwise the standard single-backend
-// route is used. Switching between modes (adding/removing spec.canary) is
-// handled by updating the existing route in-place — no delete/recreate.
+// route is used.
 func (r *Reconciler) reconcileHTTPRoute(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
 	logger := log.FromContext(ctx).WithValues("component", "gateway")
 
+	// Fetch all LoRA adapters for sandbox rules (M3 Phase 3)
+	var adapters servingv1alpha2.LLMLoraAdapterList
+	if err := r.List(ctx, &adapters, client.InNamespace(llmSvc.Namespace)); err != nil {
+		return fmt.Errorf("list adapters: %w", err)
+	}
+
+	var associated []servingv1alpha2.LLMLoraAdapter
+	for _, a := range adapters.Items {
+		if a.Spec.TargetService == llmSvc.Name {
+			associated = append(associated, a)
+		}
+	}
+
 	var httpRoute *gwapiv1.HTTPRoute
 	if llmSvc.Spec.Canary != nil {
-		httpRoute = BuildCanaryHTTPRoute(llmSvc)
+		httpRoute = BuildCanaryHTTPRoute(llmSvc, associated)
 		logger.Info("canary httproute selected",
 			"weight", llmSvc.Spec.Canary.Weight,
 			"baseModel", llmSvc.Spec.Canary.BaseModel,
 		)
 	} else {
-		httpRoute = BuildHTTPRoute(llmSvc)
+		httpRoute = BuildHTTPRoute(llmSvc, associated)
 	}
 
 	if err := controllerutil.SetControllerReference(llmSvc, httpRoute, r.Scheme); err != nil {

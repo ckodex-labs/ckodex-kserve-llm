@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -707,7 +708,7 @@ func TestReconcileNetworkPolicies_FourPoliciesCreated(t *testing.T) {
 
 	var list networkingv1.NetworkPolicyList
 	require.NoError(t, np.List(context.Background(), &list))
-	assert.Len(t, list.Items, 4)
+	assert.Len(t, list.Items, 5)
 }
 
 func TestReconcileNetworkPolicies_Idempotent(t *testing.T) {
@@ -724,7 +725,31 @@ func TestReconcileNetworkPolicies_Idempotent(t *testing.T) {
 
 	var list networkingv1.NetworkPolicyList
 	require.NoError(t, np.List(context.Background(), &list))
-	assert.Len(t, list.Items, 4, "idempotent — no duplicate policies created")
+	assert.Len(t, list.Items, 5, "idempotent — no duplicate policies created")
+}
+
+func TestReconcileNetworkPolicies_SanitizesInvalidCIDR(t *testing.T) {
+	scheme := secScheme(t)
+	svc := minimalLLMSvc("invalid-cidr", "default")
+	svc.Spec.ToolSurface = &servingv1alpha2.ToolSurface{
+		AllowedCIDRs: []string{"999.999.999.999/99", "invalid-ip", "10.0.0.0/24"},
+	}
+
+	np := &NetworkPolicyReconciler{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme: scheme,
+	}
+
+	// Should not return error even with malformed CIDRs, should just skip them or fail gracefully
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
+
+	var policy networkingv1.NetworkPolicy
+	require.NoError(t, np.Get(context.Background(),
+		client.ObjectKey{Name: "invalid-cidr-allow-tools", Namespace: "default"}, &policy))
+
+	// Should only have the valid CIDR
+	require.Len(t, policy.Spec.Egress, 1)
+	assert.Equal(t, "10.0.0.0/24", policy.Spec.Egress[0].To[0].IPBlock.CIDR)
 }
 
 // ---- EbpfReconciler.ReconcileEbpfPolicy ------------------------------------

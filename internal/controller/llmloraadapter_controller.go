@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"sync"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,6 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"k8s.io/apimachinery/pkg/types"
 
 	"bytes"
 	"encoding/json"
@@ -42,6 +46,10 @@ type LLMLoraAdapterReconciler struct {
 	Recorder       record.EventRecorder
 	CircuitBreaker *gobreaker.CircuitBreaker
 	Audit          *observability.AuditLogger
+	
+	// Warmup tracking to prevent duplicate warmup requests
+	warmupMu sync.Mutex
+	warmupDone map[string]bool
 }
 
 const (
@@ -310,6 +318,18 @@ func (r *LLMLoraAdapterReconciler) registerWithTargetService(ctx context.Context
 		logger.Info("Successfully sent load_lora_adapter request", "pod", pod.Name)
 		r.Recorder.Eventf(lora, corev1.EventTypeNormal, "Registered",
 			"Successfully loaded LoRA adapter on pod %s", pod.Name)
+		
+		// 3. Proactive Warmup (M3 Vision)
+		r.warmupMu.Lock()
+		warmupKey := fmt.Sprintf("%s/%s/%s", pod.Name, lora.Name, lora.Spec.AdapterName)
+		if !r.warmupDone[warmupKey] {
+			r.warmupMu.Unlock()
+			go r.performWarmup(ctx, podIP, lora.Spec.AdapterName)
+			r.warmupMu.Lock()
+			if r.warmupDone == nil { r.warmupDone = make(map[string]bool) }
+			r.warmupDone[warmupKey] = true
+		}
+		r.warmupMu.Unlock()
 	}
 
 	return nil
@@ -384,6 +404,28 @@ func removeString(slice []string, s string) []string {
 	return result
 }
 
+func (r *LLMLoraAdapterReconciler) performWarmup(ctx context.Context, podIP, adapterName string) {
+	logger := log.FromContext(ctx)
+	url := fmt.Sprintf("http://%s:8000/v1/completions", podIP)
+	
+	// Minimal warmup request to trigger weight allocation in VRAM
+	warmupReq := map[string]interface{}{
+		"model":       adapterName,
+		"prompt":      " ",
+		"max_tokens":  1,
+		"echo":        false,
+	}
+	body, _ := json.Marshal(warmupReq)
+	
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		logger.Error(err, "Warmup request failed", "pod", podIP)
+		return
+	}
+	defer resp.Body.Close()
+	logger.Info("Proactive warmup complete", "pod", podIP, "adapter", adapterName)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *LLMLoraAdapterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -391,5 +433,35 @@ func (r *LLMLoraAdapterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		For(&servingv1alpha2.LLMLoraAdapter{}).
 		Owns(&servingv1alpha2.LocalModelCache{}).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				pod, ok := obj.(*corev1.Pod)
+				if !ok { return nil }
+				
+				// Find service name from labels
+				svcName, ok := pod.Labels["app.kubernetes.io/instance"]
+				if !ok { return nil }
+				
+				// List all adapters in the same namespace
+				var adapters servingv1alpha2.LLMLoraAdapterList
+				if err := mgr.GetClient().List(ctx, &adapters, client.InNamespace(pod.Namespace)); err != nil {
+					return nil
+				}
+				
+				var requests []reconcile.Request
+				for _, adapter := range adapters.Items {
+					if adapter.Spec.TargetService == svcName {
+						requests = append(requests, reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      adapter.Name,
+								Namespace: adapter.Namespace,
+							},
+						})
+					}
+				}
+				return requests
+			}),
+		).
 		Complete(r)
 }

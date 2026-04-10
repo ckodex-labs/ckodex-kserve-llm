@@ -64,7 +64,7 @@ func TestReconciler_Update_Gating(t *testing.T) {
 		testLLM := llm.DeepCopy()
 		testLLM.Status = servingv1alpha2.LLMInferenceServiceStatus{}
 
-		err := r.Update(context.Background(), testLLM, llm, true)
+		err := r.Update(context.Background(), testLLM, llm, true, nil)
 		assert.NoError(t, err)
 
 		// Verify DeploymentReady condition is NOT set
@@ -89,11 +89,17 @@ func TestReconciler_Update_Gating(t *testing.T) {
 			Client:          fakeClient,
 			EnableHardening: true,
 		}
+		
+		metrics := &servingv1alpha2.AdaptiveMetrics{
+			P50Latency: "25ms",
+			P99Latency: "150ms",
+			LoadLevel:  "Light",
+		}
 
 		testLLM := llm.DeepCopy()
 		testLLM.Status = servingv1alpha2.LLMInferenceServiceStatus{}
-
-		err := r.Update(context.Background(), testLLM, llm, true)
+		
+		err := r.Update(context.Background(), testLLM, llm, true, metrics)
 		assert.NoError(t, err)
 
 		// Verify DeploymentReady condition IS set
@@ -106,5 +112,10 @@ func TestReconciler_Update_Gating(t *testing.T) {
 			}
 		}
 		assert.True(t, found, "ConditionDeploymentReady should be set when hardening is enabled")
+
+		// Verify metrics are set
+		assert.NotNil(t, testLLM.Status.AdaptiveMetrics)
+		assert.Equal(t, "150ms", testLLM.Status.AdaptiveMetrics.P99Latency)
+		assert.Equal(t, "Light", testLLM.Status.AdaptiveMetrics.LoadLevel)
 	})
 }

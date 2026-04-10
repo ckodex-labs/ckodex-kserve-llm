@@ -57,6 +57,7 @@ type LLMInferenceServiceReconciler struct {
 	OPA                               *security.OPAReconciler // nil when EnableSecurity=false
 	OPAConfig                         security.OPAConfig      // populated from OperatorConfig.Security when OPA != nil
 	NetworkPolicy                     *security.NetworkPolicyReconciler
+	ExternalSecret                    *security.ExternalSecretReconciler
 	Vault                             *security.VaultReconciler
 	SPIRE                             *security.SPIREReconciler
 	SPIRERegistration                 *security.SPIRERegistrationReconciler // nil when EnableSecurity=false
@@ -84,6 +85,9 @@ type LLMInferenceServiceReconciler struct {
 	hardwareCacheMu   sync.RWMutex
 	cachedHardware    deployment.HardwareType
 	hardwareCacheTime time.Time
+
+	// M3 Vision: Real-time Metrics Query
+	Metrics observability.MetricsQuerier
 }
 
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=llminferenceservices,verbs=get;list;watch;create;update;patch;delete
@@ -145,6 +149,13 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 	if deleted, err := r.CleanupReconciler.HandleFinalizer(ctx, &llmSvc, api.FinalizerName, cleanupFunc); err != nil || deleted {
 		return ctrl.Result{}, err
+	}
+
+	// 2.5 Reconcile Managed ExternalSecrets (Opt-in)
+	if r.ExternalSecret != nil {
+		if err := r.ExternalSecret.ReconcileExternalSecret(ctx, &llmSvc); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile external secrets: %w", err)
+		}
 	}
 
 	// 3. Reconcile Deployment
@@ -260,7 +271,14 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	isOptimized := GetWellKnownConfig(llmSvc.Spec.Model.URI) != nil
 	hwType := r.getCachedHardware(ctx)
 	llmSvc.Status.DetectedHardware = string(hwType)
-	if err := r.StatusReconciler.Update(ctx, &llmSvc, llmSvcBeforePatch, isOptimized); err != nil {
+	// 5. Update Status (Consolidated)
+	// Fetch Adaptive Metrics if available
+	var metrics *servingv1alpha2.AdaptiveMetrics
+	if r.Metrics != nil {
+		metrics = r.Metrics.GetAdaptiveMetrics(ctx, llmSvc.Namespace, llmSvc.Name)
+	}
+
+	if err := r.StatusReconciler.Update(ctx, &llmSvc, llmSvcBeforePatch, isOptimized, metrics); err != nil {
 		return ctrl.Result{}, fmt.Errorf("update status: %w", err)
 	}
 

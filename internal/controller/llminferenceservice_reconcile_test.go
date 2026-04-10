@@ -387,7 +387,7 @@ func TestUpdateStatus_NoDeployment(t *testing.T) {
 		Build()
 	r := setupReconciler(cl, s)
 
-	err := r.StatusReconciler.Update(context.Background(), llmSvc, llmSvc.DeepCopy(), false)
+	err := r.StatusReconciler.Update(context.Background(), llmSvc, llmSvc.DeepCopy(), false, nil)
 	require.NoError(t, err)
 	assert.Equal(t, int32(0), llmSvc.Status.Replicas)
 	assert.False(t, llmSvc.Status.ModelReady)
@@ -411,7 +411,7 @@ func TestUpdateStatus_WithReadyDeployment(t *testing.T) {
 		Build()
 	r := setupReconciler(cl, s)
 
-	err := r.StatusReconciler.Update(context.Background(), llmSvc, llmSvc.DeepCopy(), false)
+	err := r.StatusReconciler.Update(context.Background(), llmSvc, llmSvc.DeepCopy(), false, nil)
 	require.NoError(t, err)
 	assert.Equal(t, readyReplicas, llmSvc.Status.Replicas)
 	assert.True(t, llmSvc.Status.ModelReady)

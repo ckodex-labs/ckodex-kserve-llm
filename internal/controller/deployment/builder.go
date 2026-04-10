@@ -70,6 +70,7 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 	b.ensureModelVolumeMount(podSpec)
 	b.ensureHealthProbes(podSpec)
 	b.ensureSecurityContext(podSpec)
+	b.ensureTopologySpreadConstraints(podSpec, labels)
 
 	if len(loras) > 0 {
 		b.applyLoraAdapters(loras, podSpec)
@@ -201,6 +202,15 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 			container.EnvFrom = append(container.EnvFrom, corev1.EnvFromSource{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: *llmSvc.Spec.Model.Storage.SecretRef,
+				},
+			})
+		}
+		// Managed ExternalSecret injection (M3 Phase 5)
+		if llmSvc.Spec.Model.Storage.ExternalSecret != nil {
+			targetName := llmSvc.Name + "-external-secret"
+			container.EnvFrom = append(container.EnvFrom, corev1.EnvFromSource{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: targetName},
 				},
 			})
 		}
@@ -466,10 +476,11 @@ func (b *Builder) ensureHealthProbes(podSpec *corev1.PodSpec) {
 	if c.ReadinessProbe == nil {
 		c.ReadinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{Path: "/v1/models", Port: intstr.FromInt32(8000)},
+				HTTPGet: &corev1.HTTPGetAction{Path: "/v2/health/ready", Port: intstr.FromInt32(8000)},
 			},
 			InitialDelaySeconds: 30,
 			PeriodSeconds:       10,
+			SuccessThreshold:    3, // Pristine requirement: ensure stability before routing
 		}
 	}
 	if c.LivenessProbe == nil {
@@ -641,6 +652,30 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 }
 
 // ensureQuantCppArgs configures arguments for the llama.cpp / quant-cpp engine.
+func (b *Builder) ensureTopologySpreadConstraints(podSpec *corev1.PodSpec, labels map[string]string) {
+	if len(podSpec.TopologySpreadConstraints) > 0 {
+		return
+	}
+	podSpec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+		{
+			MaxSkew:           1,
+			TopologyKey:       "topology.kubernetes.io/zone",
+			WhenUnsatisfiable: corev1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+		{
+			MaxSkew:           1,
+			TopologyKey:       "kubernetes.io/hostname",
+			WhenUnsatisfiable: corev1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+		},
+	}
+}
+
 func (b *Builder) ensureQuantCppArgs(llmSvc *servingv1alpha2.LLMInferenceService, c *corev1.Container, hwType HardwareType) {
 	modelPath := api.ModelMountPath
 

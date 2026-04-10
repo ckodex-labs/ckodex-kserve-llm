@@ -16,12 +16,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
 // AgentReconciler reconciles Agent objects.
@@ -55,8 +56,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	// Handle deletion
 	if agent.DeletionTimestamp != nil {
-		if controllerutil.ContainsFinalizer(&agent, FinalizerName) {
-			controllerutil.RemoveFinalizer(&agent, FinalizerName)
+		if controllerutil.ContainsFinalizer(&agent, api.FinalizerName) {
+			controllerutil.RemoveFinalizer(&agent, api.FinalizerName)
 			if err := r.Update(ctx, &agent); err != nil {
 				return ctrl.Result{}, fmt.Errorf("remove finalizer: %w", err)
 			}
@@ -66,8 +67,8 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	// Add finalizer
-	if !controllerutil.ContainsFinalizer(&agent, FinalizerName) {
-		controllerutil.AddFinalizer(&agent, FinalizerName)
+	if !controllerutil.ContainsFinalizer(&agent, api.FinalizerName) {
+		controllerutil.AddFinalizer(&agent, api.FinalizerName)
 		if err := r.Update(ctx, &agent); err != nil {
 			return ctrl.Result{}, fmt.Errorf("add finalizer: %w", err)
 		}

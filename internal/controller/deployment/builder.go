@@ -25,9 +25,10 @@ type SPIREInjector interface {
 
 // Builder constructs Deployment objects for LLM inference.
 type Builder struct {
-	Client   client.Client
-	Recorder record.EventRecorder
-	SPIRE    SPIREInjector
+	Client                  client.Client
+	Recorder                record.EventRecorder
+	SPIRE                   SPIREInjector
+	EnableHardwareSelection bool
 }
 
 // Build constructs the desired Deployment spec.
@@ -126,7 +127,7 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 // activeLMC is optional; if provided, it take precedence over listing from the client.
 func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, hwType HardwareType, activeLMC *servingv1alpha2.LocalModelCache) *corev1.Container {
 	uri := llmSvc.Spec.Model.URI
-	if uri == "" || strings.HasPrefix(uri, "modelpack://") || strings.HasPrefix(uri, "hf-mount://") {
+	if uri == "" || strings.HasPrefix(uri, "modelpack://") || strings.HasPrefix(uri, "hf-mount://") || strings.HasPrefix(uri, "pvc://") {
 		return nil
 	}
 
@@ -144,6 +145,11 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 		}
 	} else if b.isLocalModelCacheReady(ctx, uri) {
 		return nil
+	}
+
+	// Dynamic hardware-aware model selection (Experimental)
+	if b.EnableHardwareSelection && llmSvc.Spec.Model.HardwareAware {
+		uri = b.transformModelURI(uri, hwType)
 	}
 
 	parts := strings.SplitN(uri, "://", 2)
@@ -169,6 +175,11 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 			{
 				Name:      api.ModelVolumeName,
 				MountPath: api.ModelMountPath,
+				ReadOnly:  false, // Writable for download
+			},
+			{
+				Name:      "tmp-scratch",
+				MountPath: "/tmp",
 			},
 		},
 	}
@@ -194,6 +205,9 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 			})
 		}
 	}
+
+	// Apply universal restricted security context
+	b.applyRestrictedSecurityContext(container)
 
 	return container
 }
@@ -300,6 +314,34 @@ func (b *Builder) getReadyLMC(ctx context.Context, modelURI string) *servingv1al
 	return nil
 }
 
+func (b *Builder) transformModelURI(uri string, hwType HardwareType) string {
+	if !strings.HasPrefix(uri, "oci://") {
+		return uri
+	}
+
+	suffix := "-cpu"
+	switch hwType {
+	case HardwareNVIDIA:
+		suffix = "-nvidia"
+	case HardwareAppleSiliconMPS:
+		suffix = "-mps"
+	case HardwareAMD:
+		suffix = "-rocm"
+	}
+
+	// Append suffix to the tag or digest
+	if strings.Contains(uri, "@sha256:") {
+		// Digests are immutable; we can't easily suffix them without a mapping.
+		// For now, only suffix tags.
+		return uri
+	}
+
+	if strings.Contains(uri, ":") {
+		return uri + suffix
+	}
+	return uri + ":latest" + suffix
+}
+
 func (b *Builder) isLocalModelCacheReady(ctx context.Context, modelURI string) bool {
 	return b.getReadyLMC(ctx, modelURI) != nil
 }
@@ -319,7 +361,7 @@ func (b *Builder) ensureModelVolume(llmSvc *servingv1alpha2.LLMInferenceService,
 			Name: api.ModelVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				CSI: &corev1.CSIVolumeSource{
-					Driver: "model.csi.modelpack.org",
+					Driver:           "model.csi.modelpack.org",
 					VolumeAttributes: map[string]string{"modelRef": ref},
 				},
 			},
@@ -353,6 +395,17 @@ func (b *Builder) ensureModelVolume(llmSvc *servingv1alpha2.LLMInferenceService,
 				},
 			},
 		})
+	case strings.HasPrefix(uri, "pvc://"):
+		pvcName := strings.TrimPrefix(uri, "pvc://")
+		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+			Name: api.ModelVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+					ReadOnly:  true,
+				},
+			},
+		})
 	default:
 		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
 			Name: api.ModelVolumeName,
@@ -361,6 +414,16 @@ func (b *Builder) ensureModelVolume(llmSvc *servingv1alpha2.LLMInferenceService,
 			},
 		})
 	}
+
+	// Always add the 4Gi /tmp scratch space to support ReadOnlyRootFilesystem
+	podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+		Name: "tmp-scratch",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				SizeLimit: ptr.To(resource.MustParse("4Gi")),
+			},
+		},
+	})
 }
 
 func (b *Builder) ensureModelVolumeMount(podSpec *corev1.PodSpec) {
@@ -378,6 +441,21 @@ func (b *Builder) ensureModelVolumeMount(podSpec *corev1.PodSpec) {
 		MountPath: api.ModelMountPath,
 		ReadOnly:  true,
 	})
+
+	// Inject /tmp scratch mount
+	foundTmp := false
+	for _, m := range c.VolumeMounts {
+		if m.MountPath == "/tmp" {
+			foundTmp = true
+			break
+		}
+	}
+	if !foundTmp {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      "tmp-scratch",
+			MountPath: "/tmp",
+		})
+	}
 }
 
 func (b *Builder) ensureHealthProbes(podSpec *corev1.PodSpec) {
@@ -409,12 +487,38 @@ func (b *Builder) ensureSecurityContext(podSpec *corev1.PodSpec) {
 	if len(podSpec.Containers) == 0 {
 		return
 	}
-	c := &podSpec.Containers[0]
-	if c.SecurityContext == nil {
-		c.SecurityContext = &corev1.SecurityContext{
-			RunAsUser:    ptr.To(int64(10001)),
-			RunAsNonRoot: ptr.To(true),
+	// Apply to all containers in the pod
+	for i := range podSpec.Containers {
+		b.applyRestrictedSecurityContext(&podSpec.Containers[i])
+	}
+	for i := range podSpec.InitContainers {
+		b.applyRestrictedSecurityContext(&podSpec.InitContainers[i])
+	}
+
+	// Add Pod-level restricted security context
+	if podSpec.SecurityContext == nil {
+		podSpec.SecurityContext = &corev1.PodSecurityContext{
+			FSGroup:        ptr.To(int64(65532)),
+			RunAsNonRoot:   ptr.To(true),
+			SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		}
+	}
+}
+
+func (b *Builder) applyRestrictedSecurityContext(c *corev1.Container) {
+	if c.SecurityContext == nil {
+		c.SecurityContext = &corev1.SecurityContext{}
+	}
+	c.SecurityContext.RunAsUser = ptr.To(int64(65532))
+	c.SecurityContext.RunAsGroup = ptr.To(int64(65532))
+	c.SecurityContext.RunAsNonRoot = ptr.To(true)
+	c.SecurityContext.ReadOnlyRootFilesystem = ptr.To(true)
+	c.SecurityContext.AllowPrivilegeEscalation = ptr.To(false)
+	c.SecurityContext.Capabilities = &corev1.Capabilities{
+		Drop: []corev1.Capability{"ALL"},
+	}
+	c.SecurityContext.SeccompProfile = &corev1.SeccompProfile{
+		Type: corev1.SeccompProfileTypeRuntimeDefault,
 	}
 }
 

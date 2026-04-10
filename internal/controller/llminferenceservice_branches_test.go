@@ -435,7 +435,7 @@ func TestLLMInferenceService_Reconcile_WithLocalModelCache(t *testing.T) {
 			Namespace: "default",
 			UID:       k8stypes.UID("lmc-uid"),
 		},
-		Spec:       servingv1alpha2.LocalModelCacheSpec{SourceModelURI: "hf://meta-llama/Llama-3-8B"},
+		Spec: servingv1alpha2.LocalModelCacheSpec{SourceModelURI: "hf://meta-llama/Llama-3-8B"},
 		Status: servingv1alpha2.LocalModelCacheStatus{
 			NodeStatuses: []servingv1alpha2.NodeCacheStatus{
 				{NodeName: "gpu-node-1", Phase: "Ready"},

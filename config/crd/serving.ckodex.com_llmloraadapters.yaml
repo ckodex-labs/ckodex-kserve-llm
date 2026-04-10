@@ -237,9 +237,30 @@ spec:
                   Example: 'sql-helper'
                 minLength: 1
                 type: string
+              behavior:
+                description: Behavior defines the expected impact of this adapter
+                  on core behavior axes.
+                properties:
+                  refusal:
+                    description: Refusal fidelity (strength of system prompt adherence).
+                    type: string
+                  safety:
+                    description: Safety level (0-10) where 10 is safest.
+                    type: integer
+                  toolPropensity:
+                    description: ToolPropensity - declared intensity of tool usage
+                      ('conservative', 'moderate', 'aggressive').
+                    type: string
+                type: object
               model:
                 description: Model specifies the LoRA weights to serve.
                 properties:
+                  hardwareAware:
+                    description: |-
+                      HardwareAware enables automatic hardware-specific artifact selection.
+                      When true, the operator appends hardware suffixes to OCI tags (e.g., -nvidia).
+                      Requires ENABLE_EXPERIMENTAL_HARDWARE_SELECTION feature gate.
+                    type: boolean
                   name:
                     description: |-
                       Name is the model identifier used in inference requests.
@@ -295,11 +316,41 @@ spec:
                 - name
                 - uri
                 type: object
+              policyEnvelope:
+                description: PolicyEnvelope constrains allowed loading and tool use
+                  for this adapter.
+                properties:
+                  allowedDomains:
+                    description: Domain restrictions (e.g. 'coding', 'general').
+                    items:
+                      type: string
+                    type: array
+                  minTrustLevel:
+                    description: Required trust levels for execution.
+                    type: string
+                type: object
               targetService:
                 description: |-
                   TargetService is the name of the LLMInferenceService to attach this LoRA to.
                   The service must be in the same namespace.
                 type: string
+              toolSurface:
+                description: ToolSurface declares reachable APIs and external connectors
+                  for this adapter.
+                properties:
+                  allowedApis:
+                    description: AllowedAPIs is a list of FQDNs that the model is
+                      permitted to reach.
+                    items:
+                      type: string
+                    type: array
+                  allowedCidrs:
+                    description: AllowedCIDRs is a list of network ranges the model
+                      is permitted to reach.
+                    items:
+                      type: string
+                    type: array
+                type: object
             required:
             - adapterName
             - model
@@ -370,6 +421,39 @@ spec:
                   - type
                   type: object
                 type: array
+              evidenceBundle:
+                description: EvidenceBundle stores receipts, attestations and provenance
+                  data.
+                properties:
+                  attestationUri:
+                    description: SLSA attestation URI.
+                    type: string
+                  lastVerifiedAt:
+                    description: Last verification timestamp.
+                    format: date-time
+                    type: string
+                  sbomDigest:
+                    description: CycloneDX SBOM digest.
+                    type: string
+                  signatureDigest:
+                    description: Cosign signature digest.
+                    type: string
+                type: object
+              statePlanes:
+                description: StatePlanes represents the governed composite state of
+                  the model system.
+                properties:
+                  binding:
+                    type: string
+                  composition:
+                    type: string
+                  lifecycle:
+                    type: string
+                  risk:
+                    type: string
+                  trust:
+                    type: string
+                type: object
             type: object
         type: object
     served: true

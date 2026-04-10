@@ -90,20 +90,53 @@ Comprehensive documentation for the lifecycle of models, tenants, and agents:
 
 ## Quick Start
 
-```bash
-# Install CRDs
-kubectl apply -f config/crd/
+> [!IMPORTANT]
+> For a clean installation on a fresh KIND cluster, refer to `local/` scripts for infrastructure prerequisites.
 
-# Deploy operator
+```bash
+# 1. Setup KIND cluster
+make kind-setup
+
+# 2. Install Infrastructure (KServe v0.17, cert-manager, etc.)
+# Note: uses OCI ghcr.io/kserve/charts/kserve-resources
+cd local && bash 02-prereqs.sh && bash 03-kserve-helm-install.sh
+
+# 3. Build & Deploy Operator
+make generate manifests
+make docker-build
+docker tag ghcr.io/ckodex/kserve-llm-operator:latest ckodex/kserve-llm-operator:dev
+kind load docker-image ckodex/kserve-llm-operator:dev --name kserve-017
+
+# 4. Install CRDs (Server-side apply recommended for large schemas)
+for f in config/crd/*.yaml; do kubectl apply --server-side -f "$f"; done
+
+# 5. Deploy Operator
+kubectl apply -f config/rbac/
 kubectl apply -f config/manager/
 
-# Create an inference service
-kubectl apply -f config/samples/llminferenceservice_basic.yaml
-
-# Verify
-kubectl get llminferenceservice
-kubectl get pods -l app.kubernetes.io/name=llminferenceservice
+# 6. Verify
+kubectl get pods -n ckodex-system
 ```
+
+## Gemma 4 Deployment on KIND
+
+To deploy Gemma 4 E2B on a standard KIND cluster (CPU only):
+
+1. **Create HuggingFace Secret**:
+   ```bash
+   kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN
+   ```
+
+2. **Apply Model Manifest**:
+   ```bash
+   kubectl apply -f samples/gemma-4-e2b.yaml
+   ```
+
+3. **Verify Optimization**:
+   The operator will automatically detect the model and inject Well-Known optimizations:
+   - vLLM Image: `vllm/vllm-openai:gemma4`
+   - TurboQuant: `VLLM_TURBOQUANT: "true"`
+   - Resources: 1 NVIDIA GPU (Pod will remain Pending on CPU-only nodes)
 
 ## Features
 

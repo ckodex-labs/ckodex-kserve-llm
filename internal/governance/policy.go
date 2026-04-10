@@ -23,11 +23,11 @@ func AggregateStatePlanes(foundation *servingv1alpha2.LLMInferenceService, adapt
 
 	// Trust hierarchy
 	trustScores := map[string]int{
-		"denied":    -1,
-		"unknown":   0,
-		"asserted":  1,
-		"verified":  2,
-		"trusted":   3,
+		"denied":   -1,
+		"unknown":  0,
+		"asserted": 1,
+		"verified": 2,
+		"trusted":  3,
 	}
 
 	scoreToTrust := map[int]string{
@@ -74,7 +74,7 @@ func AggregateStatePlanes(foundation *servingv1alpha2.LLMInferenceService, adapt
 	}
 
 	effective.Trust = scoreToTrust[currentTrustScore]
-	
+
 	// If any component is quarantined, the composite is quarantined.
 	if effective.Lifecycle == "quarantined" {
 		effective.Trust = "denied"

@@ -1,0 +1,31 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: gemma-4-hf
+  namespace: default
+spec:
+  model:
+    # HuggingFace URI scheme: hf://[org]/[repo](@branch)
+    # The operator automatically downloads all files from the Hub.
+    uri: hf://google/gemma-4-9b-it
+    name: gemma-4-9b-it
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute:
+        hostnames:
+        - gemma-hf.serving.ckodex.com
+    scheduler:
+      pool: {}
+  template:
+    spec:
+      containers:
+      - name: llm-server
+        resources:
+          # Automatically optimized for Gemma 4 if URI-agnostic matching is enabled
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1

@@ -78,6 +78,12 @@ spec:
                   For faster-whisper, use hf://openai/whisper-large-v3 or similar.
                   For transformers, use hf://CohereLabs/cohere-transcribe-03-2026.
                 properties:
+                  hardwareAware:
+                    description: |-
+                      HardwareAware enables automatic hardware-specific artifact selection.
+                      When true, the operator appends hardware suffixes to OCI tags (e.g., -nvidia).
+                      Requires ENABLE_EXPERIMENTAL_HARDWARE_SELECTION feature gate.
+                    type: boolean
                   name:
                     description: |-
                       Name is the model identifier used in inference requests.

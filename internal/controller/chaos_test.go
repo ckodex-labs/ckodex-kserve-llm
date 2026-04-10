@@ -117,7 +117,7 @@ func TestChaos_AtomicFinalizer(t *testing.T) {
 		WithObjects(svc).
 		WithStatusSubresource(svc).
 		Build()
-	
+
 	// Inject failure during AddFinalizer Update
 	interceptor := &InterceptingClient{
 		Client: fakeClient,
@@ -129,14 +129,14 @@ func TestChaos_AtomicFinalizer(t *testing.T) {
 	r := newTestReconciler(interceptor, scheme)
 	req := reconcile.Request{NamespacedName: types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}}
 	_, err := r.Reconcile(context.Background(), req)
-	
+
 	assert.Error(t, err)
-	
+
 	// Recover
 	interceptor.Error = nil
 	_, err = r.Reconcile(context.Background(), req)
 	assert.NoError(t, err)
-	
+
 	var updatedSvc servingv1alpha2.LLMInferenceService
 	require.NoError(t, r.Get(context.Background(), req.NamespacedName, &updatedSvc))
 	assert.Contains(t, updatedSvc.Finalizers, api.FinalizerName)

@@ -26349,9 +26349,21 @@ spec:
                   attributes, Deployment labels, and KEDA ScaledObject annotations so FinOps
                   tooling can group GPU-second and token costs by team, project, or cost-center.
                 type: object
+              engine:
+                default: vllm
+                description: |-
+                  Engine specifies the inference engine to use.
+                  Defaults to 'vllm'. Supported: 'vllm', 'quant-cpp'.
+                type: string
               model:
                 description: Model specifies the model to serve.
                 properties:
+                  hardwareAware:
+                    description: |-
+                      HardwareAware enables automatic hardware-specific artifact selection.
+                      When true, the operator appends hardware suffixes to OCI tags (e.g., -nvidia).
+                      Requires ENABLE_EXPERIMENTAL_HARDWARE_SELECTION feature gate.
+                    type: boolean
                   name:
                     description: |-
                       Name is the model identifier used in inference requests.
@@ -43743,6 +43755,23 @@ spec:
                     - containers
                     type: object
                 type: object
+              toolSurface:
+                description: ToolSurface declares reachable APIs and external connectors
+                  for this service.
+                properties:
+                  allowedApis:
+                    description: AllowedAPIs is a list of FQDNs that the model is
+                      permitted to reach.
+                    items:
+                      type: string
+                    type: array
+                  allowedCidrs:
+                    description: AllowedCIDRs is a list of network ranges the model
+                      is permitted to reach.
+                    items:
+                      type: string
+                    type: array
+                type: object
               worker:
                 description: |-
                   Worker configures worker nodes for multi-node distributed inference
@@ -52350,6 +52379,10 @@ spec:
                   - type
                   type: object
                 type: array
+              detectedHardware:
+                description: DetectedHardware is the hardware type identified by the
+                  operator for this service.
+                type: string
               modelReady:
                 description: |-
                   ModelReady indicates whether the model is loaded and serving.
@@ -52367,6 +52400,21 @@ spec:
                 description: Replicas is the current number of ready replicas.
                 format: int32
                 type: integer
+              statePlanes:
+                description: StatePlanes represents the governed composite state of
+                  the model system.
+                properties:
+                  binding:
+                    type: string
+                  composition:
+                    type: string
+                  lifecycle:
+                    type: string
+                  risk:
+                    type: string
+                  trust:
+                    type: string
+                type: object
               url:
                 description: URL is the inference endpoint URL.
                 type: string

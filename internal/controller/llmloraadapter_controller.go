@@ -14,18 +14,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"bytes"
 	"encoding/json"
 	"net/http"
 
+	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/governance"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 	"github.com/sony/gobreaker"
-	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -83,10 +83,10 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// Ensure it's detached
 		_ = r.unloadFromTargetService(ctx, &lora)
 		r.Recorder.Event(&lora, corev1.EventTypeWarning, "Quarantined", "Access to this composite model is forcibly blocked due to governance failure")
-		
+
 		observability.QuarantineIncidents.WithLabelValues(lora.Name, "manual_quarantine").Inc()
 		observability.GovernanceState.WithLabelValues("quarantined", lora.Status.StatePlanes.Trust).Set(1)
-		
+
 		return ctrl.Result{}, nil
 	}
 
@@ -184,10 +184,10 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		logger.Error(nil, "Governance Check Failed", "Reason", reason)
 		governance.TransitionStates(&lora, false, reason)
 		r.Recorder.Eventf(&lora, corev1.EventTypeWarning, "GovernanceFail", "Adapter failed conformance vectors: %s", reason)
-		
+
 		observability.QuarantineIncidents.WithLabelValues(lora.Name, reason).Inc()
 		observability.GovernanceState.WithLabelValues("quarantined", "denied").Set(1)
-		
+
 		if err := r.Status().Update(ctx, &lora); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -387,6 +387,7 @@ func removeString(slice []string, s string) []string {
 // SetupWithManager sets up the controller with the Manager.
 func (r *LLMLoraAdapterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		Named("llmloraadapter").
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		For(&servingv1alpha2.LLMLoraAdapter{}).
 		Owns(&servingv1alpha2.LocalModelCache{}).

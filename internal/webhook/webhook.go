@@ -83,7 +83,7 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 		}
 
 		uriLower := strings.ToLower(llmSvc.Spec.Model.URI)
-		
+
 		// Security Hardening: block credential smuggling inside URIs
 		if strings.Contains(llmSvc.Spec.Model.URI, "@") && (strings.HasPrefix(uriLower, "http://") || strings.HasPrefix(uriLower, "https://")) {
 			errs = append(errs, "spec.model.uri containing embedded credentials (user:pass@...) is forbidden to prevent SSRF")

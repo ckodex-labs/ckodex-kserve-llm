@@ -55,24 +55,34 @@ type FeatureGates struct {
 	// Requires cert-manager (or manual TLS cert provisioning) to be active in the cluster.
 	// Set CKODEX_FEATURE_ENABLE_WEBHOOKS=true once cert-manager is installed.
 	EnableWebhooks bool `json:"enableWebhooks"`
+
+	// EnableExperimentalHardwareSelection enables automatic model artifact selection
+	// based on detected hardware (e.g., appending -nvidia to OCI tags).
+	EnableExperimentalHardwareSelection bool `json:"enableExperimentalHardwareSelection"`
+
+	// EnableExperimentalStatusHardening enables the new DeploymentReady status condition
+	// and stricter status reconciliation logic.
+	EnableExperimentalStatusHardening bool `json:"enableExperimentalStatusHardening"`
 }
 
 // DefaultFeatureGates returns production-safe defaults.
 // Core reconciliation is always on. Optional subsystems default to off.
 func DefaultFeatureGates() FeatureGates {
 	return FeatureGates{
-		EnableScheduler:       true,
-		EnableGateway:         true,
-		EnableAutoscaler:      true,
-		EnableSecurity:        false,
-		EnableChaos:           false,
-		EnableDapr:            false,
-		EnableLocalModelCache: false,
-		EnableAuth:            false,
-		EnableOTelPipeline:    true,
-		EnableSessions:        false,
-		EnableGRPC:            false,
-		EnableWebhooks:        false, // requires cert-manager in cluster; opt-in
+		EnableScheduler:                     true,
+		EnableGateway:                       true,
+		EnableAutoscaler:                    true,
+		EnableSecurity:                      false,
+		EnableChaos:                         false,
+		EnableDapr:                          false,
+		EnableLocalModelCache:               false,
+		EnableAuth:                          false,
+		EnableOTelPipeline:                  true,
+		EnableSessions:                      false,
+		EnableGRPC:                          false,
+		EnableWebhooks:                      false, // requires cert-manager in cluster; opt-in
+		EnableExperimentalHardwareSelection: false,
+		EnableExperimentalStatusHardening:   false,
 	}
 }
 
@@ -91,6 +101,8 @@ func (f *FeatureGates) FromEnv() {
 	envBool("CKODEX_FEATURE_ENABLE_SESSIONS", &f.EnableSessions)
 	envBool("CKODEX_FEATURE_ENABLE_GRPC", &f.EnableGRPC)
 	envBool("CKODEX_FEATURE_ENABLE_WEBHOOKS", &f.EnableWebhooks)
+	envBool("CKODEX_FEATURE_ENABLE_EXPERIMENTAL_HARDWARE_SELECTION", &f.EnableExperimentalHardwareSelection)
+	envBool("CKODEX_FEATURE_ENABLE_EXPERIMENTAL_STATUS_HARDENING", &f.EnableExperimentalStatusHardening)
 }
 
 // OperatorConfig holds all operator-level configuration.

@@ -92,9 +92,9 @@ type AuditEvent struct {
 // AuditLogger emits structured audit events to slog, OTel spans, and K8s Events.
 type AuditLogger struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	logger       *slog.Logger
-	redactor     *Redactor
+	Scheme        *runtime.Scheme
+	logger        *slog.Logger
+	redactor      *Redactor
 	auditFilePath string // Path for persistent JSONL file auditor
 }
 

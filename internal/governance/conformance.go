@@ -90,10 +90,10 @@ func (v *PolicyValidator) Validate(ctx context.Context, adapter *servingv1alpha2
 
 	// Simple trust hierarchy: unknown < asserted < verified < trusted
 	trustScores := map[string]int{
-		"unknown":   0,
-		"asserted":  1,
-		"verified":  2,
-		"trusted":   3,
+		"unknown":  0,
+		"asserted": 1,
+		"verified": 2,
+		"trusted":  3,
 		"denied":   -1,
 	}
 
@@ -149,7 +149,7 @@ func TransitionStates(adapter *servingv1alpha2.LLMLoraAdapter, valid bool, msg s
 		adapter.Status.StatePlanes.Risk = "evaluating"
 		adapter.Status.StatePlanes.Trust = "asserted"
 	}
-	
+
 	now := metav1.NewTime(time.Now())
 	adapter.Status.EvidenceBundle.LastVerifiedAt = &now
 }

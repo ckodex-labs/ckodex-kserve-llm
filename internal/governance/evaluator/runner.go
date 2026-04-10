@@ -25,14 +25,14 @@ func GenerateEvidence(adapter *servingv1alpha2.LLMLoraAdapter, report *EvalRepor
 	if adapter.Spec.Behavior == nil {
 		adapter.Spec.Behavior = &servingv1alpha2.BehaviorMetadata{}
 	}
-	
+
 	// Update Behavior Metadata
 	adapter.Spec.Behavior.Safety = int(report.SafetyScore)
-	
+
 	// Update Evidence Bundle
 	now := metav1.NewTime(report.VerificationTime)
 	adapter.Status.EvidenceBundle.LastVerifiedAt = &now
-	
+
 	// Mock signature of the report
 	adapter.Status.EvidenceBundle.SignatureDigest = fmt.Sprintf("sha256:%x", report.VerificationTime.UnixNano())
 	adapter.Status.EvidenceBundle.AttestationURI = "ckodex://eval-runner/reports/" + adapter.Name

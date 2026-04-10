@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
 // ---- advancePipeline -------------------------------------------------------
@@ -184,7 +185,7 @@ func TestModelOnboarding_Reconcile_TerminalCompleted(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "done",
 			Namespace:  "default",
-			Finalizers: []string{FinalizerName},
+			Finalizers: []string{api.FinalizerName},
 		},
 		Spec: servingv1alpha2.ModelOnboardingSpec{ModelRef: "my-model"},
 		Status: servingv1alpha2.ModelOnboardingStatus{
@@ -214,7 +215,7 @@ func TestModelOnboarding_Reconcile_Deletion(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "deleting",
 			Namespace:  "default",
-			Finalizers: []string{FinalizerName},
+			Finalizers: []string{api.FinalizerName},
 		},
 		Spec: servingv1alpha2.ModelOnboardingSpec{ModelRef: "my-model"},
 	}
@@ -245,7 +246,7 @@ func TestModelOnboarding_Reconcile_ModelNotFound(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "no-model",
 			Namespace:  "default",
-			Finalizers: []string{FinalizerName},
+			Finalizers: []string{api.FinalizerName},
 		},
 		Spec: servingv1alpha2.ModelOnboardingSpec{ModelRef: "missing-model"},
 		Status: servingv1alpha2.ModelOnboardingStatus{
@@ -282,7 +283,7 @@ func TestModelOnboarding_Reconcile_RollbackOnFailure(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "rollback-me",
 			Namespace:  "default",
-			Finalizers: []string{FinalizerName},
+			Finalizers: []string{api.FinalizerName},
 		},
 		Spec: servingv1alpha2.ModelOnboardingSpec{
 			ModelRef:          "my-model",

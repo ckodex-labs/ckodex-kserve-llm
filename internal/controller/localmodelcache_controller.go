@@ -9,9 +9,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/google/uuid"
 	"sort"
 	"time"
-	"github.com/google/uuid"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -22,8 +22,8 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -43,7 +43,7 @@ const (
 	// defaultCacheNamespace is where cache PVCs are created for cluster-scoped resources.
 	defaultCacheNamespace = "default"
 	// warmupJobPrefix is the prefix for cache-warming Jobs.
-	warmupJobPrefix       = "lmc-warmup"
+	warmupJobPrefix = "lmc-warmup"
 )
 
 // LocalModelCacheReconciler reconciles a LocalModelCache object
@@ -121,7 +121,7 @@ func (r *LocalModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				}
 			}
 			if !found {
-				// This shouldn't happen if the loop above covered all targetNodes, 
+				// This shouldn't happen if the loop above covered all targetNodes,
 				// but keep as fallback.
 				finalNodeStatuses = append(finalNodeStatuses, prev)
 			}
@@ -369,7 +369,7 @@ func (r *LocalModelCacheReconciler) reconcileNodeCache(
 
 			// Self-Healing
 			// Self-Healing: If Job failed, check failure time.
-			// Recover by deleting the Job if it's been failed for > 5 minutes, 
+			// Recover by deleting the Job if it's been failed for > 5 minutes,
 			// allowing it to be recreated on next reconcile.
 			var failedTime *metav1.Time
 			for _, cond := range job.Status.Conditions {

@@ -1,0 +1,32 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: gemma-4-swfs
+  namespace: default
+spec:
+  model:
+    # seaweedfs:// or swfs:// URI scheme.
+    # The operator automatically detects "gemma-4" and applies optimizations,
+    # pulling from the internal SeaweedFS Filer.
+    uri: swfs://seaweedfs-filer.storage:8888/models/google/gemma-4-e2b-it
+    name: gemma-4-it
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute:
+        hostnames:
+        - gemma-internal.serving.ckodex.com
+    scheduler:
+      pool: {}
+  template:
+    spec:
+      containers:
+      - name: llm-server
+        resources:
+          # Optimization: Gemma 4 only needs 1 GPU for E2B
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1

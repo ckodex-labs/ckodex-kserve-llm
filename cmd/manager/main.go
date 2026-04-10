@@ -132,6 +132,8 @@ func main() {
 
 	// gRPC — independent of gateway (controls Service port definition)
 	reconciler.EnableGRPC = cfg.Features.EnableGRPC
+	reconciler.EnableHardwareSelection = cfg.Features.EnableExperimentalHardwareSelection
+	reconciler.EnableExperimentalStatusHardening = cfg.Features.EnableExperimentalStatusHardening
 
 	// Gateway
 	if cfg.Features.EnableGateway {

@@ -9,7 +9,7 @@ import (
 // Returns (bool, string) where bool is true if requirements are met.
 func CheckGPURequirements(llmSvc *servingv1alpha2.LLMInferenceService, totalGpus int) (bool, string) {
 	reqGpus := 0
-	
+
 	// Convention: main container is at index 0.
 	if len(llmSvc.Spec.Template.Spec.Containers) > 0 {
 		res := llmSvc.Spec.Template.Spec.Containers[0].Resources

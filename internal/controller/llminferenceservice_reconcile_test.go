@@ -87,7 +87,8 @@ func setupReconciler(cl client.Client, s *runtime.Scheme) *LLMInferenceServiceRe
 			Recorder: rec,
 		},
 		StatusReconciler: &status.Reconciler{
-			Client: cl,
+			Client:          cl,
+			EnableHardening: true,
 		},
 		CleanupReconciler: &cleanup.Reconciler{
 			Client: cl,
@@ -232,6 +233,62 @@ func TestReconcileDeployment_Gemma4WellKnown(t *testing.T) {
 	// Verify resources from WellKnown config (requests match our defined defaults)
 	assert.Equal(t, resource.MustParse("8"), vllmContainer.Resources.Requests[corev1.ResourceCPU])
 	assert.Equal(t, resource.MustParse("32Gi"), vllmContainer.Resources.Requests[corev1.ResourceMemory])
+}
+
+// TestReconcileDeployment_OCIGemma4Optimization verifies URI-agnostic matching for OCI.
+func TestReconcileDeployment_OCIGemma4Optimization(t *testing.T) {
+	s := buildLLMScheme(t)
+	llmSvc := makeLLMInferenceService("oci-gemma", "default")
+	llmSvc.Spec.Model.URI = "oci://ghcr.io/ckodex-labs/models/gemma-4-e2b-it:latest"
+
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc).Build()
+	r := setupReconciler(cl, s)
+
+	err := r.reconcileDeployment(context.Background(), llmSvc, nil)
+	require.NoError(t, err)
+
+	var deploy appsv1.Deployment
+	require.NoError(t, cl.Get(context.Background(), k8stypes.NamespacedName{
+		Name: "oci-gemma", Namespace: "default",
+	}, &deploy))
+
+	// Verify vLLM args are optimized even for OCI URI
+	vllmContainer := deploy.Spec.Template.Spec.Containers[0]
+	args := strings.Join(vllmContainer.Args, " ")
+	assert.Contains(t, args, "--enable-turboquant")
+}
+
+// TestReconcileDeployment_PVCNativeMount verifies that pvc:// URI results in direct volume mount.
+func TestReconcileDeployment_PVCNativeMount(t *testing.T) {
+	s := buildLLMScheme(t)
+	llmSvc := makeLLMInferenceService("pvc-svc", "default")
+	llmSvc.Spec.Model.URI = "pvc://existing-model-pvc"
+
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(llmSvc).Build()
+	r := setupReconciler(cl, s)
+
+	err := r.reconcileDeployment(context.Background(), llmSvc, nil)
+	require.NoError(t, err)
+
+	var deploy appsv1.Deployment
+	require.NoError(t, cl.Get(context.Background(), k8stypes.NamespacedName{
+		Name: "pvc-svc", Namespace: "default",
+	}, &deploy))
+
+	// Verify no init container
+	assert.Empty(t, deploy.Spec.Template.Spec.InitContainers)
+
+	// Verify PVC volume source
+	found := false
+	for _, v := range deploy.Spec.Template.Spec.Volumes {
+		if v.Name == api.ModelVolumeName {
+			require.NotNil(t, v.PersistentVolumeClaim)
+			assert.Equal(t, "existing-model-pvc", v.PersistentVolumeClaim.ClaimName)
+			found = true
+			break
+		}
+	}
+	assert.True(t, found)
 }
 
 // TestReconcileDeployment_UpdatesExisting exercises the update path.
@@ -458,4 +515,40 @@ func TestReconcileService_UpdatesExisting(t *testing.T) {
 	}, &svc))
 	// Port should have been updated to the managed port.
 	assert.Equal(t, "http-inference", svc.Spec.Ports[0].Name)
+}
+
+// TestReconcile_OCI_PullFailureStatus verifies Chaos path for OCI failures.
+func TestReconcile_OCI_PullFailureStatus(t *testing.T) {
+	s := buildLLMScheme(t)
+	llmSvc := makeLLMInferenceService("fail-svc", "default")
+	llmSvc.Spec.Model.URI = "oci://broken-registry/broken-model"
+
+	cl := fake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(llmSvc).
+		WithStatusSubresource(llmSvc).
+		Build()
+	r := setupReconciler(cl, s)
+
+	// Simulate reconciliation loop
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: k8stypes.NamespacedName{Name: "fail-svc", Namespace: "default"},
+	})
+	require.NoError(t, err)
+
+	// Verify conditions even before successful rollout
+	var updated servingv1alpha2.LLMInferenceService
+	require.NoError(t, cl.Get(context.Background(), k8stypes.NamespacedName{
+		Name: "fail-svc", Namespace: "default",
+	}, &updated))
+
+	// Deployment should be created but not ready
+	foundDeploymentReady := false
+	for _, cond := range updated.Status.Conditions {
+		if cond.Type == servingv1alpha2.ConditionDeploymentReady {
+			assert.Equal(t, metav1.ConditionFalse, cond.Status)
+			foundDeploymentReady = true
+		}
+	}
+	assert.True(t, foundDeploymentReady)
 }

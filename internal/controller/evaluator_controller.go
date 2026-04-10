@@ -84,7 +84,7 @@ func (r *LLMEvaluationReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 func (r *LLMEvaluationReconciler) launchEvalJob(ctx context.Context, adapter *servingv1alpha2.LLMLoraAdapter) error {
 	jobName := fmt.Sprintf("eval-%s", adapter.Name)
-	
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -123,7 +123,7 @@ func (r *LLMEvaluationReconciler) launchEvalJob(ctx context.Context, adapter *se
 
 func (r *LLMEvaluationReconciler) finalizeEvaluation(ctx context.Context, adapter *servingv1alpha2.LLMLoraAdapter, success bool) (ctrl.Result, error) {
 	patch := client.MergeFrom(adapter.DeepCopy())
-	
+
 	if success {
 		adapter.Status.StatePlanes.Trust = "verified"
 		adapter.Status.StatePlanes.Lifecycle = "active" // Automatic promotion if verified
@@ -139,10 +139,10 @@ func (r *LLMEvaluationReconciler) finalizeEvaluation(ctx context.Context, adapte
 	}
 
 	r.AuditLogger.LogUpdate(ctx, "LLMLoraAdapter", adapter.Name, map[string]string{
-		"action": "EvaluationCompleted",
+		"action":  "EvaluationCompleted",
 		"success": fmt.Sprintf("%t", success),
 	})
-	
+
 	return ctrl.Result{}, nil
 }
 
@@ -154,6 +154,7 @@ func ptrToInt32(i int32) *int32 {
 func (r *LLMEvaluationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.Recorder = mgr.GetEventRecorderFor("ckodex-evaluator")
 	return ctrl.NewControllerManagedBy(mgr).
+		Named("llmevaluation").
 		For(&servingv1alpha2.LLMLoraAdapter{}).
 		Owns(&batchv1.Job{}).
 		Complete(r)

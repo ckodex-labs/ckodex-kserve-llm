@@ -18,9 +18,14 @@ rules:
   - ""
   resources:
   - events
+  - secrets
   verbs:
   - create
+  - get
+  - list
   - patch
+  - update
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -32,17 +37,6 @@ rules:
   verbs:
   - create
   - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
   - get
   - list
   - patch
@@ -96,6 +90,18 @@ rules:
   - gateways
   - grpcroutes
   - httproutes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
   verbs:
   - create
   - delete

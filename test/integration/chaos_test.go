@@ -22,6 +22,7 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/chaos"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller"
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 func TestResilience_PodKill_SelfHealing(t *testing.T) {
@@ -156,13 +157,28 @@ func TestResilience_LocalModelCache_NodeEviction(t *testing.T) {
 	jobName := fmt.Sprintf("lmc-warmup-%s-%s", modelHash, nodeHash)
 
 	var job batchv1.Job
-	assert.Eventually(t, func() bool {
-		return suite.client.Get(ctx, client.ObjectKey{Name: jobName, Namespace: testNamespace}, &job) == nil
+	require.Eventually(t, func() bool {
+		return suite.client.Get(ctx, client.ObjectKey{Name: jobName, Namespace: "default"}, &job) == nil
 	}, eventuallyTimeout, eventuallyInterval)
 
 	// Mock Job completion (simulating successful download)
 	patchJob := client.MergeFrom(job.DeepCopy())
-	job.Status.Conditions = []batchv1.JobCondition{{Type: batchv1.JobComplete, Status: corev1.ConditionTrue}}
+	now := metav1.Now()
+	job.Status.StartTime = &now
+	job.Status.CompletionTime = &now
+	job.Status.Conditions = []batchv1.JobCondition{
+		{
+			Type:               batchv1.JobComplete,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: now,
+		},
+		{
+			Type:               "SuccessCriteriaMet",
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: now,
+		},
+	}
+	// SuccessCriteriaMet is required in newer Kubernetes versions for Complete=True
 	require.NoError(t, suite.client.Status().Patch(ctx, &job, patchJob))
 
 	// Verify LMC is Ready
@@ -178,14 +194,25 @@ func TestResilience_LocalModelCache_NodeEviction(t *testing.T) {
 	// We delete both because envtest does not have a GarbageCollector to clean up the Job.
 	pvcName := controller.PVCNameForNode(modelHash, nodeName)
 	var pvc corev1.PersistentVolumeClaim
-	require.NoError(t, suite.client.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: testNamespace}, &pvc))
-	require.NoError(t, suite.client.Delete(ctx, &pvc))
-	require.NoError(t, suite.client.Delete(ctx, &job))
+	require.NoError(t, suite.client.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: "default"}, &pvc))
+
+	background := metav1.DeletePropagationBackground
+	require.NoError(t, suite.client.Delete(ctx, &pvc, &client.DeleteOptions{PropagationPolicy: &background}))
+	require.NoError(t, suite.client.Delete(ctx, &job, &client.DeleteOptions{PropagationPolicy: &background}))
+
+	// Enforce deletion in envtest by waiting until they are gone
+	require.Eventually(t, func() bool {
+		var j batchv1.Job
+		var p corev1.PersistentVolumeClaim
+		jobGone := errors.IsNotFound(suite.client.Get(ctx, client.ObjectKey{Name: jobName, Namespace: "default"}, &j))
+		pvcGone := errors.IsNotFound(suite.client.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: "default"}, &p))
+		return jobGone && pvcGone
+	}, 20*time.Second, 1*time.Second, "PVC and Job should be deleted from API server")
 
 	// 4. Verify the Operator re-creates both resources to restore the cache
-	assert.Eventually(t, func() bool {
+	require.Eventually(t, func() bool {
 		var newJob batchv1.Job
-		err := suite.client.Get(ctx, client.ObjectKey{Name: jobName, Namespace: testNamespace}, &newJob)
+		err := suite.client.Get(ctx, client.ObjectKey{Name: jobName, Namespace: "default"}, &newJob)
 		if err != nil {
 			return false
 		}

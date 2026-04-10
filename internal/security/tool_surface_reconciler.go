@@ -26,8 +26,8 @@ type ToolSurfaceReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// ReconcileToolSurface ensures Istio ServiceEntry, VirtualService, and DestinationRule
-// resources are created for the FQDNs defined in the model's ToolSurface.
+// ReconcileToolSurface ensures Istio Sidecar, PeerAuthentication, ServiceEntry,
+// and DestinationRule resources are created for the LLMInferenceService.
 func (r *ToolSurfaceReconciler) ReconcileToolSurface(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, activeLoras []servingv1alpha2.LLMLoraAdapter) error {
 	logger := log.FromContext(ctx).WithValues("component", "tool-surface-reconciler")
 
@@ -50,14 +50,32 @@ func (r *ToolSurfaceReconciler) ReconcileToolSurface(ctx context.Context, llmSvc
 		return nil
 	}
 
-	// 2. Reconcile Istio resources for each unique FQDN
+	// 2. PeerAuthentication (Enforce STRICT mTLS)
+	if err := r.reconcilePeerAuthentication(ctx, llmSvc); err != nil {
+		return fmt.Errorf("reconcile PeerAuthentication: %w", err)
+	}
+	logger.V(1).Info("PeerAuthentication reconciled")
+
+	// 3. Aggregate FQDNs for Sidecar and ServiceEntries
+	var fqdns []string
+	for f := range apis {
+		fqdns = append(fqdns, f)
+	}
+
+	// 4. Sidecar (Restrict outbound scope)
+	if err := r.reconcileIstioSidecar(ctx, llmSvc, fqdns); err != nil {
+		return fmt.Errorf("reconcile Istio Sidecar: %w", err)
+	}
+	logger.V(1).Info("Istio Sidecar reconciled")
+
+	// 5. Reconcile ServiceEntry + DestinationRule for each FQDN
 	for fqdn := range apis {
 		if err := r.reconcileIstioEgressResources(ctx, llmSvc, fqdn); err != nil {
 			return fmt.Errorf("reconcile istio egress for %s: %w", fqdn, err)
 		}
 	}
 
-	logger.Info("ToolSurface Istio egress resources reconciled", "count", len(apis))
+	logger.Info("ToolSurface security perimeter reconciled", "allowed_apis", len(apis))
 	return nil
 }
 
@@ -81,9 +99,9 @@ func (r *ToolSurfaceReconciler) reconcileIstioEgressResources(ctx context.Contex
 	se.SetLabels(commonLabels(llmSvc))
 
 	se.Object["spec"] = map[string]interface{}{
-		"hosts":      []interface{}{fqdn},
-		"location":   "MESH_EXTERNAL",
-		"ports":      []interface{}{
+		"hosts":    []interface{}{fqdn},
+		"location": "MESH_EXTERNAL",
+		"ports": []interface{}{
 			map[string]interface{}{
 				"number":   443,
 				"name":     "https",
@@ -127,6 +145,68 @@ func (r *ToolSurfaceReconciler) reconcileIstioEgressResources(ctx context.Contex
 	}
 
 	return nil
+}
+
+func (r *ToolSurfaceReconciler) reconcilePeerAuthentication(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
+	pa := &unstructured.Unstructured{}
+	pa.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "security.istio.io",
+		Kind:    "PeerAuthentication",
+		Version: "v1beta1",
+	})
+	pa.SetName(llmSvc.Name)
+	pa.SetNamespace(llmSvc.Namespace)
+	pa.SetLabels(commonLabels(llmSvc))
+
+	pa.Object["spec"] = map[string]interface{}{
+		"selector": map[string]interface{}{
+			"matchLabels": map[string]interface{}{
+				"app.kubernetes.io/instance": llmSvc.Name,
+			},
+		},
+		"mtls": map[string]interface{}{
+			"mode": "STRICT",
+		},
+	}
+
+	return r.applyUnstructured(ctx, llmSvc, pa)
+}
+
+func (r *ToolSurfaceReconciler) reconcileIstioSidecar(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, fqdns []string) error {
+	sc := &unstructured.Unstructured{}
+	sc.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "networking.istio.io",
+		Kind:    "Sidecar",
+		Version: "v1beta1",
+	})
+	sc.SetName(llmSvc.Name)
+	sc.SetNamespace(llmSvc.Namespace)
+	sc.SetLabels(commonLabels(llmSvc))
+
+	// The sidecar strictly limits the outbound visibility to the required namespaces and FQDNs.
+	egressHosts := []interface{}{
+		"./*",               // Local namespace for internal communication
+		"istio-system/*",    // Istio control plane (required for sidecar operation)
+		"knative-serving/*", // KServe internals if applicable
+	}
+	for _, f := range fqdns {
+		egressHosts = append(egressHosts, "*/"+f)
+	}
+
+	sc.Object["spec"] = map[string]interface{}{
+		"workloadSelector": map[string]interface{}{
+			"labels": map[string]interface{}{
+				"app.kubernetes.io/instance": llmSvc.Name,
+			},
+		},
+		"egress": []interface{}{
+			map[string]interface{}{
+				"hosts": egressHosts,
+			},
+		},
+	}
+
+	return r.applyUnstructured(ctx, llmSvc, sc)
 }
 
 func (r *ToolSurfaceReconciler) applyUnstructured(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, obj *unstructured.Unstructured) error {

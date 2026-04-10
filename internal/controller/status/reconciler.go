@@ -16,7 +16,8 @@ import (
 
 // Reconciler handles LLMInferenceService status updates.
 type Reconciler struct {
-	Client client.Client
+	Client          client.Client
+	EnableHardening bool
 }
 
 // Update updates the LLMInferenceService status based on the underlying deployment and well-known configs.
@@ -38,7 +39,28 @@ func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInfe
 
 	llmSvc.Status.ObservedGeneration = llmSvc.Generation
 
-	// 2. Ready Condition
+	// 2. DeploymentReady Condition (Experimental)
+	if r.EnableHardening {
+		deployReadyStatus := metav1.ConditionFalse
+		deployReadyReason := "DeploymentUnavailable"
+		deployReadyMessage := "Waiting for deployment pods to become ready"
+		if llmSvc.Status.ModelReady {
+			deployReadyStatus = metav1.ConditionTrue
+			deployReadyReason = "DeploymentAvailable"
+			deployReadyMessage = "Deployment has ready replicas"
+		}
+
+		deployCondition := metav1.Condition{
+			Type:               servingv1alpha2.ConditionDeploymentReady,
+			Status:             deployReadyStatus,
+			Reason:             deployReadyReason,
+			Message:            deployReadyMessage,
+			ObservedGeneration: llmSvc.Generation,
+		}
+		r.setCondition(&llmSvc.Status.Conditions, deployCondition)
+	}
+
+	// 3. Ready Condition
 	newStatus := metav1.ConditionFalse
 	if llmSvc.Status.ModelReady {
 		newStatus = metav1.ConditionTrue

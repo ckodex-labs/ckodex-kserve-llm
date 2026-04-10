@@ -16,12 +16,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
 const (
@@ -92,8 +93,8 @@ func (r *ModelOnboardingReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Handle deletion
 	if ob.DeletionTimestamp != nil {
-		if controllerutil.ContainsFinalizer(&ob, FinalizerName) {
-			controllerutil.RemoveFinalizer(&ob, FinalizerName)
+		if controllerutil.ContainsFinalizer(&ob, api.FinalizerName) {
+			controllerutil.RemoveFinalizer(&ob, api.FinalizerName)
 			if err := r.Update(ctx, &ob); err != nil {
 				return ctrl.Result{}, fmt.Errorf("remove finalizer: %w", err)
 			}
@@ -101,8 +102,8 @@ func (r *ModelOnboardingReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	if !controllerutil.ContainsFinalizer(&ob, FinalizerName) {
-		controllerutil.AddFinalizer(&ob, FinalizerName)
+	if !controllerutil.ContainsFinalizer(&ob, api.FinalizerName) {
+		controllerutil.AddFinalizer(&ob, api.FinalizerName)
 		if err := r.Update(ctx, &ob); err != nil {
 			return ctrl.Result{}, fmt.Errorf("add finalizer: %w", err)
 		}

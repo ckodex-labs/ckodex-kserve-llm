@@ -630,11 +630,11 @@ func TestReconcileNetworkPolicies_DenyAllCreated(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
 
 	var policy networkingv1.NetworkPolicy
 	require.NoError(t, np.Get(context.Background(),
-		types.NamespacedName{Name: "llama3-deny-all", Namespace: "default"}, &policy))
+		types.NamespacedName{Name: "llama3-deny-all-ingress", Namespace: "default"}, &policy))
 
 	assert.Contains(t, policy.Spec.PolicyTypes, networkingv1.PolicyTypeIngress)
 	assert.Empty(t, policy.Spec.Ingress, "deny-all must have empty ingress rules")
@@ -649,7 +649,7 @@ func TestReconcileNetworkPolicies_AllowGatewayCreated(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
 
 	var policy networkingv1.NetworkPolicy
 	require.NoError(t, np.Get(context.Background(),
@@ -674,18 +674,18 @@ func TestReconcileNetworkPolicies_AllowEgressCreated_DNSAndSPIRE(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
 
 	var policy networkingv1.NetworkPolicy
 	require.NoError(t, np.Get(context.Background(),
-		types.NamespacedName{Name: "llama3-allow-egress", Namespace: "default"}, &policy))
+		types.NamespacedName{Name: "llama3-egress-lockdown", Namespace: "default"}, &policy))
 
 	assert.Contains(t, policy.Spec.PolicyTypes, networkingv1.PolicyTypeEgress)
-	require.Len(t, policy.Spec.Egress, 2, "must have DNS+HTTPS rule + SPIRE Agent rule")
+	require.Len(t, policy.Spec.Egress, 2, "must have DNS rule + SPIRE Agent rule")
 
-	// DNS/HTTPS rule: ports 53 and 443, no To selector
+	// DNS rule: ports 53 UDP and 53 TCP
 	dnsPorts := policy.Spec.Egress[0].Ports
-	require.Len(t, dnsPorts, 3)
+	require.Len(t, dnsPorts, 2)
 	assert.Equal(t, int32(53), dnsPorts[0].Port.IntVal, "first rule must be port 53")
 
 	// SPIRE rule: port 8081, scoped to spire-agent pod selector
@@ -703,7 +703,7 @@ func TestReconcileNetworkPolicies_FourPoliciesCreated(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
 
 	var list networkingv1.NetworkPolicyList
 	require.NoError(t, np.List(context.Background(), &list))
@@ -719,8 +719,8 @@ func TestReconcileNetworkPolicies_Idempotent(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
 
 	var list networkingv1.NetworkPolicyList
 	require.NoError(t, np.List(context.Background(), &list))

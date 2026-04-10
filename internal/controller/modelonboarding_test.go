@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
 // ---- mockMetricsQuerier --------------------------------------------------
@@ -323,7 +324,7 @@ func TestModelOnboardingReconcile_AddsFinalizer(t *testing.T) {
 	var updated servingv1alpha2.ModelOnboarding
 	require.NoError(t, r.Get(context.Background(),
 		types.NamespacedName{Name: "pipeline", Namespace: "default"}, &updated))
-	assert.Contains(t, updated.Finalizers, FinalizerName)
+	assert.Contains(t, updated.Finalizers, api.FinalizerName)
 }
 
 func TestModelOnboardingReconcile_NoStages_Completes(t *testing.T) {

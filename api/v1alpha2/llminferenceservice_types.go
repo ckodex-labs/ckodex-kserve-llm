@@ -187,6 +187,12 @@ type ModelSpec struct {
 	// Mirrors LocalModelCache credential support.
 	// +optional
 	Storage *StorageSpec `json:"storage,omitempty"`
+
+	// HardwareAware enables automatic hardware-specific artifact selection.
+	// When true, the operator appends hardware suffixes to OCI tags (e.g., -nvidia).
+	// Requires ENABLE_EXPERIMENTAL_HARDWARE_SELECTION feature gate.
+	// +optional
+	HardwareAware bool `json:"hardwareAware,omitempty"`
 }
 
 // StorageSpec configures storage credentials for model download.
@@ -476,6 +482,10 @@ type LLMInferenceServiceStatus struct {
 	// Optimized indicates whether the model is running with WellKnown optimizations applied.
 	// +optional
 	Optimized bool `json:"optimized,omitempty"`
+
+	// DetectedHardware is the hardware type identified by the operator for this service.
+	// +optional
+	DetectedHardware string `json:"detectedHardware,omitempty"`
 }
 
 // Condition types for LLMInferenceService.

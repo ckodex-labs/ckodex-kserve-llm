@@ -15,7 +15,6 @@ import (
 import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -23,7 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,25 +51,27 @@ import (
 // clean control/data plane separation.
 type LLMInferenceServiceReconciler struct {
 	client.Client
-	Scheme            *runtime.Scheme
-	Gateway           *gateway.Reconciler
-	Autoscaler        *autoscaler.Reconciler
-	OPA               *security.OPAReconciler // nil when EnableSecurity=false
-	OPAConfig         security.OPAConfig      // populated from OperatorConfig.Security when OPA != nil
-	NetworkPolicy     *security.NetworkPolicyReconciler
-	Vault             *security.VaultReconciler
-	SPIRE             *security.SPIREReconciler
-	SPIRERegistration *security.SPIRERegistrationReconciler // nil when EnableSecurity=false
-	Ebpf              *security.EbpfReconciler
-	LWS               *Reconciler // nil when LWS CRD not available
-	ToolSurface       *security.ToolSurfaceReconciler
-	Audit             *observability.AuditLogger
-	Inst              *observability.Instrumentation // nil → no forbidden-tuple metrics emitted
-	AuthMiddleware    *auth.Middleware               // nil when EnableAuth=false
-	BudgetEnforcer    *auth.TokenBudgetEnforcer      // nil when EnableAuth=false
-	Recorder          record.EventRecorder
-	APIReader         client.Reader
-	EnableGRPC        bool
+	Scheme                            *runtime.Scheme
+	Gateway                           *gateway.Reconciler
+	Autoscaler                        *autoscaler.Reconciler
+	OPA                               *security.OPAReconciler // nil when EnableSecurity=false
+	OPAConfig                         security.OPAConfig      // populated from OperatorConfig.Security when OPA != nil
+	NetworkPolicy                     *security.NetworkPolicyReconciler
+	Vault                             *security.VaultReconciler
+	SPIRE                             *security.SPIREReconciler
+	SPIRERegistration                 *security.SPIRERegistrationReconciler // nil when EnableSecurity=false
+	Ebpf                              *security.EbpfReconciler
+	LWS                               *Reconciler // nil when LWS CRD not available
+	ToolSurface                       *security.ToolSurfaceReconciler
+	Audit                             *observability.AuditLogger
+	Inst                              *observability.Instrumentation // nil → no forbidden-tuple metrics emitted
+	AuthMiddleware                    *auth.Middleware               // nil when EnableAuth=false
+	BudgetEnforcer                    *auth.TokenBudgetEnforcer      // nil when EnableAuth=false
+	Recorder                          record.EventRecorder
+	APIReader                         client.Reader
+	EnableGRPC                        bool
+	EnableHardwareSelection           bool
+	EnableExperimentalStatusHardening bool
 
 	// Modular sub-reconcilers
 	DeploymentBuilder *deployment.Builder
@@ -125,21 +125,8 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	// Capture original object for diffing and patching at the end
 	llmSvcBeforePatch := llmSvc.DeepCopy()
 
-	// 2. Handle finalizer for cleanup
-	if llmSvc.DeletionTimestamp != nil {
-		if controllerutil.ContainsFinalizer(&llmSvc, FinalizerName) {
-			if err := r.cleanupResources(ctx, &llmSvc); err != nil {
-				return ctrl.Result{}, fmt.Errorf("cleanup resources: %w", err)
-			}
-			controllerutil.RemoveFinalizer(&llmSvc, api.FinalizerName)
-			if err := r.Patch(ctx, &llmSvc, client.MergeFrom(llmSvcBeforePatch)); err != nil {
-				return ctrl.Result{}, fmt.Errorf("remove finalizer: %w", err)
-			}
-		}
-		return ctrl.Result{}, nil
-	}
-
-	// 3. Informational GPU Capacity Check
+	// 2. Resource Management & Finalizers
+	// Informational GPU Capacity Check
 	var nodes corev1.NodeList
 	if err := r.List(ctx, &nodes); err == nil {
 		totalGpus := deployment.GetClusterGPUCapacity(nodes.Items)
@@ -152,17 +139,12 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	// 4. Handle Finalizers (Phase 4 Cleanup)
-	if deleted, err := r.CleanupReconciler.HandleFinalizer(ctx, &llmSvc, api.FinalizerName); err != nil || deleted {
-		return ctrl.Result{}, err
+	// 3. Handle Finalizers (Consolidated Cleanup)
+	cleanupFunc := func() error {
+		return r.cleanupResources(ctx, &llmSvc)
 	}
-
-	// Add finalizer if not present
-	if !controllerutil.ContainsFinalizer(&llmSvc, FinalizerName) {
-		controllerutil.AddFinalizer(&llmSvc, api.FinalizerName)
-		if err := r.Patch(ctx, &llmSvc, client.MergeFrom(llmSvcBeforePatch)); err != nil {
-			return ctrl.Result{}, fmt.Errorf("add finalizer: %w", err)
-		}
+	if deleted, err := r.CleanupReconciler.HandleFinalizer(ctx, &llmSvc, api.FinalizerName, cleanupFunc); err != nil || deleted {
+		return ctrl.Result{}, err
 	}
 
 	// 3. Reconcile Deployment
@@ -208,14 +190,17 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	// 7. Reconcile Network Policies (default-deny + allow-gateway)
+	// 7. Reconcile Network Security Isolation
 	if r.NetworkPolicy != nil {
-		if err := r.NetworkPolicy.ReconcileNetworkPolicies(ctx, &llmSvc); err != nil {
-			return ctrl.Result{}, fmt.Errorf("reconcile network policies: %w", err)
+		if err := r.NetworkPolicy.ReconcileNetworkPolicy(ctx, &llmSvc); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile network policy: %w", err)
 		}
-		// Default internal tool-surface isolation
-		if err := r.reconcileToolSurfaceNetworkPolicy(ctx, &llmSvc, activeLoras); err != nil {
-			return ctrl.Result{}, fmt.Errorf("reconcile tool surface network policy: %w", err)
+	}
+
+	// 8. Reconcile ToolSurface Isolation (Istio Sidecar, mTLS, ServiceEntries)
+	if r.ToolSurface != nil {
+		if err := r.ToolSurface.ReconcileToolSurface(ctx, &llmSvc, activeLoras); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile tool surface isolation: %w", err)
 		}
 	}
 
@@ -273,6 +258,8 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// 13. Update status
 	isOptimized := GetWellKnownConfig(llmSvc.Spec.Model.URI) != nil
+	hwType := r.getCachedHardware(ctx)
+	llmSvc.Status.DetectedHardware = string(hwType)
 	if err := r.StatusReconciler.Update(ctx, &llmSvc, llmSvcBeforePatch, isOptimized); err != nil {
 		return ctrl.Result{}, fmt.Errorf("update status: %w", err)
 	}
@@ -478,108 +465,17 @@ func (r *LLMInferenceServiceReconciler) reconcileGovernanceEvidence(ctx context.
 	return nil
 }
 
-func (r *LLMInferenceServiceReconciler) reconcileToolSurfaceNetworkPolicy(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, activeLoras []servingv1alpha2.LLMLoraAdapter) error {
-	logger := log.FromContext(ctx)
-	
-	labels := map[string]string{
-		"app.kubernetes.io/instance": llmSvc.Name,
-	}
-
-	// 1. Aggregate Tool Surfaces
-	var egressRules []networkingv1.NetworkPolicyEgressRule
-	
-	var apis []string
-	var cidrs []string
-	
-	if llmSvc.Spec.ToolSurface != nil {
-		apis = append(apis, llmSvc.Spec.ToolSurface.AllowedAPIs...)
-		cidrs = append(cidrs, llmSvc.Spec.ToolSurface.AllowedCIDRs...)
-	}
-	
-	for _, lora := range activeLoras {
-		if lora.Spec.ToolSurface != nil {
-			apis = append(apis, lora.Spec.ToolSurface.AllowedAPIs...)
-			cidrs = append(cidrs, lora.Spec.ToolSurface.AllowedCIDRs...)
-		}
-	}
-
-	// 2. Handle FQDN-based isolation (AllowedAPIs)
-	// In production, this generates Istio ServiceEntry or EnvoyFilter resources.
-	if len(apis) > 0 {
-		logger.Info("Detected FQDN targets in ToolSurface. Generating egress ServiceEntries (placeholder logic).", "count", len(apis))
-		// DeploymentBuilder would generate Sidecar egress listeners here.
-	}
-
-	// Internal traffic (DNS)
-	egressRules = append(egressRules, networkingv1.NetworkPolicyEgressRule{
-		Ports: []networkingv1.NetworkPolicyPort{
-			{Protocol: ptrToProtocol(corev1.ProtocolUDP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 53}},
-			{Protocol: ptrToProtocol(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 53}},
-		},
-	})
-
-	// Add CIDR-based rules
-	for _, c := range cidrs {
-		egressRules = append(egressRules, networkingv1.NetworkPolicyEgressRule{
-			To: []networkingv1.NetworkPolicyPeer{
-				{IPBlock: &networkingv1.IPBlock{CIDR: c}},
-			},
-		})
-	}
-	
-	// Note: FQDN-based isolation typically requires a specialized CNI or sidecar proxy.
-	// For standard Kubernetes NetworkPolicy, we only implement CIDR-based protection here.
-
-	desired := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-tool-isolation", llmSvc.Name),
-			Namespace: llmSvc.Namespace,
-			Labels:    labels,
-		},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: metav1.LabelSelector{MatchLabels: labels},
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
-			Egress:      egressRules,
-		},
-	}
-
-	if err := controllerutil.SetControllerReference(llmSvc, desired, r.Scheme); err != nil {
-		return err
-	}
-
-	var existing networkingv1.NetworkPolicy
-	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
-	if apierrors.IsNotFound(err) {
-		logger.Info("creating tool-isolation NetworkPolicy", "name", desired.Name)
-		return r.Create(ctx, desired)
-	}
-	if err != nil {
-		return err
-	}
-
-	if !equality.Semantic.DeepEqual(existing.Spec, desired.Spec) {
-		logger.Info("updating tool-isolation NetworkPolicy", "name", desired.Name)
-		existing.Spec = desired.Spec
-		return r.Update(ctx, &existing)
-	}
-
-	return nil
-}
-
-func ptrToProtocol(p corev1.Protocol) *corev1.Protocol {
-	return &p
-}
-
-// SetupWithManager sets up the controller with the Manager.
 func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.APIReader = mgr.GetAPIReader()
 	r.DeploymentBuilder = &deployment.Builder{
-		Client:   mgr.GetClient(),
-		Recorder: mgr.GetEventRecorderFor("ckodex-llm-operator"), //nolint:staticcheck
-		SPIRE:    r.SPIRE,
+		Client:                  mgr.GetClient(),
+		Recorder:                mgr.GetEventRecorderFor("ckodex-llm-operator"), //nolint:staticcheck
+		SPIRE:                   r.SPIRE,
+		EnableHardwareSelection: r.EnableHardwareSelection,
 	}
 	r.StatusReconciler = &status.Reconciler{
-		Client: mgr.GetClient(),
+		Client:          mgr.GetClient(),
+		EnableHardening: r.EnableExperimentalStatusHardening,
 	}
 	r.CleanupReconciler = &cleanup.Reconciler{
 		Client: mgr.GetClient(),
@@ -594,6 +490,10 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		EnableGRPC: r.EnableGRPC,
 	}
 	r.PDBReconciler = &reconciler.PDBReconciler{
+		Client: mgr.GetClient(),
+		Scheme: r.Scheme,
+	}
+	r.NetworkPolicy = &security.NetworkPolicyReconciler{
 		Client: mgr.GetClient(),
 		Scheme: r.Scheme,
 	}
@@ -661,26 +561,6 @@ func (r *LLMInferenceServiceReconciler) mapLocalModelCacheToInferenceServices(ct
 	}
 	return results
 }
-
-type HardwareType string
-
-const (
-	HardwareAppleSilicon    HardwareType = "AppleSilicon"    // ARM64 in containers (CPU mode)
-	HardwareAppleSiliconMPS HardwareType = "AppleSiliconMPS" // ARM64 with Metal GPU (native macOS)
-	HardwareNVIDIA          HardwareType = "NVIDIA"
-	HardwareAMD             HardwareType = "AMD"
-	HardwareGenericX86      HardwareType = "GenericX86"
-	HardwareUnknown         HardwareType = "Unknown"
-
-	// vLLM Images
-	VLLMGenericImage  = "vllm/vllm-openai-cpu:v0.19.0"
-	VLLMCPUArm64Image = "vllm/vllm-openai-cpu:v0.19.0" // CPU-compiled ARM64 image for Linux containers
-	VLLMMPSImage      = "vllm/vllm-openai-cpu:v0.19.0" // MPS native macOS also uses CPU image in containers
-	VLLMROCmImage     = "vllm/vllm-openai:v0.19.0-rocm" // ROCm 7.2.1
-	// VLLMGemma4Image is the vLLM-recommended dedicated Gemma 4 image.
-	// Use this for all Gemma 4 WellKnown models for optimal out-of-box support.
-	VLLMGemma4Image = "vllm/vllm-openai:gemma4"
-)
 
 const hardwareCacheTTL = 5 * time.Minute
 

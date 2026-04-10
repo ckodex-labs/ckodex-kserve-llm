@@ -15,12 +15,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
 // SkillRegistryReconciler reconciles SkillRegistry objects.
@@ -51,8 +52,8 @@ func (r *SkillRegistryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Handle deletion
 	if reg.DeletionTimestamp != nil {
-		if controllerutil.ContainsFinalizer(&reg, FinalizerName) {
-			controllerutil.RemoveFinalizer(&reg, FinalizerName)
+		if controllerutil.ContainsFinalizer(&reg, api.FinalizerName) {
+			controllerutil.RemoveFinalizer(&reg, api.FinalizerName)
 			if err := r.Update(ctx, &reg); err != nil {
 				return ctrl.Result{}, fmt.Errorf("remove finalizer: %w", err)
 			}
@@ -61,8 +62,8 @@ func (r *SkillRegistryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	if !controllerutil.ContainsFinalizer(&reg, FinalizerName) {
-		controllerutil.AddFinalizer(&reg, FinalizerName)
+	if !controllerutil.ContainsFinalizer(&reg, api.FinalizerName) {
+		controllerutil.AddFinalizer(&reg, api.FinalizerName)
 		if err := r.Update(ctx, &reg); err != nil {
 			return ctrl.Result{}, fmt.Errorf("add finalizer: %w", err)
 		}

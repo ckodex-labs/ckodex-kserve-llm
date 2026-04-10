@@ -87,6 +87,12 @@ spec:
                   For image-generation models: hf://stabilityai/stable-diffusion-xl-base-1.0.
                   For text-to-speech models: hf://LiquidAI/LFM2.5-Audio-1.5B.
                 properties:
+                  hardwareAware:
+                    description: |-
+                      HardwareAware enables automatic hardware-specific artifact selection.
+                      When true, the operator appends hardware suffixes to OCI tags (e.g., -nvidia).
+                      Requires ENABLE_EXPERIMENTAL_HARDWARE_SELECTION feature gate.
+                    type: boolean
                   name:
                     description: |-
                       Name is the model identifier used in inference requests.

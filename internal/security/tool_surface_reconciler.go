@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -50,6 +51,16 @@ func (r *ToolSurfaceReconciler) ReconcileToolSurface(ctx context.Context, llmSvc
 		return nil
 	}
 
+	// 2. Check if Istio CRDs are available.
+	exists, err := r.isGVKAvailable()
+	if err != nil {
+		return fmt.Errorf("check Istio GVK availability: %w", err)
+	}
+	if !exists {
+		logger.Info("Istio networking.istio.io/v1beta1 CRDs not found, skipping tool-surface reconciliation")
+		return nil
+	}
+
 	// 2. PeerAuthentication (Enforce STRICT mTLS)
 	if err := r.reconcilePeerAuthentication(ctx, llmSvc); err != nil {
 		return fmt.Errorf("reconcile PeerAuthentication: %w", err)
@@ -77,6 +88,35 @@ func (r *ToolSurfaceReconciler) ReconcileToolSurface(ctx context.Context, llmSvc
 
 	logger.Info("ToolSurface security perimeter reconciled", "allowed_apis", len(apis))
 	return nil
+}
+
+// isGVKAvailable checks if Istio Sidecar CRD is registered.
+func (r *ToolSurfaceReconciler) isGVKAvailable() (bool, error) {
+	if r.Client == nil {
+		return false, nil
+	}
+
+	gvk := schema.GroupVersionKind{
+		Group:   "networking.istio.io",
+		Version: "v1beta1",
+		Kind:    "Sidecar",
+	}
+
+	if mapper := r.RESTMapper(); mapper != nil {
+		_, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+		if err == nil {
+			return true, nil
+		}
+		if !meta.IsNoMatchError(err) {
+			return false, err
+		}
+	}
+
+	if r.Scheme != nil && r.Scheme.Recognizes(gvk) {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (r *ToolSurfaceReconciler) reconcileIstioEgressResources(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, fqdn string) error {

@@ -34,6 +34,17 @@ func secScheme(t *testing.T) *runtime.Scheme {
 	require.NoError(t, appsv1.AddToScheme(s))
 	require.NoError(t, corev1.AddToScheme(s))
 	require.NoError(t, networkingv1.AddToScheme(s))
+
+	// Register unstructured GVKs for isGVKAvailable checks
+	s.AddKnownTypeWithName(ExternalSecretGVK, &unstructured.Unstructured{})
+	s.AddKnownTypeWithName(ConstraintTemplateGVK, &unstructured.Unstructured{})
+	s.AddKnownTypeWithName(TracingPolicyGVK, &unstructured.Unstructured{})
+	s.AddKnownTypeWithName(schema.GroupVersionKind{
+		Group:   "networking.istio.io",
+		Version: "v1beta1",
+		Kind:    "Sidecar",
+	}, &unstructured.Unstructured{})
+
 	return s
 }
 

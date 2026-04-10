@@ -498,20 +498,12 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	r.CleanupReconciler = &cleanup.Reconciler{
 		Client: mgr.GetClient(),
 	}
-	r.ToolSurface = &security.ToolSurfaceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: r.Scheme,
-	}
 	r.ServiceReconciler = &reconciler.ServiceReconciler{
 		Client:     mgr.GetClient(),
 		Scheme:     r.Scheme,
 		EnableGRPC: r.EnableGRPC,
 	}
 	r.PDBReconciler = &reconciler.PDBReconciler{
-		Client: mgr.GetClient(),
-		Scheme: r.Scheme,
-	}
-	r.NetworkPolicy = &security.NetworkPolicyReconciler{
 		Client: mgr.GetClient(),
 		Scheme: r.Scheme,
 	}

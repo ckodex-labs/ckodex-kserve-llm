@@ -33,6 +33,11 @@ func (m *mockESClient) Create(ctx context.Context, obj client.Object, opts ...cl
 	return nil
 }
 
+func (m *mockESClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	m.objects[obj.GetName()] = obj
+	return nil
+}
+
 func (m *mockESClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	if found, ok := m.objects[key.Name]; ok {
 		// Very simplified copy for test
@@ -129,8 +134,48 @@ func TestManagedSecret_LatentSyncResilience(t *testing.T) {
 	assert.Equal(t, []byte("ready"), found.Data["token"])
 }
 
+func TestManagedSecret_UpdateIdempotency(t *testing.T) {
+	scheme := secScheme(t)
+	scheme.AddKnownTypeWithName(ExternalSecretGVK, &unstructured.Unstructured{})
+
+	svc := minimalLLMSvc("update-test", "default")
+	svc.Spec.Model.Storage = &servingv1alpha2.StorageSpec{
+		ExternalSecret: &servingv1alpha2.ExternalSecretSpec{
+			SecretStoreRef: servingv1alpha2.SecretStoreRef{Name: "old-store"},
+		},
+	}
+
+	mcl := &mockESClient{
+		scheme:  scheme,
+		objects: make(map[string]client.Object),
+	}
+	r := &ExternalSecretReconciler{
+		Client: mcl,
+		Scheme: scheme,
+	}
+
+	// 1. Initial creation
+	require.NoError(t, r.ReconcileExternalSecret(context.Background(), svc))
+	
+	es := &unstructured.Unstructured{}
+	es.SetGroupVersionKind(ExternalSecretGVK)
+	require.NoError(t, mcl.Get(context.Background(), client.ObjectKey{Name: svc.Name, Namespace: svc.Namespace}, es))
+	
+	oldSpec := es.Object["spec"].(map[string]interface{})
+	assert.Equal(t, "old-store", oldSpec["secretStoreRef"].(map[string]interface{})["name"])
+
+	// 2. Update spec
+	svc.Spec.Model.Storage.ExternalSecret.SecretStoreRef.Name = "new-store"
+	require.NoError(t, r.ReconcileExternalSecret(context.Background(), svc))
+
+	// 3. Verify update
+	require.NoError(t, mcl.Get(context.Background(), client.ObjectKey{Name: svc.Name, Namespace: svc.Namespace}, es))
+	newSpec := es.Object["spec"].(map[string]interface{})
+	assert.Equal(t, "new-store", newSpec["secretStoreRef"].(map[string]interface{})["name"])
+}
+
 func TestManagedSecret_GVKAbsenceResilience(t *testing.T) {
-	scheme := secScheme(t) // No ExternalSecret registered here
+	scheme := runtime.NewScheme() // Empty scheme, does not recognize ExternalSecret
 	svc := minimalLLMSvc("no-crd", "default")
 	svc.Spec.Model.Storage = &servingv1alpha2.StorageSpec{
 		ExternalSecret: &servingv1alpha2.ExternalSecretSpec{

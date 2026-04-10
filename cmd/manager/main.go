@@ -163,6 +163,14 @@ func main() {
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
 		}
+		reconciler.ToolSurface = &security.ToolSurfaceReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}
+		reconciler.ExternalSecret = &security.ExternalSecretReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}
 		reconciler.Vault = &security.VaultReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),

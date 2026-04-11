@@ -5,7 +5,7 @@ const (
 
 	VLLMImage                     = "vllm/vllm-openai:v0.19.0"
 	QuantCppImage                 = "ckodex/quant-cpp:v0.1.0"
-	StorageInitializerImage       = "kserve/storage-initializer:v0.14.1"
+	StorageInitializerImage       = "kserve/storage-initializer:v0.17.0"
 	CKodexStorageInitializerImage = "ckodex/storage-initializer:v0.1.0"
 	HFMountCSIDriver              = "hf.csi.huggingface.co"
 

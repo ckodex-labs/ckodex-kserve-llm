@@ -38,10 +38,22 @@ component-definition:
                   href: "#audit-validation"
             - uuid: 44444444-4444-4444-4444-444444444447
               control-id: si-7
-              description: Ensure software and information integrity via state machine
+              description: Ensure software and information integrity via signing and attestation
               links:
                 - rel: lula-validation
                   href: "#integrity-validation"
+            - uuid: 44444444-4444-4444-4444-444444444448
+              control-id: si-4
+              description: Information system monitoring via Open Inference Signals (OIS)
+              links:
+                - rel: lula-validation
+                  href: "#monitoring-validation"
+            - uuid: 44444444-4444-4444-4444-444444444449
+              control-id: sr-2
+              description: Supply chain risk management via SLSA provenance
+              links:
+                - rel: lula-validation
+                  href: "#supply-chain-validation"
   back-matter:
     resources:
       - uuid: 55555555-5555-5555-5555-555555555555
@@ -64,7 +76,19 @@ component-definition:
             href: "governance-validation.yaml"
       - uuid: 55555555-5555-5555-5555-555555555558
         id: integrity-validation
-        description: Validate composite integrity state via status conditions
+        description: Validate supply-chain integrity via Cosign signatures
         links:
           - rel: lula-validation
-            href: "governance-validation.yaml"
+            href: "supply-chain-validation.yaml"
+      - uuid: 55555555-5555-5555-5555-555555555559
+        id: monitoring-validation
+        description: Validate presence of OIS URNs in inference workloads
+        links:
+          - rel: lula-validation
+            href: "ois-validation.yaml"
+      - uuid: 55555555-5555-5555-5555-555555555560
+        id: supply-chain-validation
+        description: Validate presence of SLSA provenance attestations
+        links:
+          - rel: lula-validation
+            href: "supply-chain-validation.yaml"

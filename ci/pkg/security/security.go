@@ -28,12 +28,14 @@ func Scan(ctx context.Context, p *core.Pipeline) (string, error) {
 		Stdout(ctx)
 }
 
-func Lula(ctx context.Context, p *core.Pipeline) (string, error) {
+func Lula(ctx context.Context, p *core.Pipeline) (*dagger.File, error) {
 	// Lula validates security controls and generates OSCAL assessment results.
-	return p.Client.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).
+	assessment := p.Client.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).
 		From(core.LulaImage).
 		WithMountedDirectory("/src", p.Source).
 		WithWorkdir("/src").
 		WithExec([]string{"lula", "validate", "-f", "lula/lula-component.yaml", "-o", "assessment-results.yaml"}).
-		Stdout(ctx)
+		File("assessment-results.yaml")
+
+	return assessment, nil
 }

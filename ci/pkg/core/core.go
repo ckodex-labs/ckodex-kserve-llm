@@ -11,10 +11,10 @@ const (
 
 	GoVersion         = "1.25"
 	GolangciLintVer   = "v1.64.6"
-	SyftVersion       = "v1.22.0"
-	CosignVersion     = "v2.4.1"
-	TrivyVersion      = "0.58.2"
-	LulaVersion       = "v0.9.4"
+	SyftVersion       = "v1.42.4"
+	CosignVersion     = "v3.0.4"
+	TrivyVersion      = "0.69.3"
+	LulaVersion       = "v0.9.5"
 	LulaImage         = "ghcr.io/defenseunicorns/lula:" + LulaVersion
 	GolangciLintImage = "golangci/golangci-lint:" + GolangciLintVer
 

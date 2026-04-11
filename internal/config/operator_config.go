@@ -287,7 +287,7 @@ func DefaultOperatorConfig() OperatorConfig {
 			// Pinned to a specific version — :latest is a supply chain risk and air-gapped blocker.
 			RuntimeImage:            "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.17.1",
 			SchedulerImage:          "us-central1-docker.pkg.dev/k8s-staging-gateway-api/gateway-api-inference-extension/epp:main",
-			StorageInitializerImage: "kserve/storage-initializer:v0.14.1",
+			StorageInitializerImage: "kserve/storage-initializer:v0.17.0",
 			DefaultReplicas:         1,
 		},
 		Scheduler: SchedulerDefaults{

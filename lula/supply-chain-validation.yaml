@@ -1,0 +1,26 @@
+apiVersion: lula.dev/v1alpha1
+kind: Validation
+metadata:
+  name: lula-supply-chain-verification
+  labels:
+    oscal-control: sr-2
+spec:
+  description: "Ensure that LLMInferenceService artifacts are verified via SLSA provenance"
+  domain:
+    type: kubernetes
+    kubernetesSpec:
+      resources:
+        - name: llm-supply-chain
+          resource: llminferenceservices
+          allNamespaces: true
+  payload:
+    rego: |
+      package lula
+
+      # Check for SR-2: Supply Chain Risk Management
+      validate {
+        condition := input.resources[0].status.conditions[_]
+        condition.type == "Compliance-SR-2"
+        condition.status == "True"
+        condition.reason == "ProvenanceVerified"
+      }

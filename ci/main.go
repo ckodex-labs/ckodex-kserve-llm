@@ -62,10 +62,14 @@ func main() {
 	}
 
 	// Lula OSCAL Validation
-	if _, err := security.Lula(ctx, p); err != nil {
+	lulaResults, err := security.Lula(ctx, p)
+	if err != nil {
 		fatal("lula validation", err)
 	}
-	log("lula oscal validation passed")
+	if _, err := lulaResults.Export(ctx, "bin/oscal-assessment-results.yaml"); err != nil {
+		fatal("export lula results", err)
+	}
+	log("lula oscal validation passed → bin/oscal-assessment-results.yaml")
 
 	// Supply Chain Security (SBOM + Sign + Attest)
 	if !cfg.SkipScan {

@@ -49,14 +49,6 @@ type RegistrationEntry struct {
 
 // SPIRERegistrationReconciler manages SPIRE registration entries for LLMInferenceService workloads.
 //
-// It stores each entry as a ConfigMap in SPIRERegistrationNamespace so the SPIRE k8s
-// Workload Attestor can create the corresponding server-side entries automatically.
-//
-// Registration entry format:
-//
-//	SPIFFE ID:   spiffe://ckodex.com/ns/{namespace}/sa/{serviceaccount}/model/{name}
-//	Selectors:   k8s:ns:{namespace} + k8s:sa:{serviceaccount}
-//
 // SPIFFE IDs are validated with go-spiffe/v2/spiffeid before writing.
 type SPIRERegistrationReconciler struct {
 	client.Client
@@ -75,7 +67,14 @@ func (r *SPIRERegistrationReconciler) ReconcileRegistrationEntry(
 
 	// Service account name follows operator convention: same as service name.
 	sa := llmSvc.Name
-	spiffeIDStr := SPIFFEIDForService(llmSvc.Namespace, sa, llmSvc.Name)
+	spiffeIDStr := r.SpireReconciler.SPIFFEIDForService(llmSvc.Namespace, sa, llmSvc.Name)
+
+	// In vcluster mode, the physical namespace in the host cluster is what
+	// the SPIRE Agent (running on host nodes) will see during pod attestation.
+	physicalNS := llmSvc.Namespace
+	if r.VClusterMode && r.HostNamespace != "" {
+		physicalNS = r.HostNamespace
+	}
 
 	// Validate the SPIFFE ID components with go-spiffe/v2 before writing to cluster state.
 	if err := validateSPIFFEID(llmSvc.Namespace, sa, llmSvc.Name); err != nil {
@@ -86,7 +85,7 @@ func (r *SPIRERegistrationReconciler) ReconcileRegistrationEntry(
 	entry := RegistrationEntry{
 		SPIFFEID: spiffeIDStr,
 		Selectors: []string{
-			fmt.Sprintf("k8s:ns:%s", llmSvc.Namespace),
+			fmt.Sprintf("k8s:ns:%s", physicalNS),
 			fmt.Sprintf("k8s:sa:%s", sa),
 		},
 		TTL: DefaultSVIDTTLSeconds,

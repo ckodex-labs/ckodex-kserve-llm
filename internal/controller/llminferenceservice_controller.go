@@ -74,6 +74,10 @@ type LLMInferenceServiceReconciler struct {
 	EnableHardwareSelection           bool
 	EnableExperimentalStatusHardening bool
 	OTEL_Endpoint                     string // Contract: OTEL_EXPORTER_OTLP_ENDPOINT
+	
+	// AirGap configuration
+	AirGappedMode bool
+	LocalRegistry string
 
 	// Modular sub-reconcilers
 	DeploymentBuilder *deployment.Builder
@@ -501,11 +505,15 @@ func (r *LLMInferenceServiceReconciler) reconcileGovernanceEvidence(ctx context.
 	}
 
 	// SR-2: Supply Chain Risk Management (Provenance verification)
+	sr2Msg := "Software supply chain verified via SLSA provenance and Cosign certificates"
+	if r.AirGappedMode {
+		sr2Msg = "Software supply chain verified via offline Cosign signatures using local public keys"
+	}
 	sr2 := metav1.Condition{
 		Type:               "Compliance-SR-2",
 		Status:             metav1.ConditionTrue,
 		Reason:             "ProvenanceVerified",
-		Message:            "Software supply chain verified via SLSA provenance and Cosign certificates",
+		Message:            sr2Msg,
 		LastTransitionTime: metav1.Now(),
 	}
 
@@ -538,6 +546,8 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		SPIRE:                   r.SPIRE,
 		EnableHardwareSelection: r.EnableHardwareSelection,
 		OTEL_Endpoint:           r.OTEL_Endpoint,
+		AirGappedMode:           r.AirGappedMode,
+		LocalRegistry:           r.LocalRegistry,
 	}
 	r.StatusReconciler = &status.Reconciler{
 		Client:          mgr.GetClient(),

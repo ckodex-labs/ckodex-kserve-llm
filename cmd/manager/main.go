@@ -129,6 +129,8 @@ func main() {
 		Scheme:        mgr.GetScheme(),
 		Recorder:      mgr.GetEventRecorderFor("LLMInferenceService"), //nolint:staticcheck
 		OTEL_Endpoint: cfg.Observability.OTLPEndpoint,
+		AirGappedMode: cfg.AirGappedMode,
+		LocalRegistry: cfg.LocalRegistry,
 	}
 
 	// gRPC — independent of gateway (controls Service port definition)
@@ -194,12 +196,17 @@ func main() {
 		// InjectSidecar appends the CSI volume + spiffe-helper container to every
 		// vLLM Deployment, providing zero-trust workload identity via mTLS.
 		reconciler.SPIRE = &security.SPIREReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			VClusterMode:  cfg.VClusterMode,
+			HostNamespace: cfg.HostNamespace,
 		}
 		reconciler.SPIRERegistration = &security.SPIRERegistrationReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			VClusterMode:    cfg.VClusterMode,
+			HostNamespace:   cfg.HostNamespace,
+			SpireReconciler: reconciler.SPIRE,
 		}
 		setupLog.Info("security reconcilers enabled",
 			"components", "NetworkPolicy+Vault+OPA+eBPF+SPIRE",

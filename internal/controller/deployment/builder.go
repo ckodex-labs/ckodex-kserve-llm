@@ -29,8 +29,11 @@ type Builder struct {
 	Client                  client.Client
 	Recorder                record.EventRecorder
 	SPIRE                   SPIREInjector
-	EnableHardwareSelection bool
 	OTEL_Endpoint           string // Contract: OTEL_EXPORTER_OTLP_ENDPOINT
+	
+	// AirGap configuration
+	AirGappedMode bool
+	LocalRegistry string // e.g. "local-registry.corp.internal"
 }
 
 // Build constructs the desired Deployment spec.
@@ -169,8 +172,17 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 		initializerImage = api.CKodexStorageInitializerImage
 	}
 
+	if b.AirGappedMode && b.LocalRegistry != "" {
+		initializerImage = b.rewriteImage(initializerImage)
+		// Storage initialized in air-gap expects converted URIs (hf:// -> oci://)
+		uri = b.storageResolveAirGap(uri)
+	}
+
 	if hwType == HardwareAppleSilicon {
 		initializerImage = api.CKodexStorageInitializerImage
+		if b.AirGappedMode && b.LocalRegistry != "" {
+			initializerImage = b.rewriteImage(initializerImage)
+		}
 	}
 
 	container := &corev1.Container{
@@ -676,11 +688,17 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 	switch engine {
 	case "quant-cpp":
 		c.Image = api.QuantCppImage
+		if b.AirGappedMode && b.LocalRegistry != "" {
+			c.Image = b.rewriteImage(c.Image)
+		}
 		b.ensureQuantCppArgs(llmSvc, c, hwType)
 	default:
 		// Default to vllm image if not already set by template
 		if c.Image == "" {
 			c.Image = api.VLLMImage
+		}
+		if b.AirGappedMode && b.LocalRegistry != "" {
+			c.Image = b.rewriteImage(c.Image)
 		}
 		// vLLM args are typically handled by applying WellKnown config or user spec.
 		// If no args provided, we add safe defaults.
@@ -764,4 +782,28 @@ func (b *Builder) ensureQuantCppArgs(llmSvc *servingv1alpha2.LLMInferenceService
 	if !foundHost {
 		c.Args = append(c.Args, "--host", "0.0.0.0", "--port", "8000")
 	}
+}
+
+// rewriteImage replaces the registry part of an image string with the local registry.
+func (b *Builder) rewriteImage(image string) string {
+	if b.LocalRegistry == "" {
+		return image
+	}
+	// Split by '/' to find the registry
+	parts := strings.Split(image, "/")
+	if len(parts) > 1 {
+		// If the first part looks like a registry (contains . or :) or matches known prefixes
+		// Alternatively, just prepend our local registry and keep the rest as the path
+		// Convention: {local-registry}/{original-path}
+		return fmt.Sprintf("%s/%s", b.LocalRegistry, strings.Join(parts, "/"))
+	}
+	// Simple images (e.g. "nginx")
+	return fmt.Sprintf("%s/%s", b.LocalRegistry, image)
+}
+
+// storageResolveAirGap uses the storage package to rewrite URIs.
+func (b *Builder) storageResolveAirGap(uri string) string {
+	// We use the storage package's resolution logic.
+	// We'll import "github.com/ckodex-labs/kserve-llm-operator/internal/storage"
+	return ResolveAirGappedURI(uri, b.LocalRegistry)
 }

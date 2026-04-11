@@ -41,13 +41,26 @@ const (
 type SPIREReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// VClusterMode indicates we are running in a virtual cluster.
+	VClusterMode bool
+	// HostNamespace is the physical shadow namespace in the host cluster.
+	HostNamespace string
 }
 
 // SPIFFEIDForService generates a SPIFFE ID for a given service.
 // Format: spiffe://ckodex.com/ns/{namespace}/sa/{serviceaccount}/model/{modelname}
-func SPIFFEIDForService(namespace, serviceAccount, modelName string) string {
+func (r *SPIREReconciler) SPIFFEIDForService(namespace, serviceAccount, modelName string) string {
+	ns := namespace
+	if r.VClusterMode && r.HostNamespace != "" {
+		// In vcluster mode, we use the virtual namespace for the tenant's logic,
+		// but we can also offer a mode where the host-cluster SPIRE expects the 
+		// physical (shadow) namespace. For now, we stay consistent with the virtual 
+		// view unless the host-cluster SPIRE is configured otherwise.
+		ns = namespace 
+	}
 	return fmt.Sprintf("spiffe://%s/ns/%s/sa/%s/model/%s",
-		SPIFFETrustDomain, namespace, serviceAccount, modelName)
+		SPIFFETrustDomain, ns, serviceAccount, modelName)
 }
 
 // ReconcileSPIRE ensures SPIRE Server and Agent are deployed.
@@ -193,7 +206,7 @@ func (r *SPIREReconciler) InjectSidecar(podSpec *corev1.PodSpec, llmSvc *serving
 	}
 
 	// 3. SPIFFE helper sidecar — manages SVID rotation and writes PEM files.
-	spiffeID := SPIFFEIDForService(llmSvc.Namespace, llmSvc.Name, llmSvc.Name)
+	spiffeID := r.SPIFFEIDForService(llmSvc.Namespace, llmSvc.Name, llmSvc.Name)
 	sidecar := corev1.Container{
 		Name:  "spiffe-sidecar",
 		Image: SPIFFEHelperImage,

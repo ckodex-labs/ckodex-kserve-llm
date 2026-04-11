@@ -163,6 +163,27 @@ type OperatorConfig struct {
 	// Version is the operator version, injected at build time.
 	// Defaults to "dev". Override via VERSION environment variable (contract).
 	Version string `json:"version"`
+
+	// VClusterMode indicates the operator is running inside a vcluster.
+	// In this mode, Pods are project into a HostNamespace.
+	VClusterMode bool `json:"vClusterMode"`
+
+	// HostNamespace is the name of the namespace in the host cluster that 
+	// shadows the vcluster's virtual resources.
+	HostNamespace string `json:"hostNamespace,omitempty"`
+
+	// AirGappedMode indicates the operator is running in a disconnected environment.
+	// When true, all external URIs (hf://, s3://) are automatically converted
+	// to local OCI references via LocalRegistry.
+	AirGappedMode bool `json:"airGappedMode"`
+
+	// LocalRegistry is the OCI registry used for mirroring external artifacts.
+	// Format: "local-registry.corp.internal" (no scheme).
+	LocalRegistry string `json:"localRegistry,omitempty"`
+
+	// LocalCosignKeyPath is the path to a local public key used for offline
+	// signature verification in air-gapped environments.
+	LocalCosignKeyPath string `json:"localCosignKeyPath,omitempty"`
 }
 
 // DefaultsConfig holds default workload configuration.
@@ -359,6 +380,15 @@ func (c *OperatorConfig) LoadFromEnv() {
 	// OIS / OTel Contract Overrides
 	envStr("VERSION", &c.Version)
 	envStr("OTEL_EXPORTER_OTLP_ENDPOINT", &c.Observability.OTLPEndpoint)
+
+	// VCluster Overrides
+	envBool("CKODEX_VCLUSTER_MODE", &c.VClusterMode)
+	envStr("CKODEX_VCLUSTER_HOST_NAMESPACE", &c.HostNamespace)
+
+	// AirGap Overrides
+	envBool("CKODEX_AIRGAPPED_MODE", &c.AirGappedMode)
+	envStr("CKODEX_LOCAL_REGISTRY", &c.LocalRegistry)
+	envStr("CKODEX_LOCAL_COSIGN_KEY_PATH", &c.LocalCosignKeyPath)
 }
 
 func envBool(key string, target *bool) {

@@ -280,6 +280,30 @@ func ParseOCIURI(uri string) (*ModelArtifact, error) {
 	return artifact, nil
 }
 
+// ResolveAirGappedURI rewrites external URIs to local OCI references if 
+// air-gapped mode is enabled.
+func ResolveAirGappedURI(uri string, localRegistry string) string {
+	if localRegistry == "" {
+		return uri
+	}
+
+	// Automated conversion: hf://google/gemma-4 -> oci://local-reg/hf/google/gemma-4
+	if strings.HasPrefix(uri, "hf://") {
+		path := strings.TrimPrefix(uri, "hf://")
+		return fmt.Sprintf("oci://%s/hf/%s", localRegistry, path)
+	}
+
+	// Mirroring for other OCI registries: oci://ghcr.io/ckodex/model -> oci://local-reg/ghcr.io/ckodex/model
+	if strings.HasPrefix(uri, "oci://") {
+		ref := strings.TrimPrefix(uri, "oci://")
+		if !strings.HasPrefix(ref, localRegistry) {
+			return fmt.Sprintf("oci://%s/%s", localRegistry, ref)
+		}
+	}
+
+	return uri
+}
+
 // Push uploads model artifacts from srcPath to the OCI registry.
 // Packs layers by media type and pushes the manifest.
 func (c *OCIClient) Push(ctx context.Context, artifact *ModelArtifact, srcPath string) error {

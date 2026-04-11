@@ -45,6 +45,9 @@ graph TD
     GR --> DP
 ```
 
+> [!NOTE]
+> For a deep dive into our defense-in-depth strategy, mTLS enforcement, and OPA policy layers, see the **[Security Architecture](docs/SECURITY_ARCHITECTURE.md)** guide.
+
 ## Production Hardening Features
 
 ### Governed State Planes (L|T|R)
@@ -65,9 +68,13 @@ A built-in Next.js dashboard provides a unified view of the governed fleet:
 - **Live Audit Feed**: Event-driven streaming of operator and inference decisions.
 - **Shared Audit Plane**: Uses a high-performance persistent volume for real-time log ingestion.
 
-### Supply Chain Security
-- **0-Vulnerability Posture**: All core dependencies (OpenTelemetry, Distribution, Go-Git) are remediated against known CVEs.
-- **Verifiable Evidence**: Every model status includes evidence bundles with SLSA attestation and SBOM digests.
+### Verifiable Evidence (Proofs)
+Unlike typical operators, we provide machine-readable "receipts" of our security posture:
+- **OSCAL Assessment**: Automated validation of NIST 800-53 controls (SR-2, SI-4, SI-7) exported to **`assessment-results.yaml`**.
+- **OIS Signal Payloads**: Standardized inference behavior telemetry using **Open Inference Signals v0.1**.
+- **Supply-Chain Contract**: 100% SLSA-compliant builds with Cosign signatures and verifiable SBOMs.
+
+See **[COMPLIANCE.md](COMPLIANCE.md)** for the full control mapping.
 
 ## Operational Guides
 ...
@@ -198,6 +205,16 @@ make test          # Run tests (≥80% coverage)
 make lint          # golangci-lint
 make docker-build  # Build container
 ```
+
+## Contributing
+
+We welcome contributions! To ensure the project remains "Hardened" and production-ready, all PRs must adhere to our **Supply-Chain & Compliance-as-Code** requirements:
+
+- **Signed Commits**: All commits must be signed (DCO).
+- **Compliance Evidence**: New security features must include a corresponding **Lula Validation**.
+- **OIS Instrumentation**: New telemetry must follow the **Open Inference Signals v0.1** spec.
+
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full developer workflow.
 
 ## Benchmarks
 

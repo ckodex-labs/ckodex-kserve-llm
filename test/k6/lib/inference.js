@@ -5,12 +5,13 @@
 import http from 'k6/http';
 import { LLM_MODEL, EMBED_MODEL, MM_MODEL } from './config.js';
 
-export function buildChatPayload(model = LLM_MODEL, prompt = 'ping', maxTokens = 20) {
+export function buildChatPayload(model = LLM_MODEL, prompt = 'ping', maxTokens = 20, stream = false) {
   return JSON.stringify({
     model,
     messages: [{ role: 'user', content: prompt }],
     max_tokens: maxTokens,
     temperature: 0.0,
+    stream: stream,
   });
 }
 

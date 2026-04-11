@@ -19,6 +19,8 @@ export const SMOKE_THRESHOLDS = {
 export const STRESS_THRESHOLDS = {
   http_req_failed:   [{ threshold: 'rate<0.05' }],
   http_req_duration: [{ threshold: 'p(95)<60000' }],
+  ttft_ms:           [{ threshold: 'p(95)<10000' }],
+  tokens_per_sec:    [{ threshold: 'avg>0.1' }],
 };
 
 export const BENCH_THRESHOLDS = {

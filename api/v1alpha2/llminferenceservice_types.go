@@ -122,6 +122,28 @@ type LLMInferenceServiceSpec struct {
 	// ToolSurface declares reachable APIs and external connectors for this service.
 	// +optional
 	ToolSurface *ToolSurface `json:"toolSurface,omitempty"`
+
+	// Observability configures telemetry sinks (logs, traces, metrics).
+	// +optional
+	Observability *ObservabilitySpec `json:"observability,omitempty"`
+}
+
+// ObservabilitySpec configures telemetry for an inference service.
+type ObservabilitySpec struct {
+	// Sink select the telemetry destination for Vector and Audit signals.
+	// +optional
+	Sink *TelemetrySink `json:"sink,omitempty"`
+}
+
+// TelemetrySink defines a destination for OIS signals.
+type TelemetrySink struct {
+	// Type of sink: "stdout", "otlp", "loki", "elasticsearch".
+	// +kubebuilder:validation:Enum=stdout;otlp;loki;elasticsearch
+	Type string `json:"type"`
+
+	// Endpoint for the sink (e.g., "http://otel-collector:4318").
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // ToolSurface defines allowed external reachability.

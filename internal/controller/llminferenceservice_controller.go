@@ -73,6 +73,7 @@ type LLMInferenceServiceReconciler struct {
 	EnableGRPC                        bool
 	EnableHardwareSelection           bool
 	EnableExperimentalStatusHardening bool
+	OTEL_Endpoint                     string // Contract: OTEL_EXPORTER_OTLP_ENDPOINT
 
 	// Modular sub-reconcilers
 	DeploymentBuilder *deployment.Builder
@@ -194,6 +195,11 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
+	// 6. Reconcile Vector ConfigMap (OIS v0.1)
+	if err := r.reconcileVectorConfig(ctx, &llmSvc); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconcile vector: %w", err)
+	}
+
 	// 6. Reconcile Autoscaler (HPA/KEDA/WVA)
 	if r.Autoscaler != nil {
 		if err := r.Autoscaler.Reconcile(ctx, &llmSvc); err != nil {
@@ -282,13 +288,29 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, fmt.Errorf("update status: %w", err)
 	}
 
-	// 14. Audit event
+	// 14. Audit event & Receipt (OIS v0.1)
 	resourceRef := fmt.Sprintf("LLMInferenceService/%s/%s", llmSvc.Namespace, llmSvc.Name)
 	if r.Audit != nil {
-		r.Audit.LogUpdate(ctx, resourceRef, "controller", map[string]string{
-			"replicas": fmt.Sprintf("%d", llmSvc.Status.Replicas),
-			"ready":    fmt.Sprintf("%t", llmSvc.Status.ModelReady),
-		})
+		mode := "observe"
+		if r.OPA != nil {
+			mode = "enforced"
+		}
+
+		details := map[string]string{
+			"replicas":        fmt.Sprintf("%d", llmSvc.Status.Replicas),
+			"ready":           fmt.Sprintf("%t", llmSvc.Status.ModelReady),
+			"model_uri":       llmSvc.Spec.Model.URI,
+			"engine":          llmSvc.Spec.Engine,
+			"exec.mode":       mode,
+			"detected_hw":     llmSvc.Status.DetectedHardware,
+		}
+
+		r.Audit.LogUpdate(ctx, resourceRef, "controller", details)
+
+		// Emit OIS Receipt if the model is ready (materialized state change)
+		if llmSvc.Status.ModelReady {
+			r.Audit.LogReceipt(ctx, "", "ok", "Model server materialized and ready", details)
+		}
 	}
 
 	logger.Info("reconciliation complete",
@@ -490,6 +512,7 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Recorder:                mgr.GetEventRecorderFor("ckodex-llm-operator"), //nolint:staticcheck
 		SPIRE:                   r.SPIRE,
 		EnableHardwareSelection: r.EnableHardwareSelection,
+		OTEL_Endpoint:           r.OTEL_Endpoint,
 	}
 	r.StatusReconciler = &status.Reconciler{
 		Client:          mgr.GetClient(),
@@ -611,4 +634,54 @@ func (r *LLMInferenceServiceReconciler) getCachedHardware(ctx context.Context) d
 
 func ptrToHostPath(hp corev1.HostPathType) *corev1.HostPathType {
 	return &hp
+}
+
+func (r *LLMInferenceServiceReconciler) reconcileVectorConfig(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
+	// 1. Determine if Vector is needed (Contract: User Spec > Operator Config)
+	sinkType := "stdout"
+	endpoint := r.OTEL_Endpoint
+
+	if r.OTEL_Endpoint != "" {
+		sinkType = "otlp"
+	}
+
+	if llmSvc.Spec.Observability != nil && llmSvc.Spec.Observability.Sink != nil {
+		sinkType = llmSvc.Spec.Observability.Sink.Type
+		if llmSvc.Spec.Observability.Sink.Endpoint != "" {
+			endpoint = llmSvc.Spec.Observability.Sink.Endpoint
+		}
+	}
+
+	// If sink is stdout and no OTel endpoint, we don't need a ConfigMap (console sink is default)
+	if sinkType == "stdout" && endpoint == "" {
+		return nil
+	}
+
+	// 2. Build ConfigMap
+	cfg := observability.VectorConfig{
+		Enabled:      true,
+		SinkType:     sinkType,
+		SinkEndpoint: endpoint,
+	}
+	cm := observability.BuildVectorConfigMap(llmSvc.Name, llmSvc.Namespace, llmSvc.Spec.Model.Name, cfg)
+	if err := controllerutil.SetControllerReference(llmSvc, cm, r.Scheme); err != nil {
+		return err
+	}
+
+	// 3. Create or Update
+	var existing corev1.ConfigMap
+	err := r.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, &existing)
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, cm)
+	}
+	if err != nil {
+		return err
+	}
+
+	if !equality.Semantic.DeepEqual(existing.Data, cm.Data) {
+		existing.Data = cm.Data
+		return r.Update(ctx, &existing)
+	}
+
+	return nil
 }

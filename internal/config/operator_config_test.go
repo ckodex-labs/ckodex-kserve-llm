@@ -111,6 +111,17 @@ func TestLoadFromEnv_StringFields(t *testing.T) {
 	assert.Equal(t, "http://prometheus.monitoring:9090", cfg.PrometheusURL)
 }
 
+func TestLoadFromEnv_ContractOverrides(t *testing.T) {
+	setEnv(t, "OTEL_EXPORTER_OTLP_ENDPOINT", "http://contract-otel:4318")
+	setEnv(t, "VERSION", "v1.2.3-contract")
+
+	cfg := config.DefaultOperatorConfig()
+	cfg.LoadFromEnv()
+
+	assert.Equal(t, "http://contract-otel:4318", cfg.Observability.OTLPEndpoint)
+	assert.Equal(t, "v1.2.3-contract", cfg.Version)
+}
+
 func TestLoadFromEnv_SemanticCacheFields(t *testing.T) {
 	setEnv(t, "CKODEX_SEMANTIC_CACHE_ADDR", "valkey-master.cache.svc:6379")
 	setEnv(t, "CKODEX_SEMANTIC_CACHE_TTL", "30m")

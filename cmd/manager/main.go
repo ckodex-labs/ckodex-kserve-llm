@@ -125,9 +125,10 @@ func main() {
 
 	// Build reconciler with feature-gated sub-reconcilers
 	reconciler := &controller.LLMInferenceServiceReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("LLMInferenceService"), //nolint:staticcheck
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		Recorder:      mgr.GetEventRecorderFor("LLMInferenceService"), //nolint:staticcheck
+		OTEL_Endpoint: cfg.Observability.OTLPEndpoint,
 	}
 
 	// gRPC — independent of gateway (controls Service port definition)

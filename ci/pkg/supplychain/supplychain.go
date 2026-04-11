@@ -155,3 +155,44 @@ func slsaProvenance(imageRef, gitCommit, repoURL string) map[string]any {
 		},
 	}
 }
+
+// VerifySignature implements the COSIGN_IMAGE/COSIGN_ARTIFACT_PATH contract (Section 31.4).
+func VerifySignature(ctx context.Context, p *core.Pipeline) error {
+	image := p.Cfg.CosignImagePath
+	if image == "" {
+		return nil
+	}
+
+	ctr := p.Client.Container().
+		From(fmt.Sprintf("gcr.io/projectsigstore/cosign:%s", core.CosignVersion))
+
+	args := []string{"cosign", "verify", "--yes"}
+	if p.Cfg.CosignBundlePath != "" {
+		args = append(args, "--bundle", p.Cfg.CosignBundlePath)
+	}
+	args = append(args, image)
+
+	_, err := ctr.WithExec(args).Stdout(ctx)
+	return err
+}
+
+// VerifyProvenance implements the SLSA_PROVENANCE_PATH contract (Section 32.1).
+func VerifyProvenance(ctx context.Context, p *core.Pipeline) error {
+	if p.Cfg.SLSAProvenancePath == "" || p.Cfg.SLSAArtifactPath == "" {
+		return nil
+	}
+
+	ctr := p.Client.Container().
+		From(fmt.Sprintf("gcr.io/projectsigstore/cosign:%s", core.CosignVersion))
+
+	_, err := ctr.
+		WithExec([]string{
+			"cosign", "verify-attestation",
+			"--yes",
+			"--type", "slsaprovenance1",
+			"--bundle", p.Cfg.SLSAProvenancePath,
+			p.Cfg.SLSAArtifactPath,
+		}).
+		Stdout(ctx)
+	return err
+}

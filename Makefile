@@ -46,7 +46,8 @@ e2e-test: ## Run E2E tests (requires KIND cluster)
 
 .PHONY: build
 build: generate fmt vet ## Build manager binary
-	go build -o bin/manager -ldflags="-s -w" cmd/manager/main.go
+	@version=$$( [ -n "$$VERSION" ] && echo "$$VERSION" || echo "dev" ); \
+	go build -o bin/manager -ldflags="-s -w -X main.version=$$version" cmd/manager/main.go
 
 .PHONY: run
 run: generate fmt vet ## Run controller locally against cluster

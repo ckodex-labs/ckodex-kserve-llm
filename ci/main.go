@@ -103,6 +103,23 @@ func parseFlags() *core.Config {
 	flag.StringVar(&cfg.GitCommit, "git-commit", "", "Git commit SHA for SLSA provenance (default: $GITHUB_SHA)")
 	flag.StringVar(&cfg.GitRepoURL, "git-repo", "", "Git repo URL for SLSA provenance (default: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY)")
 	flag.Parse()
+
+	// Environment variable contract overrides
+	if v := os.Getenv("REGISTRY"); v != "" {
+		cfg.Registry = v
+		cfg.Push = true
+	}
+	if v := os.Getenv("VERSION"); v != "" {
+		cfg.Version = v
+	}
+	cfg.CosignBundlePath = os.Getenv("COSIGN_BUNDLE_PATH")
+	cfg.CosignImagePath = os.Getenv("COSIGN_IMAGE")
+	if cfg.CosignImagePath == "" {
+		cfg.CosignImagePath = os.Getenv("COSIGN_ARTIFACT_PATH")
+	}
+	cfg.SLSAArtifactPath = os.Getenv("SLSA_ARTIFACT_PATH")
+	cfg.SLSAProvenancePath = os.Getenv("SLSA_PROVENANCE_PATH")
+
 	return cfg
 }
 

@@ -11,7 +11,7 @@ import (
 )
 
 // RedactedPlaceholder replaces detected PII in audit details.
-const RedactedPlaceholder = "[REDACTED]"
+const RedactedPlaceholder = "__REDACTED__"
 
 // piiPattern holds a compiled pattern and a human-readable name for logging.
 type piiPattern struct {

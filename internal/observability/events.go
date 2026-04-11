@@ -73,22 +73,21 @@ func AddReconcileCompleteEvent(span trace.Span, name string, requeued bool) {
 }
 
 // AddInferenceFirstTokenEvent marks the time-to-first-token point on the span.
-// ttftMs is the elapsed milliseconds from request receipt to first token emitted.
 func AddInferenceFirstTokenEvent(span trace.Span, ttftMs int64, tenantID, modelName string) {
 	span.AddEvent(EventInferenceFirstToken, trace.WithAttributes(
-		attribute.Int64("ttft_ms", ttftMs),
-		attribute.String("ckodex.tenant_id", tenantID),
-		attribute.String("ckodex.model", modelName),
+		attribute.Int64(AttrPerfFirstTokenMS, ttftMs),
+		attribute.String(AttrActorID, tenantID),
+		attribute.String(AttrModelBaseID, modelName),
 	))
 }
 
 // AddInferenceCompleteEvent marks completion of an inference request.
 func AddInferenceCompleteEvent(span trace.Span, promptTokens, completionTokens int64, latencyMs int64) {
 	span.AddEvent(EventInferenceComplete, trace.WithAttributes(
-		attribute.Int64("tokens.prompt", promptTokens),
-		attribute.Int64("tokens.completion", completionTokens),
-		attribute.Int64("tokens.total", promptTokens+completionTokens),
-		attribute.Int64("latency_ms", latencyMs),
+		attribute.Int64(AttrCostTokensInput, promptTokens),
+		attribute.Int64(AttrCostTokensOutput, completionTokens),
+		attribute.Int64(AttrCostTokensTotal, promptTokens+completionTokens),
+		attribute.Int64(AttrPerfLatencyMS, latencyMs),
 	))
 }
 

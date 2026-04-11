@@ -119,8 +119,7 @@ transforms:
       .namespace   = get_env_var("NAMESPACE") ?? "default"
 
   # Promote OTel trace context fields to the log root so sinks can index them.
-  # Supports both flat (trace_id) and nested (span.trace_id) structures emitted
-  # by the OTel Go SDK slog bridge and by vLLM's structured logger.
+  # Supports both debt (trace_id) and nested (span.trace_id) structures.
   otel_correlation:
     type: remap
     inputs: ["enrich"]
@@ -136,13 +135,36 @@ transforms:
         del(.traceId)
         del(.spanId)
       }
-      # Normalise trace_id to lowercase 32-hex for Grafana Tempo link format
       .trace_id = downcase(string(.trace_id) ?? "")
       .span_id  = downcase(string(.span_id)  ?? "")
 
+  # OIS v0.1: Promote canonical inference signals from model server logs.
+  # Maps internal vLLM/LMC metrics to the OIS semantic contract.
+  ois_enrichment:
+    type: remap
+    inputs: ["otel_correlation"]
+    source: |
+      # Core Profile
+      ."exec.id" = .exec_id ?? .trace_id
+      ."exec.kind" = "inference"
+      ."exec.status" = .status ?? "ok"
+      
+      # Timing Profile
+      ."perf.first_token.ms" = .ttft ?? .ttft_ms
+      ."perf.latency.ms" = .latency ?? .duration_ms
+      ."perf.queue.ms" = .queue_time ?? .queue_ms
+      
+      # Economic Profile
+      ."cost.tokens.input" = .prompt_tokens ?? .input_tokens
+      ."cost.tokens.output" = .completion_tokens ?? .output_tokens
+      ."cost.tokens.total" = .total_tokens ?? (."cost.tokens.input" + ."cost.tokens.output")
+      
+      # Cleanup internal vLLM fields if they were promoted
+      del(.ttft); del(.ttft_ms); del(.prompt_tokens); del(.completion_tokens); del(.total_tokens)
+
   filter_noise:
     type: filter
-    inputs: ["otel_correlation"]
+    inputs: ["ois_enrichment"]
     condition:
       type: vrl
       source: '.level != "debug" && .level != "trace"'

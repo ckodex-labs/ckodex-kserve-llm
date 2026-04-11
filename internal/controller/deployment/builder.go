@@ -16,6 +16,7 @@ import (
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 )
 
 // SPIREInjector defines the interface for SPIRE sidecar injection.
@@ -29,6 +30,7 @@ type Builder struct {
 	Recorder                record.EventRecorder
 	SPIRE                   SPIREInjector
 	EnableHardwareSelection bool
+	OTEL_Endpoint           string // Contract: OTEL_EXPORTER_OTLP_ENDPOINT
 }
 
 // Build constructs the desired Deployment spec.
@@ -78,11 +80,14 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 
 	b.applyEngineSelection(llmSvc, podSpec, hwType)
 
-	b.ensureVLLMEnv(podSpec)
+	b.ensureVLLMEnv(llmSvc, podSpec)
 
 	if b.SPIRE != nil {
 		b.SPIRE.InjectSidecar(podSpec, llmSvc)
 	}
+
+	// OIS v0.1: Refined Telemetry Sinks (Vector Sidecar)
+	b.injectVector(llmSvc, podSpec)
 
 	for k, v := range llmSvc.Spec.CostAllocationTags {
 		labels["ckodex.cost/"+strings.ReplaceAll(k, ".", "-")] = v
@@ -533,15 +538,32 @@ func (b *Builder) applyRestrictedSecurityContext(c *corev1.Container) {
 	}
 }
 
-func (b *Builder) ensureVLLMEnv(podSpec *corev1.PodSpec) {
+func (b *Builder) ensureVLLMEnv(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
 	if len(podSpec.Containers) == 0 {
 		return
 	}
 	c := &podSpec.Containers[0]
+
+	// OIS v0.1 Identity Context
+	modelID := llmSvc.Spec.Model.Name
+	if modelID == "" {
+		modelID = strings.ReplaceAll(llmSvc.Spec.Model.URI, "/", ".")
+	}
+	engineURN := observability.URN("engine", llmSvc.Spec.Engine)
+	if llmSvc.Spec.Engine == "" {
+		engineURN = observability.URN("engine", "vllm")
+	}
+
 	envs := map[string]string{
 		"HOME":                    "/tmp",
 		"TORCHINDUCTOR_CACHE_DIR": "/tmp",
 		"VLLM_LOGGING_LEVEL":      "INFO",
+
+		// OIS Core Profile (Section 26.1)
+		"OIS_MODEL_ID":   modelID,
+		"OIS_MODEL_URN":  observability.URN("model", modelID),
+		"OIS_ENGINE_URN": engineURN,
+		"OIS_ACTOR_URN":  observability.URN("actor", llmSvc.Namespace), // Default to namespace authority
 	}
 	for k, v := range envs {
 		found := false
@@ -554,6 +576,27 @@ func (b *Builder) ensureVLLMEnv(podSpec *corev1.PodSpec) {
 		if !found {
 			c.Env = append(c.Env, corev1.EnvVar{Name: k, Value: v})
 		}
+	}
+}
+
+func (b *Builder) injectVector(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
+	// 1. Determine sink configuration (Contract: User Spec > Operator Config > Default)
+	sinkType := "stdout"
+
+	if b.OTEL_Endpoint != "" {
+		sinkType = "otlp"
+	}
+
+	if llmSvc.Spec.Observability != nil && llmSvc.Spec.Observability.Sink != nil {
+		sinkType = llmSvc.Spec.Observability.Sink.Type
+	}
+
+	// 2. Inject sidecar if telemetry is enabled or OTLP sink is active
+	if sinkType != "stdout" || b.OTEL_Endpoint != "" {
+		// The ConfigMap is managed by the reconciler; here we just point to its name.
+		// Convention: <name>-vector-config
+		configMapName := llmSvc.Name + "-vector-config"
+		observability.InjectVectorSidecar(podSpec, configMapName)
 	}
 }
 

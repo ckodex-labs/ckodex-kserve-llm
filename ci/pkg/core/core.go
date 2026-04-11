@@ -29,6 +29,8 @@ const (
 
 type Config struct {
 	ImageRef   string
+	Registry   string // Contract: Push target
+	Version    string // Contract: Override git version
 	Push       bool
 	Sign       bool
 	Attest     bool
@@ -36,6 +38,12 @@ type Config struct {
 	SkipScan   bool
 	GitCommit  string
 	GitRepoURL string
+
+	// Supply Chain Verification Paths (Contract)
+	CosignBundlePath    string
+	CosignImagePath     string
+	SLSAArtifactPath    string
+	SLSAProvenancePath  string
 }
 
 // Pipeline holds Dagger client + source directory for all stages.

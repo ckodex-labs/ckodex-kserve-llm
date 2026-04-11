@@ -159,6 +159,10 @@ type OperatorConfig struct {
 	// unconditionally (backward-compatible default for clusters without Prometheus).
 	// Override via CKODEX_PROMETHEUS_URL.
 	PrometheusURL string `json:"prometheusURL,omitempty"`
+
+	// Version is the operator version, injected at build time.
+	// Defaults to "dev". Override via VERSION environment variable (contract).
+	Version string `json:"version"`
 }
 
 // DefaultsConfig holds default workload configuration.
@@ -327,6 +331,7 @@ func DefaultOperatorConfig() OperatorConfig {
 		// Empty addr → in-memory fallback; override with CKODEX_SEMANTIC_CACHE_ADDR in prod.
 		SemanticCacheAddr: "",
 		SemanticCacheTTL:  1 * time.Hour,
+		Version:           "dev",
 	}
 }
 
@@ -350,6 +355,10 @@ func (c *OperatorConfig) LoadFromEnv() {
 	envStr("CKODEX_SEMANTIC_CACHE_ADDR", &c.SemanticCacheAddr)
 	envDuration("CKODEX_SEMANTIC_CACHE_TTL", &c.SemanticCacheTTL)
 	envStr("CKODEX_PROMETHEUS_URL", &c.PrometheusURL)
+
+	// OIS / OTel Contract Overrides
+	envStr("VERSION", &c.Version)
+	envStr("OTEL_EXPORTER_OTLP_ENDPOINT", &c.Observability.OTLPEndpoint)
 }
 
 func envBool(key string, target *bool) {

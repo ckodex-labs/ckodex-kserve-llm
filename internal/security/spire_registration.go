@@ -53,6 +53,13 @@ type RegistrationEntry struct {
 type SPIRERegistrationReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// SpireReconciler provides SPIFFE ID generation.
+	SpireReconciler *SPIREReconciler
+	// VClusterMode indicates we are running in a virtual cluster.
+	VClusterMode bool
+	// HostNamespace is the physical shadow namespace in the host cluster.
+	HostNamespace string
 }
 
 // ReconcileRegistrationEntry creates or updates the SPIRE registration entry ConfigMap

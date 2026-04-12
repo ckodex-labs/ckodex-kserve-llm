@@ -435,18 +435,21 @@ func TestReconcileOPA_Idempotent(t *testing.T) {
 // ---- SPIFFEIDForService ----------------------------------------------------
 
 func TestSPIFFEIDForService_Format(t *testing.T) {
-	id := SPIFFEIDForService("prod", "vllm-sa", "llama3")
+	r := &SPIREReconciler{}
+	id := r.SPIFFEIDForService("prod", "vllm-sa", "llama3")
 	assert.Equal(t, "spiffe://ckodex.com/ns/prod/sa/vllm-sa/model/llama3", id)
 }
 
 func TestSPIFFEIDForService_TrustDomain(t *testing.T) {
-	id := SPIFFEIDForService("any", "sa", "model")
+	r := &SPIREReconciler{}
+	id := r.SPIFFEIDForService("any", "sa", "model")
 	assert.Contains(t, id, "spiffe://"+SPIFFETrustDomain+"/")
 }
 
 func TestSPIFFEIDForService_DifferentInputs(t *testing.T) {
-	a := SPIFFEIDForService("ns1", "sa1", "m1")
-	b := SPIFFEIDForService("ns2", "sa2", "m2")
+	r := &SPIREReconciler{}
+	a := r.SPIFFEIDForService("ns1", "sa1", "m1")
+	b := r.SPIFFEIDForService("ns2", "sa2", "m2")
 	assert.NotEqual(t, a, b)
 }
 
@@ -865,8 +868,9 @@ func TestReconcileRegistrationEntry_CreatesConfigMap(t *testing.T) {
 	svc := minimalLLMSvc("llama3", "default")
 
 	r := &SPIRERegistrationReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
-		Scheme: scheme,
+		Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:          scheme,
+		SpireReconciler: &SPIREReconciler{},
 	}
 
 	require.NoError(t, r.ReconcileRegistrationEntry(context.Background(), svc))
@@ -887,8 +891,9 @@ func TestReconcileRegistrationEntry_Idempotent(t *testing.T) {
 	svc := minimalLLMSvc("phi3", "staging")
 
 	r := &SPIRERegistrationReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
-		Scheme: scheme,
+		Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:          scheme,
+		SpireReconciler: &SPIREReconciler{},
 	}
 
 	require.NoError(t, r.ReconcileRegistrationEntry(context.Background(), svc))
@@ -900,8 +905,9 @@ func TestReconcileRegistrationEntry_EntryContainsTTL(t *testing.T) {
 	svc := minimalLLMSvc("gemma", "prod")
 
 	r := &SPIRERegistrationReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
-		Scheme: scheme,
+		Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:          scheme,
+		SpireReconciler: &SPIREReconciler{},
 	}
 
 	require.NoError(t, r.ReconcileRegistrationEntry(context.Background(), svc))
@@ -922,8 +928,9 @@ func TestReconcileRegistrationEntry_EntryContainsDNSSAN(t *testing.T) {
 	svc := minimalLLMSvc("mistral", "default")
 
 	r := &SPIRERegistrationReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
-		Scheme: scheme,
+		Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:          scheme,
+		SpireReconciler: &SPIREReconciler{},
 	}
 
 	require.NoError(t, r.ReconcileRegistrationEntry(context.Background(), svc))
@@ -944,8 +951,9 @@ func TestDeleteRegistrationEntry_RemovesConfigMap(t *testing.T) {
 	svc := minimalLLMSvc("llama3", "default")
 
 	r := &SPIRERegistrationReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
-		Scheme: scheme,
+		Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:          scheme,
+		SpireReconciler: &SPIREReconciler{},
 	}
 
 	require.NoError(t, r.ReconcileRegistrationEntry(context.Background(), svc))

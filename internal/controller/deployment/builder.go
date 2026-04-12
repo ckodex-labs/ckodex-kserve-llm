@@ -17,6 +17,7 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/storage"
 )
 
 // SPIREInjector defines the interface for SPIRE sidecar injection.
@@ -29,8 +30,9 @@ type Builder struct {
 	Client                  client.Client
 	Recorder                record.EventRecorder
 	SPIRE                   SPIREInjector
+	EnableHardwareSelection bool
 	OTEL_Endpoint           string // Contract: OTEL_EXPORTER_OTLP_ENDPOINT
-	
+
 	// AirGap configuration
 	AirGappedMode bool
 	LocalRegistry string // e.g. "local-registry.corp.internal"
@@ -803,7 +805,5 @@ func (b *Builder) rewriteImage(image string) string {
 
 // storageResolveAirGap uses the storage package to rewrite URIs.
 func (b *Builder) storageResolveAirGap(uri string) string {
-	// We use the storage package's resolution logic.
-	// We'll import "github.com/ckodex-labs/kserve-llm-operator/internal/storage"
-	return ResolveAirGappedURI(uri, b.LocalRegistry)
+	return storage.ResolveAirGappedURI(uri, b.LocalRegistry)
 }

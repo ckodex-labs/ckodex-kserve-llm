@@ -119,6 +119,7 @@ func main() {
 		"enableAutoscaler", cfg.Features.EnableAutoscaler,
 		"enableSecurity", cfg.Features.EnableSecurity,
 		"enableOTelPipeline", cfg.Features.EnableOTelPipeline,
+		"enableExperimentalAgents", cfg.Features.EnableExperimentalAgents,
 		"auditSinkType", cfg.AuditSink.Type,
 		"piiRedaction", cfg.AuditSink.PIIRedaction,
 	)
@@ -313,21 +314,25 @@ func main() {
 	}
 
 	// Set up Agent controller — validates model + skill registry bindings.
-	if err := (&controller.AgentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Agent")
-		os.Exit(1)
-	}
+	// Experimental: gated behind EnableExperimentalAgents feature flag.
+	if cfg.Features.EnableExperimentalAgents {
+		if err := (&controller.AgentReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "Agent")
+			os.Exit(1)
+		}
 
-	// Set up SkillRegistry controller — validates skill entries and maintains entryCount.
-	if err := (&controller.SkillRegistryReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "SkillRegistry")
-		os.Exit(1)
+		// Set up SkillRegistry controller — validates skill entries and maintains entryCount.
+		if err := (&controller.SkillRegistryReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "SkillRegistry")
+			os.Exit(1)
+		}
+		setupLog.Info("experimental Agent and SkillRegistry controllers enabled")
 	}
 
 	// Set up ModelOnboarding controller — drives multi-stage model promotion pipeline.

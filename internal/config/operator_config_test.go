@@ -33,6 +33,7 @@ func TestDefaultOperatorConfig_FeatureGates(t *testing.T) {
 	assert.False(t, cfg.Features.EnableSessions)
 	assert.False(t, cfg.Features.EnableGRPC)
 	assert.False(t, cfg.Features.EnableWebhooks)
+	assert.False(t, cfg.Features.EnableExperimentalAgents)
 }
 
 func TestDefaultOperatorConfig_AuditSink(t *testing.T) {
@@ -220,6 +221,7 @@ func TestDefaultFeatureGates_FromEnv_AllGates(t *testing.T) {
 		{"CKODEX_FEATURE_ENABLE_SESSIONS", func(f config.FeatureGates) bool { return f.EnableSessions }},
 		{"CKODEX_FEATURE_ENABLE_GRPC", func(f config.FeatureGates) bool { return f.EnableGRPC }},
 		{"CKODEX_FEATURE_ENABLE_WEBHOOKS", func(f config.FeatureGates) bool { return f.EnableWebhooks }},
+		{"CKODEX_FEATURE_ENABLE_EXPERIMENTAL_AGENTS", func(f config.FeatureGates) bool { return f.EnableExperimentalAgents }},
 	}
 
 	defaults := config.DefaultFeatureGates()

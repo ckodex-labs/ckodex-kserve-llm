@@ -63,6 +63,11 @@ type FeatureGates struct {
 	// EnableExperimentalStatusHardening enables the new DeploymentReady status condition
 	// and stricter status reconciliation logic.
 	EnableExperimentalStatusHardening bool `json:"enableExperimentalStatusHardening"`
+
+	// EnableExperimentalAgents enables the Agent and SkillRegistry controllers.
+	// These CRDs are under active development and may change without notice.
+	// Set CKODEX_FEATURE_ENABLE_EXPERIMENTAL_AGENTS=true to opt in.
+	EnableExperimentalAgents bool `json:"enableExperimentalAgents"`
 }
 
 // DefaultFeatureGates returns production-safe defaults.
@@ -83,6 +88,7 @@ func DefaultFeatureGates() FeatureGates {
 		EnableWebhooks:                      false, // requires cert-manager in cluster; opt-in
 		EnableExperimentalHardwareSelection: false,
 		EnableExperimentalStatusHardening:   false,
+		EnableExperimentalAgents:            false,
 	}
 }
 
@@ -103,6 +109,7 @@ func (f *FeatureGates) FromEnv() {
 	envBool("CKODEX_FEATURE_ENABLE_WEBHOOKS", &f.EnableWebhooks)
 	envBool("CKODEX_FEATURE_ENABLE_EXPERIMENTAL_HARDWARE_SELECTION", &f.EnableExperimentalHardwareSelection)
 	envBool("CKODEX_FEATURE_ENABLE_EXPERIMENTAL_STATUS_HARDENING", &f.EnableExperimentalStatusHardening)
+	envBool("CKODEX_FEATURE_ENABLE_EXPERIMENTAL_AGENTS", &f.EnableExperimentalAgents)
 }
 
 // OperatorConfig holds all operator-level configuration.

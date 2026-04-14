@@ -27,16 +27,24 @@ func Test(ctx context.Context, p *core.Pipeline) (string, error) {
 	return out, err
 }
 
-// coverageGateScript returns a shell script that parses coverage.out and
-// fails if any measured package falls below its threshold.
+// coverageGateScript returns a shell script that parses the existing coverage.out 
+// and fails if any measured package falls below its threshold.
 func coverageGateScript(ctrlMin, gwMin, storeMin, authMin, inferMin, obsMin int) string {
 	return fmt.Sprintf(`
 set -e
+if [ ! -f coverage.out ]; then
+  echo "FAIL: coverage.out not found" >&2; exit 1
+fi
+
 check() {
   pkg=$1; min=$2
-  # Run go test -cover for the specific package to get weighted package-level coverage.
-  pct=$(go test -cover "./internal/${pkg}" | grep -oE "coverage: [0-9.]+" | awk '{print int($2)}')
-  if [ -z "$pct" ]; then pct=0; fi
+  # Extract total coverage for the specific internal package from the profile.
+  # go tool cover -func output format: <file>:<line>: <func> <percent>
+  pct=$(go tool cover -func=coverage.out | grep "internal/${pkg}/" | awk '
+    { sum += $NF; count++ }
+    END { if (count > 0) print int(sum/count); else print 0 }
+  ')
+  
   echo "Coverage internal/${pkg}: ${pct}%% (min: ${min}%%)"
   if [ "$pct" -lt "$min" ]; then
     echo "FAIL: internal/${pkg} coverage ${pct}%% < ${min}%% threshold" >&2; exit 1

@@ -25,16 +25,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install Dagger CLI
-        run: |
-          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=0.15.0 sh
-          sudo mv bin/dagger /usr/local/bin/dagger
-          dagger version
-
-      # All pipeline logic lives in ci/main.go (Go, not shell).
-      # No untrusted github.event.* context is interpolated into run: commands.
-      - name: Run pipeline (lint + test + build + scan)
-        run: go run ./ci/main.go
+      - name: Run Dagger Pipeline
+        uses: dagger/dagger-for-github-action@v6
+        with:
+          version: "0.20.2"
+          verb: run
+          args: go run ./ci/main.go
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
 

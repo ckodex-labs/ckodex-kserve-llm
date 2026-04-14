@@ -67,3 +67,14 @@ func (p *Pipeline) GoBase() *dagger.Container {
 		WithEnvVariable("GOFLAGS", "-mod=readonly").
 		WithExec([]string{"go", "mod", "download"})
 }
+
+// LintBase returns a container using the official golangci-lint image.
+func (p *Pipeline) LintBase() *dagger.Container {
+	return p.Client.Container().
+		From(GolangciLintImage).
+		WithMountedDirectory("/src", p.Source).
+		WithWorkdir("/src").
+		WithMountedCache("/go/pkg/mod", p.Client.CacheVolume("go-mod")).
+		WithMountedCache("/root/.cache/go-build", p.Client.CacheVolume("go-build")).
+		WithMountedCache("/root/.cache/golangci-lint", p.Client.CacheVolume("golangci-lint"))
+}

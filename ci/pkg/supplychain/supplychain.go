@@ -11,7 +11,8 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/ci/pkg/core"
 )
 
-func SBOM(ctx context.Context, p *core.Pipeline) (*dagger.File, error) {
+func SBOM(ctx context.Context, p *core.Pipeline, imageRef string) (*dagger.File, error) {
+	// Generate SBOM from the built image to ensure we capture the final state.
 	ctr := p.Client.Container().
 		From(fmt.Sprintf("aquasec/trivy:%s", core.TrivyVersion)).
 		WithMountedDirectory("/src", p.Source).
@@ -20,7 +21,7 @@ func SBOM(ctx context.Context, p *core.Pipeline) (*dagger.File, error) {
 			"trivy", "image",
 			"--format", "cyclonedx",
 			"--output", "sbom.cdx.json",
-			"ghcr.io/ckodex-labs/ckodex-kserve-llm:dev",
+			imageRef,
 		})
 
 	return ctr.File("sbom.cdx.json"), nil

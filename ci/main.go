@@ -27,13 +27,14 @@ func main() {
 	defer func() { _ = client.Close() }()
 
 	source := client.Host().Directory(".", dagger.HostDirectoryOpts{
-		Exclude: []string{".git", "bin", "ci"},
+		Exclude: []string{".git", "bin", "node_modules"},
 	})
 
 	p := &core.Pipeline{Client: client, Source: source, Cfg: cfg}
 
 	// Lint — always run
-	if _, err := lint.Lint(ctx, p); err != nil {
+	if out, err := lint.Lint(ctx, p); err != nil {
+		fmt.Fprintln(os.Stderr, out)
 		fatal("lint", err)
 	}
 	log("lint passed")
@@ -73,7 +74,7 @@ func main() {
 
 	// Supply Chain Security (SBOM + Sign + Attest)
 	if !cfg.SkipScan {
-		sbomFile, err := supplychain.SBOM(ctx, p)
+		sbomFile, err := supplychain.SBOM(ctx, p, imageRef)
 		if err != nil {
 			fatal("sbom generation", err)
 		}

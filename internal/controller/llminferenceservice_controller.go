@@ -542,7 +542,7 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	r.APIReader = mgr.GetAPIReader()
 	r.DeploymentBuilder = &deployment.Builder{
 		Client:                  mgr.GetClient(),
-		Recorder:                mgr.GetEventRecorderFor("ckodex-llm-operator"), //nolint:staticcheck
+		Recorder:                mgr.GetEventRecorderFor("ckodex-llm-operator"),
 		SPIRE:                   r.SPIRE,
 		EnableHardwareSelection: r.EnableHardwareSelection,
 		OTEL_Endpoint:           r.OTEL_Endpoint,

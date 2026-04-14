@@ -7,6 +7,7 @@ Licensed under the Apache License, Version 2.0.
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -399,10 +400,13 @@ func (c *OperatorConfig) LoadFromEnv() {
 }
 
 func envBool(key string, target *bool) {
-	if v, ok := os.LookupEnv(key); ok {
-		if parsed, err := strconv.ParseBool(v); err == nil {
-			*target = parsed
+	if val, ok := os.LookupEnv(key); ok {
+		parsed, err := strconv.ParseBool(val)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: invalid boolean value for %s: %s (using default: %t)\n", key, val, *target)
+			return
 		}
+		*target = parsed
 	}
 }
 
@@ -413,17 +417,23 @@ func envStr(key string, target *string) {
 }
 
 func envFloat(key string, target *float64) {
-	if v, ok := os.LookupEnv(key); ok {
-		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-			*target = parsed
+	if val, ok := os.LookupEnv(key); ok {
+		parsed, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: invalid float value for %s: %s (using default: %f)\n", key, val, *target)
+			return
 		}
+		*target = parsed
 	}
 }
 
 func envDuration(key string, target *time.Duration) {
-	if v, ok := os.LookupEnv(key); ok && v != "" {
-		if parsed, err := time.ParseDuration(v); err == nil {
-			*target = parsed
+	if val, ok := os.LookupEnv(key); ok && val != "" {
+		parsed, err := time.ParseDuration(val)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: invalid duration value for %s: %s (using default: %v)\n", key, val, *target)
+			return
 		}
+		*target = parsed
 	}
 }

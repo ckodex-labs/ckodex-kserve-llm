@@ -128,7 +128,7 @@ func main() {
 	reconciler := &controller.LLMInferenceServiceReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
-		Recorder:      mgr.GetEventRecorderFor("LLMInferenceService"), //nolint:staticcheck
+		Recorder:      mgr.GetEventRecorderFor("llminferenceservice-controller"),
 		OTEL_Endpoint: cfg.Observability.OTLPEndpoint,
 		AirGappedMode: cfg.AirGappedMode,
 		LocalRegistry: cfg.LocalRegistry,
@@ -276,7 +276,7 @@ func main() {
 		Client:     mgr.GetClient(),
 		Scheme:     mgr.GetScheme(),
 		HTTPClient: &http.Client{},
-		Recorder:   mgr.GetEventRecorderFor("LLMLoraAdapter"), //nolint:staticcheck
+		Recorder:   mgr.GetEventRecorderFor("llmloraadapter-controller"),
 		Audit:      reconciler.Audit,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LLMLoraAdapter")
@@ -307,7 +307,7 @@ func main() {
 	if err := (&controller.LocalModelCacheReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("LocalModelCache"), //nolint:staticcheck // TODO(ckodex): migrate to GetEventRecorder once Recorder field adopts events.EventRecorder
+		Recorder: mgr.GetEventRecorderFor("localmodelcache-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LocalModelCache")
 		os.Exit(1)
@@ -356,7 +356,7 @@ func main() {
 	if err := (&controller.ASRInferenceServiceReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("ASRInferenceService"), //nolint:staticcheck
+		Recorder: mgr.GetEventRecorderFor("asrinferenceservice-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ASRInferenceService")
 		os.Exit(1)

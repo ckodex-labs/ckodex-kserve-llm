@@ -8,20 +8,25 @@ import (
 )
 
 func Lint(ctx context.Context, p *core.Pipeline) (string, error) {
-	// Two-step lint: go vet (fast, built-in) + golangci-lint (comprehensive)
-	goVet, err := p.GoBase().
-		WithExec([]string{"go", "vet", "./..."}).
-		Stdout(ctx)
-	if err != nil {
-		return goVet, fmt.Errorf("go vet: %w", err)
+	// 1. go vet (fast, built-in)
+	goVetCtr := p.GoBase().WithExec([]string{"go", "vet", "./..."})
+	if _, err := goVetCtr.Sync(ctx); err != nil {
+		out, _ := goVetCtr.Stdout(ctx)
+		return out, fmt.Errorf("go vet: %w", err)
 	}
 
-	return p.GoBase().
-		WithExec([]string{"go", "install", "github.com/golangci/golangci-lint/cmd/golangci-lint@" + core.GolangciLintVer}).
+	// 2. golangci-lint (using optimized image)
+	lintCtr := p.LintBase().
 		WithExec([]string{
 			"golangci-lint", "run", "-v",
-			"--timeout", "5m",
+			"--timeout", "10m",
 			"--out-format", "line-number",
-		}).
-		Stdout(ctx)
+		})
+	
+	if _, err := lintCtr.Sync(ctx); err != nil {
+		out, _ := lintCtr.Stdout(ctx)
+		return out, fmt.Errorf("golangci-lint: %w", err)
+	}
+	
+	return "lint passed", nil
 }

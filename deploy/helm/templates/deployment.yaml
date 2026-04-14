@@ -80,6 +80,21 @@ spec:
             - name: CKODEX_HF_MIRROR_URL
               value: {{ .Values.registry.mirrorURL | quote }}
             {{- end }}
+            # Feature Gates
+            - name: CKODEX_FEATURE_ENABLE_SECURITY
+              value: {{ .Values.features.enableSecurity | quote }}
+            - name: CKODEX_FEATURE_ENABLE_AUTOSCALER
+              value: {{ .Values.features.enableAutoscaler | quote }}
+            - name: CKODEX_FEATURE_ENABLE_GATEWAY
+              value: {{ .Values.features.enableGateway | quote }}
+            - name: CKODEX_FEATURE_ENABLE_SCHEDULER
+              value: {{ .Values.features.enableScheduler | quote }}
+            - name: CKODEX_FEATURE_ENABLE_EXPERIMENTAL_AGENTS
+              value: {{ .Values.features.enableExperimentalAgents | quote }}
+            - name: CKODEX_FEATURE_ENABLE_EXPERIMENTAL_HARDWARE_SELECTION
+              value: {{ .Values.features.enableExperimentalHardwareSelection | quote }}
+            - name: CKODEX_FEATURE_ENABLE_EXPERIMENTAL_STATUS_HARDENING
+              value: {{ .Values.features.enableExperimentalStatusHardening | quote }}
           resources: {{ toYaml .Values.controller.resources | nindent 12 }}
           securityContext: {{ toYaml .Values.controller.securityContext | nindent 12 }}
           volumeMounts:

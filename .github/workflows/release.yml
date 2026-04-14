@@ -5,25 +5,26 @@ on:
     tags:
       - "v*"
 
-# id-token write is required for cosign keyless signing (OIDC → Fulcio/Rekor).
 permissions:
-  contents: write      # create GitHub Release + upload assets
-  packages: write      # push to ghcr.io
-  id-token: write      # OIDC token for cosign keyless signing
-
-env:
-  REGISTRY: ghcr.io
+  contents: write
+  packages: write
+  id-token: write
 
 jobs:
-  release:
-    name: Build + Sign + Attest + Release
+  # 1. Verification & Build
+  # Runs the Dagger pipeline to ensure the codebase passes all guardrails (Lint/Test/Scan/Lula)
+  # then performs the multi-arch build and pushes the images to GHCR.
+  build:
+    name: Verify + Build + Push
     runs-on: ubuntu-latest
-
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-name: ${{ steps.build.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history for provenance materials
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -39,56 +40,92 @@ jobs:
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Obtain a GitHub OIDC token for cosign keyless signing.
-      # Token is short-lived and scoped to this workflow run only.
-      # Passed via env var (never interpolated into shell commands).
-      - name: Obtain OIDC token
-        id: oidc
+      - name: Run Dagger Release Pipeline
+        id: build
         run: |
-          TOKEN=$(curl -s \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sigstore" | jq -r '.value')
-          echo "::add-mask::$TOKEN"
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
-      # All pipeline logic (build, test, sign, attest) lives in Go (ci/main.go).
-      # Trusted github.* context values are passed via env: — not shell-interpolated.
-      - name: Run release pipeline
-        run: go run ./ci/main.go --push --sign --attest
+          # The --push flag triggers the image push to GHCR via Dagger.
+          # We capture the digest for the SLSA generator.
+          go run ./ci/main.go --push --sign
+          # Extract digest and name for the next job
+          echo "digest=$(cat bin/image-digest.txt)" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${{ github.repository }}" >> "$GITHUB_OUTPUT"
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           REGISTRY_USERNAME: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SIGSTORE_ID_TOKEN: ${{ steps.oidc.outputs.token }}
-          IMAGE_REF: ${{ env.REGISTRY }}/${{ github.repository }}:${{ github.ref_name }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
 
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+  # 2. Binary Release (GoReleaser)
+  # Generates the multi-arch binaries and creates a GitHub Release (Draft).
+  binary-release:
+    name: Binary Release
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          name: sbom-${{ github.ref_name }}
-          path: sbom/
-          retention-days: 365
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload SLSA provenance
-        uses: actions/upload-artifact@v4
-        with:
-          name: slsa-provenance-${{ github.ref_name }}
-          path: slsa-provenance.json
-          retention-days: 365
+  # 3. SLSA L3 Image Provenance
+  # Generates non-forgeable provenance for the pushed container images.
+  image-provenance:
+    needs: [build]
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
+    with:
+      image: ${{ needs.build.outputs.image-name }}
+      digest: ${{ needs.build.outputs.image-digest }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            sbom/sbom.cdx.json
-            sbom/sbom.spdx.json
-            slsa-provenance.json
+  # 4. SLSA L3 Binary Provenance
+  # Generates non-forgeable provenance for the binaries in the GitHub Release.
+  binary-provenance:
+    needs: [binary-release]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: "${{ needs.binary-release.outputs.hashes }}"
+      upload-assets: true
+
+  # 5. Helm Chart Release
+  # Packages the Helm chart and pushes it to GHCR as an OCI artifact.
+  helm-release:
+    name: Helm Release
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Package & Push Chart
+        run: |
+          helm package deploy/helm
+          helm push ckodex-kserve-llm-operator-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+

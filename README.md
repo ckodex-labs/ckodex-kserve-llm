@@ -110,6 +110,14 @@ make kind-setup
 # Note: uses OCI ghcr.io/kserve/charts/kserve-resources
 cd local && bash 02-prereqs.sh && bash 03-kserve-helm-install.sh
 
+### High-Assurance CI/CD (Dagger)
+To verify your local environment against the production-grade **SSDLC & SLSA L3** guardrails, use our Dagger-powered governance pipeline:
+
+```bash
+# Verify Linting, Security Scanning, SBOM, and Compliance Evidence
+DOCKER_HOST=unix:///var/run/docker.sock go run ./ci/main.go --skip-tests
+```
+
 # 3. Build & Deploy Operator
 make generate manifests
 make docker-build
@@ -185,7 +193,19 @@ To deploy Gemma 4 E2B on a standard KIND cluster (CPU only):
 - **Strict Admission Control**: Power-of-2 parallelism enforcement and Guaranteed QoS for GPU workloads.
 - **LocalModelCache**: Zero-copy model loading via node-local storage and hostPath mounts.
 
+### Experimental Feature Gates
+Some features are in Active Development and require explicit opt-in via Helm `features.*` or `CKODEX_FEATURE_*` environment variables.
+
+| Feature Gate | Default | Subsystems Enabled | Stability |
+| :--- | :--- | :--- | :--- |
+| `EnableExperimentalAgents` | `false` | `Agent`, `SkillRegistry` controllers | ALPHA |
+| `EnableExperimentalHardwareSelection` | `false` | Multi-arch image tag mapping | ALPHA |
+| `EnableExperimentalStatusHardening` | `false` | Atomic DeploymentReady checks | BETA |
+| `EnableSecurity` | `false` | SPIRE, eBPF, OPA, Vault | BETA |
+
 ### Production Hardening
+- **SSDLC Enforcement**: Zero-tolerance for unchecked errors, weak crypto, and variable shadowing via strict golangci-lint profile.
+- **SLSA L3 Provenance**: Automated provenance generation and OIDC-signed build attestations.
 - **Guaranteed QoS**: Automatic alignment of CPU/Memory requests and limits for stable scheduling.
 - **Graceful Termination**: 30-second default termination grace period for all inference workloads.
 - **Atomic Reconciliation**: High-performance status updates using SSA-style Patching with DeepEqual guards.

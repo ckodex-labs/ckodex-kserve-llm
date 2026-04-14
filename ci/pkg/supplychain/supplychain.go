@@ -100,6 +100,9 @@ func Attest(ctx context.Context, p *core.Pipeline, imageRef string, sbomFile *da
 			p.Client.SetSecret("sigstore-id-token-prov", idToken))
 	}
 
+	// NOTE: This generates the SLSA v1.0 predicate for 'Manual' or 'Local' attestation.
+	// In production (GHA), this is wrapped or superseded by the non-forgeable L3
+	// envelope provided by the slsa-framework/slsa-github-generator.
 	_, err = ctr2.
 		WithExec([]string{
 			"cosign", "attest",
@@ -112,6 +115,7 @@ func Attest(ctx context.Context, p *core.Pipeline, imageRef string, sbomFile *da
 	return err
 }
 
+// slsaProvenance generates a SLSA v1.0 predicate for local/development use.
 func slsaProvenance(imageRef, gitCommit, repoURL string) map[string]any {
 	if gitCommit == "" {
 		gitCommit = os.Getenv("GITHUB_SHA")

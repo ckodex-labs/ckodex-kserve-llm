@@ -161,6 +161,24 @@ observability:
     level: info
     format: json
 
+# Feature Gates
+# Controls which subsystems and experimental features are enabled.
+features:
+  # enableSecurity enables SPIFFE/SPIRE, eBPF, OPA, and Vault integration.
+  enableSecurity: false
+  # enableAutoscaler enables HPA/KEDA/WVA autoscaling.
+  enableAutoscaler: true
+  # enableGateway enables Gateway API resource management.
+  enableGateway: true
+  # enableScheduler enables the EPP scheduler.
+  enableScheduler: true
+  # enableExperimentalAgents enables the Agent and SkillRegistry controllers (M3).
+  enableExperimentalAgents: false
+  # enableExperimentalHardwareSelection enables hardware-specific image tag selection.
+  enableExperimentalHardwareSelection: false
+  # enableExperimentalStatusHardening enables the new DeploymentReady status check.
+  enableExperimentalStatusHardening: false
+
 # Chaos engine
 chaos:
   enabled: false

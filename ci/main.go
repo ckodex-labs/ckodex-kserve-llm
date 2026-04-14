@@ -102,7 +102,7 @@ func parseFlags() *core.Config {
 	flag.StringVar(&cfg.ImageRef, "image", "", "Image reference to build/push (e.g. ghcr.io/org/app:v1.0.0)")
 	flag.BoolVar(&cfg.Push, "push", false, "Push image to registry after build")
 	flag.BoolVar(&cfg.Sign, "sign", false, "Sign image with cosign keyless (requires OIDC env)")
-	flag.BoolVar(&cfg.Attest, "attest", false, "Attach SBOM + SLSA provenance attestations")
+	flag.BoolVar(&cfg.Attest, "attest", false, "Attach dev-grade SBOM + SLSA provenance attestations (L2)")
 	flag.BoolVar(&cfg.SkipTests, "skip-tests", false, "Skip test stage")
 	flag.BoolVar(&cfg.SkipScan, "skip-scan", false, "Skip Trivy vulnerability scan")
 	flag.StringVar(&cfg.GitCommit, "git-commit", "", "Git commit SHA for SLSA provenance (default: $GITHUB_SHA)")

@@ -93,19 +93,13 @@ dockers_v2:
     flags:
       - "--target=storage-initializer"
 
-# Image Signing (Cosign)
-signs:
-  - id: cosign
-    cmd: cosign
-    artifacts: images
-    args:
-      - "sign"
-      - "--key"
-      - "env://COSIGN_PRIVATE_KEY"
-      - "${artifact}"
-    env:
-      - COSIGN_PASSWORD= # Set in CI secrets if needed
+# Image Signing (Cosign) — Managed by CI for keyless OIDC signing.
+# GoReleaser only handles binary signing here if needed (deprecated in favor of SLSA).
+# signs: [] 
 
-# SLSA Provenance
+# SLSA Provenance (L1/L2 Metadata)
+# L3 Provenance is delegated to the slsa-framework/slsa-github-generator in GHA.
 provenance:
   enabled: true
+  # Generates the .intoto.jsonl predicate that the SLSA generator will encapsulate.
+  # This provides the base identity for the non-forgeable L3 envelope.

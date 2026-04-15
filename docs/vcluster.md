@@ -27,9 +27,9 @@ Add the following to your `vcluster.yaml` or use a plugin:
 sync:
   generic:
     config: |-
-      - apiVersion: serving.ckodex.com/v1alpha2
+      - apiVersion: serving.ckodex.com/v1
         kind: LLMInferenceService
-      - apiVersion: serving.ckodex.com/v1alpha2
+      - apiVersion: serving.ckodex.com/v1
         kind: LLMLoraAdapter
 ```
 

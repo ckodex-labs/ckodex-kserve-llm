@@ -171,7 +171,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - serving.ckodex.io
+  - serving.ckodex.com
   resources:
   - coactorgroups
   - inferenceactors
@@ -185,7 +185,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - serving.ckodex.io
+  - serving.ckodex.com
   resources:
   - coactorgroups/status
   - inferenceactors/status

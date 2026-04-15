@@ -103,3 +103,13 @@ provenance:
   enabled: true
   # Generates the .intoto.jsonl predicate that the SLSA generator will encapsulate.
   # This provides the base identity for the non-forgeable L3 envelope.
+
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum

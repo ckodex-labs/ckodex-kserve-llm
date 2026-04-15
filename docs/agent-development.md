@@ -10,7 +10,7 @@ Agents are higher-level abstractions that bind a specific **LLMInferenceService*
 Use the `Agent` CRD to define the agent's identity and its underlying model backend.
 
 ```yaml
-apiVersion: serving.ckodex.io/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: Agent
 metadata:
   name: customer-support-agent
@@ -27,7 +27,7 @@ spec:
 Skills are reusable tool definitions (functions) that an agent can invoke during its inference cycle. These are managed via `SkillRegistry`.
 
 ```yaml
-apiVersion: serving.ckodex.io/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: SkillRegistry
 metadata:
   name: platform-tools
@@ -52,7 +52,7 @@ spec:
 You can bind specific skills to your agent using `SkillRef`.
 
 ```yaml
-apiVersion: serving.ckodex.io/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: Agent
 metadata:
   name: customer-support-agent

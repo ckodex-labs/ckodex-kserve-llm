@@ -30,7 +30,7 @@ Gemma 4 ships in four performance-optimized sizes:
 Gemma 4 E4B is the best all-rounder. Use the following manifest:
 
 ```yaml
-apiVersion: serving.ckodex.com/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: LLMInferenceService
 metadata:
   name: gemma-4-e4b
@@ -51,7 +51,7 @@ The operator will automatically apply the **WellKnown** optimizations:
 For the dense 31B model, the operator defaults to **Tensor Parallelism (TP=2)** because it requires more VRAM than typical single-GPU nodes:
 
 ```yaml
-apiVersion: serving.ckodex.com/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: LLMInferenceService
 metadata:
   name: gemma-4-31b

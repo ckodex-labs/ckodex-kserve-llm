@@ -93,7 +93,7 @@ func TestSessionReconcile_EdgeCases_FinalVer2(t *testing.T) {
 			Name:              "terminating",
 			Namespace:         "default",
 			DeletionTimestamp: &now,
-			Finalizers:        []string{"sessions.serving.ckodex.io/finalizer"},
+			Finalizers:        []string{"sessions.serving.ckodex.com/finalizer"},
 		},
 		Spec: servingv1alpha2.InferenceSessionSpec{ModelRef: "my-model"},
 	}

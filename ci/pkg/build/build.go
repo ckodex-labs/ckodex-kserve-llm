@@ -4,6 +4,7 @@ package build
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"dagger.io/dagger"
@@ -33,7 +34,7 @@ func Build(ctx context.Context, p *core.Pipeline) (string, error) {
 	if version == "" {
 		version = "dev"
 	}
-	ldflags := fmt.Sprintf("-s -w -extldflags '-static' -X main.version=%s", version)
+	ldflags := fmt.Sprintf("-s -w -extldflags '-static' -X github.com/ckodex-labs/kserve-llm-operator/internal/version.Version=%s", version)
 
 	// Build one container per platform.
 	variants := make([]*dagger.Container, 0, len(platforms))
@@ -67,6 +68,15 @@ func Build(ctx context.Context, p *core.Pipeline) (string, error) {
 			Publish(ctx, ref, dagger.ContainerPublishOpts{
 				PlatformVariants: variants,
 			})
+		if err != nil {
+			return digest, err
+		}
+		if err := os.MkdirAll("bin", 0o755); err != nil {
+			return digest, fmt.Errorf("prepare bin directory: %w", err)
+		}
+		if writeErr := os.WriteFile("bin/image-digest.txt", []byte(digest), 0o600); writeErr != nil {
+			return digest, fmt.Errorf("write image digest: %w", writeErr)
+		}
 		return digest, err
 	}
 

@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -33,6 +34,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/health"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/security"
+	appversion "github.com/ckodex-labs/kserve-llm-operator/internal/version"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/webhook"
 )
 
@@ -56,12 +58,14 @@ func main() {
 		enableLeaderElection bool
 		webhookPort          int
 		developmentMode      bool
+		showVersion          bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8091", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8087", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "Webhook server port.")
+	flag.BoolVar(&showVersion, "version", false, "Print the operator version and exit.")
 
 	flag.BoolVar(&developmentMode, "development", false, "Enable development-mode logging (console output, DPanic, no sampling). Production defaults to JSON.")
 
@@ -69,7 +73,13 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	if showVersion {
+		fmt.Println(appversion.Version)
+		return
+	}
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	setupLog.Info("operator version", "version", appversion.Version)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -138,7 +148,7 @@ func main() {
 	reconciler.EnableGRPC = cfg.Features.EnableGRPC
 	reconciler.EnableHardwareSelection = cfg.Features.EnableExperimentalHardwareSelection
 	reconciler.EnableExperimentalStatusHardening = cfg.Features.EnableExperimentalStatusHardening
-	
+
 	// M3 Vision: Real-time Performance Overlay
 	reconciler.Metrics = &observability.MockMetricsQuerier{}
 

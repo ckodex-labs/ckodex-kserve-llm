@@ -35,11 +35,11 @@ import (
 
 const (
 	// labelLocalCache identifies PVCs belonging to a LocalModelCache.
-	labelLocalCache = "serving.ckodex.io/local-cache"
+	labelLocalCache = "serving.ckodex.com/local-cache"
 	// labelNode identifies the node a PVC is pinned to.
-	labelNode = "serving.ckodex.io/node"
+	labelNode = "serving.ckodex.com/node"
 	// labelModelHash identifies the content-addressable model URI hash.
-	labelModelHash = "serving.ckodex.io/model-hash"
+	labelModelHash = "serving.ckodex.com/model-hash"
 	// defaultCacheNamespace is where cache PVCs are created for cluster-scoped resources.
 	defaultCacheNamespace = "default"
 	// warmupJobPrefix is the prefix for cache-warming Jobs.
@@ -406,7 +406,7 @@ func (r *LocalModelCacheReconciler) buildCachePVC(
 				labelModelHash:  modelHash,
 			},
 			Annotations: map[string]string{
-				"serving.ckodex.io/model-uri": lmc.Spec.SourceModelURI,
+				"serving.ckodex.com/model-uri": lmc.Spec.SourceModelURI,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{

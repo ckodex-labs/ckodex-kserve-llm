@@ -17,7 +17,7 @@ CKodex supports multiple model distribution schemes. Select the one best suited 
 To avoid multi-gigabyte downloads during pod startup, use `LocalModelCache` to pre-warm nodes.
 
 ```yaml
-apiVersion: serving.ckodex.io/v1alpha2
+apiVersion: serving.ckodex.com/v1alpha2
 kind: LocalModelCache
 metadata:
   name: llama-3-8b-cache
@@ -36,7 +36,7 @@ The operator will create a `storage-initializer` Job on each target node to popu
 Define the `LLMInferenceService` to manage the serving workload.
 
 ```yaml
-apiVersion: serving.ckodex.io/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: LLMInferenceService
 metadata:
   name: llama-3-8b
@@ -64,7 +64,7 @@ spec:
 For production workloads, use the `ModelOnboarding` CRD to automate the promotion cycle.
 
 ```yaml
-apiVersion: serving.ckodex.io/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: ModelOnboarding
 metadata:
   name: llama-3-8b-promotion

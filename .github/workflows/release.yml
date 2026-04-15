@@ -32,6 +32,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.0.0
+        with:
+          cosign-release: v3.0.4
+
       - name: Install Dagger CLI
         run: |
           curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=0.15.0 sh
@@ -49,12 +54,18 @@ jobs:
         run: |
           # The --push flag triggers the image push to GHCR via Dagger.
           # We capture the digest for the SLSA generator.
-          go run ./ci/main.go --push --sign
+          go run ./ci/main.go \
+            --image ghcr.io/${{ github.repository }}:${{ github.ref_name }} \
+            --push \
+            --sign
           # Extract digest and name for the next job
           echo "digest=$(cat bin/image-digest.txt)" >> "$GITHUB_OUTPUT"
           echo "name=ghcr.io/${{ github.repository }}" >> "$GITHUB_OUTPUT"
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          VERSION: ${{ github.ref_name }}
+          GIT_COMMIT: ${{ github.sha }}
+          GIT_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
           REGISTRY_USERNAME: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -64,6 +75,8 @@ jobs:
     name: Binary Release
     needs: [build]
     runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.hashes.outputs.hashes }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,6 +87,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Run GoReleaser
+        id: goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -81,6 +95,18 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Collect checksum hashes for SLSA
+        id: hashes
+        shell: bash
+        run: |
+          checksum_file=$(printf '%s' '${{ steps.goreleaser.outputs.artifacts }}' | jq -r '.[] | select(.type == "Checksum") | .path' | head -n 1)
+          if [ -z "$checksum_file" ] || [ "$checksum_file" = "null" ]; then
+            echo "Failed to locate GoReleaser checksum artifact" >&2
+            exit 1
+          fi
+          hashes=$(base64 -w0 < "$checksum_file")
+          printf 'hashes=%s\n' "$hashes" >> "$GITHUB_OUTPUT"
 
   # 3. SLSA L3 Image Provenance
   # Generates non-forgeable provenance for the pushed container images.
@@ -128,4 +154,3 @@ jobs:
         run: |
           helm package deploy/helm
           helm push ckodex-kserve-llm-operator-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
-

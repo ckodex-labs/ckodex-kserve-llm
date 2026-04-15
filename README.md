@@ -102,38 +102,70 @@ Comprehensive documentation for the lifecycle of models, tenants, and agents:
 > [!IMPORTANT]
 > For a clean installation on a fresh KIND cluster, refer to `local/` scripts for infrastructure prerequisites.
 
+### 1. Setup KIND cluster
+
 ```bash
-# 1. Setup KIND cluster
 make kind-setup
+```
 
-# 2. Install Infrastructure (KServe v0.17, cert-manager, etc.)
-# Note: uses OCI ghcr.io/kserve/charts/kserve-resources
-cd local && bash 02-prereqs.sh && bash 03-kserve-helm-install.sh
-
-### High-Assurance CI/CD (Dagger)
-To verify your local environment against the production-grade **SSDLC & SLSA L3** guardrails, use our Dagger-powered governance pipeline:
+### 2. Install infrastructure
 
 ```bash
-# Verify Linting, Security Scanning, SBOM, and Compliance Evidence
+# KServe v0.17, cert-manager, and supporting resources
+cd local && bash 02-prereqs.sh && bash 03-kserve-helm-install.sh
+```
+
+### 3. Verify your local environment with the Dagger pipeline
+
+```bash
 DOCKER_HOST=unix:///var/run/docker.sock go run ./ci/main.go --skip-tests
 ```
 
-# 3. Build & Deploy Operator
+### 4. Build and deploy the operator
+
+```bash
 make generate manifests
 make docker-build
 docker tag ghcr.io/ckodex/kserve-llm-operator:latest ckodex/kserve-llm-operator:dev
 kind load docker-image ckodex/kserve-llm-operator:dev --name kserve-017
+```
 
-# 4. Install CRDs (Server-side apply recommended for large schemas)
+### 5. Install CRDs
+
+```bash
 for f in config/crd/*.yaml; do kubectl apply --server-side -f "$f"; done
+```
 
-# 5. Deploy Operator
+### 6. Deploy the operator
+
+```bash
 kubectl apply -f config/rbac/
 kubectl apply -f config/manager/
+```
 
-# 6. Verify
+### 7. Verify
+
+```bash
 kubectl get pods -n ckodex-system
 ```
+
+## High-Assurance CI/CD (Dagger)
+
+To verify your local environment against the production-grade SSDLC and SLSA L3 guardrails, use the Dagger-powered governance pipeline:
+
+- Linting
+- Security scanning
+- SBOM generation
+- OSCAL evidence export
+
+## Releases
+
+Tagged releases are published through GitHub Actions and carry:
+
+- versioned binaries,
+- cosign-signed container images,
+- draft GitHub release assets for review,
+- and provenance artifacts for downstream verification.
 
 ## Gemma 4 Deployment on KIND
 

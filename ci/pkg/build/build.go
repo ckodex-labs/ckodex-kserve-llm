@@ -1,3 +1,4 @@
+// Package build contains the Dagger image build stage.
 package build
 
 import (
@@ -9,9 +10,10 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/ci/pkg/core"
 )
 
+// Build builds the operator image for the configured platforms.
 func Build(ctx context.Context, p *core.Pipeline) (string, error) {
 	platforms := []dagger.Platform{"linux/amd64", "linux/arm64"}
-	
+
 	// 1. Determine image reference (Contract: REGISTRY)
 	ref := p.Cfg.ImageRef
 	if ref == "" {

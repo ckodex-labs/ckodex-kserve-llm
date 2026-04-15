@@ -176,7 +176,7 @@ type OperatorConfig struct {
 	// In this mode, Pods are project into a HostNamespace.
 	VClusterMode bool `json:"vClusterMode"`
 
-	// HostNamespace is the name of the namespace in the host cluster that 
+	// HostNamespace is the name of the namespace in the host cluster that
 	// shadows the vcluster's virtual resources.
 	HostNamespace string `json:"hostNamespace,omitempty"`
 
@@ -372,7 +372,6 @@ func (c *OperatorConfig) LoadFromEnv() {
 	envStr("CKODEX_SCHEDULER_IMAGE", &c.Scheduler.Image)
 	envStr("CKODEX_AUTH_ISSUER_URL", &c.Auth.IssuerURL)
 	envStr("CKODEX_AUTH_AUDIENCE", &c.Auth.Audience)
-	envStr("CKODEX_OTEL_ENDPOINT", &c.Observability.OTLPEndpoint)
 	envStr("CKODEX_OTEL_SERVICE_NAME", &c.Observability.ServiceName)
 	envFloat("CKODEX_OTEL_SAMPLING_RATE", &c.Observability.SamplingRate)
 
@@ -388,6 +387,7 @@ func (c *OperatorConfig) LoadFromEnv() {
 	// OIS / OTel Contract Overrides
 	envStr("VERSION", &c.Version)
 	envStr("OTEL_EXPORTER_OTLP_ENDPOINT", &c.Observability.OTLPEndpoint)
+	envStr("CKODEX_OTEL_ENDPOINT", &c.Observability.OTLPEndpoint)
 
 	// VCluster Overrides
 	envBool("CKODEX_VCLUSTER_MODE", &c.VClusterMode)

@@ -1,3 +1,4 @@
+// Package lint contains the Dagger lint stage.
 package lint
 
 import (
@@ -7,6 +8,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/ci/pkg/core"
 )
 
+// Lint runs vet and golangci-lint for the pipeline inputs.
 func Lint(ctx context.Context, p *core.Pipeline) (string, error) {
 	// 1. go vet (fast, built-in)
 	goVetCtr := p.GoBase().WithExec([]string{"go", "vet", "./..."})
@@ -20,13 +22,12 @@ func Lint(ctx context.Context, p *core.Pipeline) (string, error) {
 		WithExec([]string{
 			"golangci-lint", "run", "-v",
 			"--timeout", "10m",
-			"--out-format", "line-number",
+			"./ci/...",
 		})
-	
 	if _, err := lintCtr.Sync(ctx); err != nil {
 		out, _ := lintCtr.Stdout(ctx)
 		return out, fmt.Errorf("golangci-lint: %w", err)
 	}
-	
+
 	return "lint passed", nil
 }

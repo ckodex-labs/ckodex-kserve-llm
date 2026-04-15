@@ -1,3 +1,4 @@
+// Package supplychain contains the Dagger supply-chain security stages.
 package supplychain
 
 import (
@@ -11,7 +12,8 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/ci/pkg/core"
 )
 
-func SBOM(ctx context.Context, p *core.Pipeline, imageRef string) (*dagger.File, error) {
+// SBOM generates a CycloneDX SBOM for the built image.
+func SBOM(_ context.Context, p *core.Pipeline, imageRef string) (*dagger.File, error) {
 	// Generate SBOM from the built image to ensure we capture the final state.
 	ctr := p.Client.Container().
 		From(fmt.Sprintf("aquasec/trivy:%s", core.TrivyVersion)).
@@ -27,6 +29,7 @@ func SBOM(ctx context.Context, p *core.Pipeline, imageRef string) (*dagger.File,
 	return ctr.File("sbom.cdx.json"), nil
 }
 
+// Sign signs the image with cosign when an OIDC token is available.
 func Sign(ctx context.Context, p *core.Pipeline, imageRef string) error {
 	idToken := os.Getenv("SIGSTORE_ID_TOKEN")
 	if idToken == "" {
@@ -52,6 +55,7 @@ func Sign(ctx context.Context, p *core.Pipeline, imageRef string) error {
 	return err
 }
 
+// Attest attaches SBOM and SLSA provenance attestations to the image.
 func Attest(ctx context.Context, p *core.Pipeline, imageRef string, sbomFile *dagger.File) error {
 	idToken := os.Getenv("SIGSTORE_ID_TOKEN")
 
@@ -85,8 +89,8 @@ func Attest(ctx context.Context, p *core.Pipeline, imageRef string, sbomFile *da
 		return fmt.Errorf("marshal slsa provenance: %w", err)
 	}
 
-	if err := os.WriteFile("slsa-provenance.json", provJSON, 0o600); err != nil {
-		return fmt.Errorf("write slsa provenance: %w", err)
+	if writeErr := os.WriteFile("slsa-provenance.json", provJSON, 0o600); writeErr != nil {
+		return fmt.Errorf("write slsa provenance: %w", writeErr)
 	}
 
 	provFile := p.Client.Host().File("slsa-provenance.json")

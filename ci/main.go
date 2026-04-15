@@ -1,4 +1,4 @@
-// CKodex KServe LLM Operator — Dagger CI/CD Pipeline
+// Package main runs the Dagger-backed CI/CD pipeline for the operator.
 package main
 
 import (
@@ -32,69 +32,9 @@ func main() {
 
 	p := &core.Pipeline{Client: client, Source: source, Cfg: cfg}
 
-	// Lint — always run
-	if out, err := lint.Lint(ctx, p); err != nil {
-		fmt.Fprintln(os.Stderr, out)
-		fatal("lint", err)
+	if err := runPipeline(ctx, p); err != nil {
+		fatal("pipeline", err)
 	}
-	log("lint passed")
-
-	// Test + coverage gate
-	if !cfg.SkipTests {
-		if _, err := test.Test(ctx, p); err != nil {
-			fatal("test", err)
-		}
-		log("tests passed (coverage gates met)")
-	}
-
-	// Build multi-arch image
-	imageRef, err := build.Build(ctx, p)
-	if err != nil {
-		fatal("build", err)
-	}
-	log("build passed → %s", imageRef)
-
-	// Vulnerability scan
-	if !cfg.SkipScan {
-		if _, err := security.Scan(ctx, p); err != nil {
-			fatal("security scan", err)
-		}
-		log("trivy scan passed (no CRITICAL/HIGH unfixed CVEs)")
-	}
-
-	// Lula OSCAL Validation
-	lulaResults, err := security.Lula(ctx, p)
-	if err != nil {
-		fatal("lula validation", err)
-	}
-	if _, err := lulaResults.Export(ctx, "bin/oscal-assessment-results.yaml"); err != nil {
-		fatal("export lula results", err)
-	}
-	log("lula oscal validation passed → bin/oscal-assessment-results.yaml")
-
-	// Supply Chain Security (SBOM + Sign + Attest)
-	if !cfg.SkipScan {
-		sbomFile, err := supplychain.SBOM(ctx, p, imageRef)
-		if err != nil {
-			fatal("sbom generation", err)
-		}
-		log("sbom generated (cyclonedx-json)")
-
-		if cfg.Sign {
-			if err := supplychain.Sign(ctx, p, imageRef); err != nil {
-				fatal("signing", err)
-			}
-			log("image signed (cosign keyless)")
-		}
-
-		if cfg.Attest {
-			if err := supplychain.Attest(ctx, p, imageRef, sbomFile); err != nil {
-				fatal("attestation", err)
-			}
-			log("sbom and slsa provenance attached")
-		}
-	}
-	log("pipeline complete")
 }
 
 func parseFlags() *core.Config {
@@ -126,6 +66,114 @@ func parseFlags() *core.Config {
 	cfg.SLSAProvenancePath = os.Getenv("SLSA_PROVENANCE_PATH")
 
 	return cfg
+}
+
+func runPipeline(ctx context.Context, p *core.Pipeline) error {
+	if err := runLint(ctx, p); err != nil {
+		return err
+	}
+	log("lint passed")
+
+	if !p.Cfg.SkipTests {
+		if err := runTests(ctx, p); err != nil {
+			return err
+		}
+		log("tests passed (coverage gates met)")
+	}
+
+	imageRef, err := runBuild(ctx, p)
+	if err != nil {
+		return err
+	}
+	log("build passed → %s", imageRef)
+
+	if !p.Cfg.SkipScan {
+		if err := runSecurityScan(ctx, p); err != nil {
+			return err
+		}
+		log("trivy scan passed (no CRITICAL/HIGH unfixed CVEs)")
+	}
+
+	if err := runLula(ctx, p); err != nil {
+		return err
+	}
+	log("lula oscal validation passed → bin/oscal-assessment-results.yaml")
+
+	if !p.Cfg.SkipScan {
+		if err := runSupplyChain(ctx, p, imageRef); err != nil {
+			return err
+		}
+	}
+
+	log("pipeline complete")
+	return nil
+}
+
+func runLint(ctx context.Context, p *core.Pipeline) error {
+	// Lint is always run.
+	out, err := lint.Lint(ctx, p)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, out)
+		return fmt.Errorf("lint: %w", err)
+	}
+	return nil
+}
+
+func runTests(ctx context.Context, p *core.Pipeline) error {
+	if _, err := test.Test(ctx, p); err != nil {
+		return fmt.Errorf("test: %w", err)
+	}
+	return nil
+}
+
+func runBuild(ctx context.Context, p *core.Pipeline) (string, error) {
+	imageRef, err := build.Build(ctx, p)
+	if err != nil {
+		return "", fmt.Errorf("build: %w", err)
+	}
+	return imageRef, nil
+}
+
+func runSecurityScan(ctx context.Context, p *core.Pipeline) error {
+	if _, err := security.Scan(ctx, p); err != nil {
+		return fmt.Errorf("security scan: %w", err)
+	}
+	return nil
+}
+
+func runLula(ctx context.Context, p *core.Pipeline) error {
+	lulaResults, err := security.Lula(ctx, p)
+	if err != nil {
+		return fmt.Errorf("lula validation: %w", err)
+	}
+	if _, err := lulaResults.Export(ctx, "bin/oscal-assessment-results.yaml"); err != nil {
+		return fmt.Errorf("export lula results: %w", err)
+	}
+	return nil
+}
+
+func runSupplyChain(ctx context.Context, p *core.Pipeline, imageRef string) error {
+	sbomFile, err := supplychain.SBOM(ctx, p, imageRef)
+	if err != nil {
+		return fmt.Errorf("sbom generation: %w", err)
+	}
+	log("sbom generated (cyclonedx-json)")
+
+	if p.Cfg.Sign {
+		if err := supplychain.Sign(ctx, p, imageRef); err != nil {
+			return fmt.Errorf("signing: %w", err)
+		}
+		log("image signed (cosign keyless)")
+	}
+
+	if p.Cfg.Attest {
+		if err := supplychain.Attest(ctx, p, imageRef, sbomFile); err != nil {
+			return fmt.Errorf("attestation: %w", err)
+		}
+		log("sbom and slsa provenance attached")
+	}
+
+	return nil
 }
 
 func log(msg string, args ...any) {

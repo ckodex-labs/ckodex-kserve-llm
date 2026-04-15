@@ -1,3 +1,4 @@
+// Package test contains the Dagger test and coverage stage.
 package test
 
 import (
@@ -7,6 +8,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/ci/pkg/core"
 )
 
+// Test runs the repository tests and coverage gate.
 func Test(ctx context.Context, p *core.Pipeline) (string, error) {
 	out, err := p.GoBase().
 		WithExec([]string{
@@ -27,7 +29,7 @@ func Test(ctx context.Context, p *core.Pipeline) (string, error) {
 	return out, err
 }
 
-// coverageGateScript returns a shell script that parses the existing coverage.out 
+// coverageGateScript returns a shell script that parses the existing coverage.out
 // and fails if any measured package falls below its threshold.
 func coverageGateScript(ctrlMin, gwMin, storeMin, authMin, inferMin, obsMin int) string {
 	return fmt.Sprintf(`

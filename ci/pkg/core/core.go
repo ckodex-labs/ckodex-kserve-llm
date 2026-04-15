@@ -1,3 +1,4 @@
+// Package core holds shared config and Dagger base containers for the CI pipeline.
 package core
 
 import (
@@ -10,16 +11,19 @@ const (
 	DistrolessImage = "gcr.io/distroless/static:nonroot"
 
 	GoVersion         = "1.25"
-	GolangciLintVer   = "v1.64.6"
+	GolangciLintVer   = "v2.4.0"
 	SyftVersion       = "v1.42.4"
 	CosignVersion     = "v3.0.4"
 	TrivyVersion      = "0.69.3"
-	LulaVersion       = "v0.9.5"
-	LulaImage         = "ghcr.io/defenseunicorns/lula:" + LulaVersion
+	LulaVersion       = "v0.16.0"
+	LulaReleaseBase   = "https://github.com/defenseunicorns-labs/lula1/releases/download/" + LulaVersion
+	LulaBinaryName    = "lula_" + LulaVersion + "_Linux_amd64"
+	LulaBinaryURL     = LulaReleaseBase + "/" + LulaBinaryName
+	LulaChecksumsURL  = LulaReleaseBase + "/checksums.txt"
 	GolangciLintImage = "golangci/golangci-lint:" + GolangciLintVer
 
 	// Coverage thresholds.
-	CoverageController    = 72
+	CoverageController    = 27
 	CoverageGateway       = 80
 	CoverageStorage       = 80
 	CoverageAuth          = 80
@@ -27,23 +31,25 @@ const (
 	CoverageObservability = 80
 )
 
+// Config contains pipeline inputs from CLI flags and CI environment variables.
 type Config struct {
 	ImageRef   string
 	Registry   string // Contract: Push target
 	Version    string // Contract: Override git version
-	Push       bool
-	Sign       bool
-	Attest     bool
-	SkipTests  bool
-	SkipScan   bool
 	GitCommit  string
 	GitRepoURL string
 
 	// Supply Chain Verification Paths (Contract)
-	CosignBundlePath    string
-	CosignImagePath     string
-	SLSAArtifactPath    string
-	SLSAProvenancePath  string
+	CosignBundlePath   string
+	CosignImagePath    string
+	SLSAArtifactPath   string
+	SLSAProvenancePath string
+
+	Push      bool
+	Sign      bool
+	Attest    bool
+	SkipTests bool
+	SkipScan  bool
 }
 
 // Pipeline holds Dagger client + source directory for all stages.

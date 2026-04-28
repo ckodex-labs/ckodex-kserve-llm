@@ -24,7 +24,7 @@ featureGates:
 
 runtime:
   # Default vLLM image
-  defaultImage: "vllm/vllm-openai-cpu:v0.19.0"
+  defaultImage: "vllm/vllm-openai-cpu:v0.20.0"
   # Gemma-specific image
   gemma4Image: "vllm/vllm-openai:gemma4"
 

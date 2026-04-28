@@ -127,7 +127,10 @@ rules:
   resources:
   - agents
   - asrinferenceservices
+  - coactorgroups
   - embeddinginferenceservices
+  - inferenceactors
+  - inferencesessions
   - llminferenceservices
   - llmloraadapters
   - localmodelcaches
@@ -159,37 +162,16 @@ rules:
   resources:
   - agents/status
   - asrinferenceservices/status
+  - coactorgroups/status
   - embeddinginferenceservices/status
+  - inferenceactors/status
+  - inferencesessions/status
   - llminferenceservices/status
   - llmloraadapters/status
   - localmodelcaches/status
   - modelonboardings/status
   - multimodalinferenceservices/status
   - skillregistries/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - serving.ckodex.com
-  resources:
-  - coactorgroups
-  - inferenceactors
-  - inferencesessions
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - serving.ckodex.com
-  resources:
-  - coactorgroups/status
-  - inferenceactors/status
-  - inferencesessions/status
   verbs:
   - get
   - patch

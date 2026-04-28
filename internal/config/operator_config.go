@@ -315,12 +315,12 @@ func DefaultOperatorConfig() OperatorConfig {
 			// CPU-optimized vLLM image for ARM64/x86 nodes (no GPU).
 			// Pinned to a specific version — :latest is a supply chain risk and air-gapped blocker.
 			RuntimeImage:            "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.17.1",
-			SchedulerImage:          "us-central1-docker.pkg.dev/k8s-staging-gateway-api/gateway-api-inference-extension/epp:main",
+			SchedulerImage:          "ghcr.io/llm-d/llm-d-inference-scheduler:v0.7.1",
 			StorageInitializerImage: "kserve/storage-initializer:v0.17.0",
 			DefaultReplicas:         1,
 		},
 		Scheduler: SchedulerDefaults{
-			Image: "us-central1-docker.pkg.dev/k8s-staging-gateway-api/gateway-api-inference-extension/epp:main",
+			Image: "ghcr.io/llm-d/llm-d-inference-scheduler:v0.7.1",
 			DefaultPlugins: []string{
 				"prefix-cache-scorer",
 				"queue-scorer",

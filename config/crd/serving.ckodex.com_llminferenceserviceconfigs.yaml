@@ -126,6 +126,26 @@ spec:
                             items:
                               type: string
                             type: array
+                          resilience:
+                            description: Resilience configures timeouts and retries
+                              for this route.
+                            properties:
+                              maxRetries:
+                                default: 3
+                                description: MaxRetries is the maximum number of retry
+                                  attempts.
+                                format: int32
+                                type: integer
+                              retryOn:
+                                default: 5xx,connect-failure,refused-stream
+                                description: RetryOn specifies the conditions under
+                                  which to retry.
+                                type: string
+                              timeout:
+                                default: 30s
+                                description: Timeout defines the request timeout.
+                                type: string
+                            type: object
                         type: object
                     type: object
                   scheduler:

@@ -29,7 +29,7 @@ const (
 	// EPPImage is the Endpoint Picker Pod container image.
 	// Pinned — :latest is a supply chain risk and air-gapped deployment blocker.
 	// Must match OperatorConfig.Scheduler.Image default.
-	EPPImage = "us-central1-docker.pkg.dev/k8s-staging-gateway-api/gateway-api-inference-extension/epp:main"
+	EPPImage = "ghcr.io/llm-d/llm-d-inference-scheduler:v0.7.1"
 	// EPPPort is the EPP gRPC port (Gateway ExtensionRef).
 	EPPPort int32 = 9002
 	// EPPMetricsPort is the metrics/health port.

@@ -20,10 +20,10 @@ const (
 
 // vLLM Images (Keep here for hardware-specific selection)
 const (
-	VLLMGenericImage  = "vllm/vllm-openai-cpu:v0.19.0"
-	VLLMCPUArm64Image = "vllm/vllm-openai:v0.19.0"
-	VLLMMPSImage      = "vllm/vllm-openai:v0.19.0"
-	VLLMROCmImage     = "vllm/vllm-openai:v0.19.0-rocm"
+	VLLMGenericImage  = "vllm/vllm-openai-cpu:v0.20.0"
+	VLLMCPUArm64Image = "vllm/vllm-openai:v0.20.0"
+	VLLMMPSImage      = "vllm/vllm-openai:v0.20.0"
+	VLLMROCmImage     = "vllm/vllm-openai:v0.20.0-rocm"
 	VLLMGemma4Image   = "vllm/vllm-openai:gemma4"
 )
 

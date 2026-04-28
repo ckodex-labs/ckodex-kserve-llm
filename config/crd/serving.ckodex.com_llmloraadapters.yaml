@@ -271,6 +271,66 @@ spec:
                       Storage configures credentials for model download.
                       Mirrors LocalModelCache credential support.
                     properties:
+                      externalSecret:
+                        description: |-
+                          ExternalSecret configures native integration with external-secrets.io.
+                          When set, the operator creates an ExternalSecret resource to sync
+                          credentials from an external provider (Vault, AWS SM, etc.).
+                        properties:
+                          data:
+                            description: Data defines the mapping of remote keys to
+                              local secret keys.
+                            items:
+                              description: ExternalSecretData defines a single mapping
+                                of a remote secret to a local key.
+                              properties:
+                                remoteRef:
+                                  description: RemoteRef defines where to fetch the
+                                    secret from the provider.
+                                  properties:
+                                    key:
+                                      description: Key is the name/path of the secret
+                                        in the external provider.
+                                      type: string
+                                    property:
+                                      description: Property is the specific field
+                                        to extract from the remote secret.
+                                      type: string
+                                  required:
+                                  - key
+                                  type: object
+                                secretKey:
+                                  description: SecretKey is the key in the resulting
+                                    Kubernetes Secret.
+                                  type: string
+                              required:
+                              - remoteRef
+                              - secretKey
+                              type: object
+                            type: array
+                          refreshInterval:
+                            default: 1h
+                            description: RefreshInterval is how often to re-sync the
+                              secret from the provider.
+                            type: string
+                          secretStoreRef:
+                            description: SecretStoreRef references the SecretStore/ClusterSecretStore
+                              to use.
+                            properties:
+                              kind:
+                                default: SecretStore
+                                description: Kind of the SecretStore (SecretStore
+                                  or ClusterSecretStore).
+                                type: string
+                              name:
+                                description: Name of the SecretStore.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - secretStoreRef
+                        type: object
                       secretRef:
                         description: SecretRef is a reference to a Secret containing
                           storage credentials.
@@ -327,6 +387,22 @@ spec:
                     type: array
                   minTrustLevel:
                     description: Required trust levels for execution.
+                    type: string
+                type: object
+              sandbox:
+                description: |-
+                  Sandbox enables header-based virtual routing for this adapter.
+                  When enabled, requests with 'x-ckodex-adapter: <headerValue>' are
+                  matched against this adapter.
+                properties:
+                  enable:
+                    description: Enable activates the sandbox route in the associated
+                      Gateway HTTPRoute.
+                    type: boolean
+                  headerValue:
+                    description: |-
+                      HeaderValue is the value to match in the 'x-ckodex-adapter' header.
+                      Example: 'sql-test-v1'
                     type: string
                 type: object
               targetService:

@@ -26374,6 +26374,66 @@ spec:
                       Storage configures credentials for model download.
                       Mirrors LocalModelCache credential support.
                     properties:
+                      externalSecret:
+                        description: |-
+                          ExternalSecret configures native integration with external-secrets.io.
+                          When set, the operator creates an ExternalSecret resource to sync
+                          credentials from an external provider (Vault, AWS SM, etc.).
+                        properties:
+                          data:
+                            description: Data defines the mapping of remote keys to
+                              local secret keys.
+                            items:
+                              description: ExternalSecretData defines a single mapping
+                                of a remote secret to a local key.
+                              properties:
+                                remoteRef:
+                                  description: RemoteRef defines where to fetch the
+                                    secret from the provider.
+                                  properties:
+                                    key:
+                                      description: Key is the name/path of the secret
+                                        in the external provider.
+                                      type: string
+                                    property:
+                                      description: Property is the specific field
+                                        to extract from the remote secret.
+                                      type: string
+                                  required:
+                                  - key
+                                  type: object
+                                secretKey:
+                                  description: SecretKey is the key in the resulting
+                                    Kubernetes Secret.
+                                  type: string
+                              required:
+                              - remoteRef
+                              - secretKey
+                              type: object
+                            type: array
+                          refreshInterval:
+                            default: 1h
+                            description: RefreshInterval is how often to re-sync the
+                              secret from the provider.
+                            type: string
+                          secretStoreRef:
+                            description: SecretStoreRef references the SecretStore/ClusterSecretStore
+                              to use.
+                            properties:
+                              kind:
+                                default: SecretStore
+                                description: Kind of the SecretStore (SecretStore
+                                  or ClusterSecretStore).
+                                type: string
+                              name:
+                                description: Name of the SecretStore.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - secretStoreRef
+                        type: object
                       secretRef:
                         description: SecretRef is a reference to a Secret containing
                           storage credentials.
@@ -26418,6 +26478,29 @@ spec:
                 required:
                 - name
                 - uri
+                type: object
+              observability:
+                description: Observability configures telemetry sinks (logs, traces,
+                  metrics).
+                properties:
+                  sink:
+                    description: Sink select the telemetry destination for Vector
+                      and Audit signals.
+                    properties:
+                      endpoint:
+                        description: Endpoint for the sink (e.g., "http://otel-collector:4318").
+                        type: string
+                      type:
+                        description: 'Type of sink: "stdout", "otlp", "loki", "elasticsearch".'
+                        enum:
+                        - stdout
+                        - otlp
+                        - loki
+                        - elasticsearch
+                        type: string
+                    required:
+                    - type
+                    type: object
                 type: object
               parallelism:
                 description: Parallelism configures distributed inference across GPUs/nodes.
@@ -35044,6 +35127,26 @@ spec:
                             items:
                               type: string
                             type: array
+                          resilience:
+                            description: Resilience configures timeouts and retries
+                              for this route.
+                            properties:
+                              maxRetries:
+                                default: 3
+                                description: MaxRetries is the maximum number of retry
+                                  attempts.
+                                format: int32
+                                type: integer
+                              retryOn:
+                                default: 5xx,connect-failure,refused-stream
+                                description: RetryOn specifies the conditions under
+                                  which to retry.
+                                type: string
+                              timeout:
+                                default: 30s
+                                description: Timeout defines the request timeout.
+                                type: string
+                            type: object
                         type: object
                     type: object
                   scheduler:
@@ -52322,6 +52425,29 @@ spec:
           status:
             description: LLMInferenceServiceStatus defines the observed state of LLMInferenceService.
             properties:
+              adaptiveMetrics:
+                description: AdaptiveMetrics represents real-time performance and
+                  load pressure.
+                properties:
+                  loadLevel:
+                    description: LoadLevel is the current graceful degradation state
+                      (None, Light, Moderate, Severe).
+                    type: string
+                  p50Latency:
+                    description: P50Latency is the median end-to-end latency.
+                    type: string
+                  p95Latency:
+                    description: P95Latency is the 95th percentile latency.
+                    type: string
+                  p99Latency:
+                    description: P99Latency is the 99th percentile latency.
+                    type: string
+                  queueDepth:
+                    description: QueueDepth is the number of pending requests in the
+                      priority queue.
+                    format: int64
+                    type: integer
+                type: object
               conditions:
                 description: Conditions represent the latest available observations.
                 items:

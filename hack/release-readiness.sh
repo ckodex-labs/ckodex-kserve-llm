@@ -5,6 +5,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${ROOT_DIR}/dist"
 HELM_OUT_DIR="${DIST_DIR}/helm"
 SUMMARY_FILE="${ROOT_DIR}/bin/release-readiness.json"
+SCRATCH_DIR="${ROOT_DIR}/bin/release-readiness"
+READINESS_MODE="${CKODEX_RELEASE_READINESS_MODE:-}"
+
+if [[ -z "${READINESS_MODE}" ]]; then
+  if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    READINESS_MODE="ci"
+  else
+    READINESS_MODE="full"
+  fi
+fi
 
 require_tool() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -42,8 +52,58 @@ grep -q "generator_container_slsa3.yml" "${ROOT_DIR}/.github/workflows/release.y
 grep -q "generator_generic_slsa3.yml" "${ROOT_DIR}/.github/workflows/release.yml"
 grep -q "helm push" "${ROOT_DIR}/.github/workflows/release.yml"
 
-echo "==> running local goreleaser snapshot rehearsal"
-(cd "${ROOT_DIR}" && goreleaser release --snapshot --clean --skip=publish,sign)
+current_goos="$(go env GOOS)"
+current_goarch="$(go env GOARCH)"
+
+run_ci_snapshot() {
+  echo "==> running CI-sized goreleaser snapshot rehearsal"
+  local target_goos="${CKODEX_RELEASE_READINESS_GOOS:-linux}"
+  local target_goarch="${CKODEX_RELEASE_READINESS_GOARCH:-amd64}"
+
+  rm -rf "${DIST_DIR}"
+  rm -rf "${SCRATCH_DIR}"
+  mkdir -p "${DIST_DIR}" "${SCRATCH_DIR}"
+
+  (
+    cd "${ROOT_DIR}" &&
+      GOOS="${target_goos}" GOARCH="${target_goarch}" \
+      goreleaser build --snapshot --clean --single-target --id manager \
+        -o "${SCRATCH_DIR}/manager"
+  )
+  rm -rf "${DIST_DIR}"
+  mkdir -p "${DIST_DIR}"
+  (
+    cd "${ROOT_DIR}" &&
+      GOOS="${target_goos}" GOARCH="${target_goarch}" \
+      goreleaser build --snapshot --clean --single-target --id storage-initializer \
+        -o "${SCRATCH_DIR}/storage-initializer"
+  )
+
+  tar -czf "${DIST_DIR}/kserve-llm-operator_manager_snapshot_${target_goos}_${target_goarch}.tar.gz" \
+    -C "${SCRATCH_DIR}" manager
+  tar -czf "${DIST_DIR}/kserve-llm-operator_storage-initializer_snapshot_${target_goos}_${target_goarch}.tar.gz" \
+    -C "${SCRATCH_DIR}" storage-initializer
+
+  (
+    cd "${DIST_DIR}" &&
+      if [[ "${checksum_cmd}" == "sha256sum" ]]; then
+        sha256sum ./*.tar.gz > checksums.txt
+      else
+        shasum -a 256 ./*.tar.gz > checksums.txt
+      fi
+  )
+}
+
+run_full_snapshot() {
+  echo "==> running full goreleaser snapshot rehearsal"
+  (cd "${ROOT_DIR}" && goreleaser release --snapshot --clean --skip=publish,sign)
+}
+
+if [[ "${READINESS_MODE}" == "ci" ]]; then
+  run_ci_snapshot
+else
+  run_full_snapshot
+fi
 
 echo "==> packaging helm chart"
 rm -rf "${HELM_OUT_DIR}"
@@ -84,13 +144,16 @@ if [[ -n "${mutated_files}" ]]; then
   exit 1
 fi
 
+rm -rf "${SCRATCH_DIR}"
+
 jq -n \
   --arg checksum_file "${checksum_file#${ROOT_DIR}/}" \
   --arg helm_package "${helm_package#${ROOT_DIR}/}" \
   --argjson archive_count "${archive_count}" \
+  --arg mode "${READINESS_MODE}" \
   '{
     status: "ok",
-    mode: "local-snapshot",
+    mode: $mode,
     checksum_file: $checksum_file,
     helm_package: $helm_package,
     archive_count: $archive_count

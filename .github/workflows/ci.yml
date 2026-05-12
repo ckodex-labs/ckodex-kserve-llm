@@ -25,7 +25,19 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Detect console sources
+        id: console
+        shell: bash
+        run: |
+          if [[ -f console/package.json && -f console/package-lock.json ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Console gate skipped::console/package.json and console/package-lock.json are not present in this checkout. The repo currently stores console as a gitlink without a .gitmodules mapping, so Actions cannot populate it from a fresh clone."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Node.js
+        if: steps.console.outputs.available == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -42,6 +54,7 @@ jobs:
           version: v2.15.4
 
       - name: Build console
+        if: steps.console.outputs.available == 'true'
         working-directory: console
         run: |
           npm ci

@@ -71,8 +71,8 @@ func Build(ctx context.Context, p *core.Pipeline) (string, error) {
 		if err != nil {
 			return digest, err
 		}
-		if err := os.MkdirAll("bin", 0o755); err != nil {
-			return digest, fmt.Errorf("prepare bin directory: %w", err)
+		if mkErr := os.MkdirAll("bin", 0o750); mkErr != nil {
+			return digest, fmt.Errorf("prepare bin directory: %w", mkErr)
 		}
 		if writeErr := os.WriteFile("bin/image-digest.txt", []byte(digest), 0o600); writeErr != nil {
 			return digest, fmt.Errorf("write image digest: %w", writeErr)

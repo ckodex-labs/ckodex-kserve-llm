@@ -29,13 +29,13 @@ type Validator interface {
 type EVIDValidator struct{}
 
 func (v *EVIDValidator) Validate(ctx context.Context, adapter *servingv1alpha2.LLMLoraAdapter) ConformanceResult {
-	if adapter.Status.EvidenceBundle.SignatureDigest == "" {
-		return ConformanceResult{Valid: false, Reason: "MissingSignature", Message: "No Cosign signature found in evidence bundle"}
+	if !HasAssertedSupplyChainEvidence(adapter) {
+		return ConformanceResult{
+			Valid:   false,
+			Reason:  "IncompleteEvidence",
+			Message: "Evidence bundle is incomplete: signature digest, attestation URI, and SBOM digest are all required",
+		}
 	}
-	if adapter.Status.EvidenceBundle.AttestationURI == "" {
-		return ConformanceResult{Valid: false, Reason: "MissingAttestation", Message: "No SLSA attestation found in evidence bundle"}
-	}
-	// In production, this would use 'github.com/slsa-framework/slsa-verifier'
 	return ConformanceResult{Valid: true}
 }
 
@@ -43,10 +43,12 @@ func (v *EVIDValidator) Validate(ctx context.Context, adapter *servingv1alpha2.L
 type SBOMValidator struct{}
 
 func (v *SBOMValidator) Validate(ctx context.Context, adapter *servingv1alpha2.LLMLoraAdapter) ConformanceResult {
-	// For production readiness, we check if the SBOM digest is recorded in the status.
-	// This ensures the evidence plane is fully populated.
-	if adapter.Status.EvidenceBundle.SBOMDigest == "" {
-		return ConformanceResult{Valid: false, Reason: "MissingSBOM", Message: "No CycloneDX SBOM digest found in evidence bundle"}
+	if !HasAssertedSupplyChainEvidence(adapter) {
+		return ConformanceResult{
+			Valid:   false,
+			Reason:  "MissingSBOM",
+			Message: "No CycloneDX SBOM digest found in a complete evidence bundle",
+		}
 	}
 	return ConformanceResult{Valid: true}
 }
@@ -145,8 +147,11 @@ func TransitionStates(adapter *servingv1alpha2.LLMLoraAdapter, valid bool, msg s
 		adapter.Status.StatePlanes.Lifecycle = "active"
 		adapter.Status.StatePlanes.Risk = "normal"
 	} else {
-		adapter.Status.StatePlanes.Lifecycle = "pending-evaluation"
-		adapter.Status.StatePlanes.Risk = "evaluating"
+		// The repo does not ship a public evaluation runner artifact yet, so
+		// asserted adapters stay active instead of entering a non-functional
+		// pending-evaluation state by default.
+		adapter.Status.StatePlanes.Lifecycle = "active"
+		adapter.Status.StatePlanes.Risk = "normal"
 		adapter.Status.StatePlanes.Trust = "asserted"
 	}
 

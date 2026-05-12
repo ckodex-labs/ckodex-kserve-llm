@@ -53,14 +53,14 @@ graph TD
 ### Governed State Planes (L|T|R)
 The operator implements a **Governed Composite State Machine** that aggregates safety and compliance metadata across the model system:
 - **Lifecycle (L)**: `pending` → `active` → `quarantined`. Tracks the operational readiness of the model.
-- **Trust (T)**: `unknown` → `asserted` → `verified`. Cryptographically verified identity (SPIFFE) and network isolation (DPI).
+- **Trust (T)**: `unknown` → `asserted` → `verified`. Most runtime paths are currently **asserted** by default; `verified` should only be treated as true when the controller records cryptographic evidence rather than placeholder or inferred status.
 - **Risk (R)**: `normal` → `evaluating` → `high`. Real-time risk assessment based on behavioral declared intent and tool usage.
 
 ### Deep Packet Inspection (DPI)
 Models requiring external tool access (`ToolSurface.AllowedAPIs`) are isolated via **Istio Egress Filtering**:
 - Automatic `ServiceEntry` and `VirtualService` generation for FQDN targets.
 - Sidecar-level egress isolation prevents unauthorized data exfiltration.
-- Moves the model trust state to **`verified`** upon successful DPI verification.
+- Contributes network-isolation evidence, but does not by itself prove software provenance.
 
 ### Real-time Monitoring Console
 A built-in Next.js dashboard provides a unified view of the governed fleet:
@@ -68,11 +68,11 @@ A built-in Next.js dashboard provides a unified view of the governed fleet:
 - **Live Audit Feed**: Event-driven streaming of operator and inference decisions.
 - **Shared Audit Plane**: Uses a high-performance persistent volume for real-time log ingestion.
 
-### Verifiable Evidence (Proofs)
-Unlike typical operators, we provide machine-readable "receipts" of our security posture:
+### Evidence Hooks
+The repository ships machine-readable evidence hooks, but not every runtime path is cryptographically verified today:
 - **OSCAL Assessment**: Automated validation of NIST 800-53 controls (SR-2, SI-4, SI-7) exported to **`assessment-results.yaml`**.
 - **OIS Signal Payloads**: Standardized inference behavior telemetry using **Open Inference Signals v0.1**.
-- **Supply-Chain Contract**: 100% SLSA-compliant builds with Cosign signatures and verifiable SBOMs.
+- **Supply-Chain Artifacts**: The tag-driven release workflow publishes Cosign signatures, SBOMs, and provenance artifacts. Runtime controllers only report `verified` when a cryptographic verification result has actually been recorded.
 
 See **[COMPLIANCE.md](COMPLIANCE.md)** for the full control mapping.
 
@@ -121,6 +121,8 @@ cd local && bash 02-prereqs.sh && bash 03-kserve-helm-install.sh
 DOCKER_HOST=unix:///var/run/docker.sock go run ./ci/main.go --skip-tests
 ```
 
+This command expects a working local Docker daemon. If Docker or the Dagger engine cannot start, treat that as an environment prerequisite failure rather than proof that the repository is release-ready.
+
 ### 4. Build and deploy the operator
 
 ```bash
@@ -151,7 +153,7 @@ kubectl get pods -n ckodex-system
 
 ## High-Assurance CI/CD (Dagger)
 
-To verify your local environment against the production-grade SSDLC and SLSA L3 guardrails, use the Dagger-powered governance pipeline:
+The Dagger-powered pipeline is the repo-level validation path for lint, tests, scans, SBOM generation, and Lula/OSCAL export. Local runs are useful for preflight checks, but the tag-driven release workflow remains the authoritative path for release signing and hosted provenance:
 
 - Linting
 - Security scanning
@@ -160,32 +162,28 @@ To verify your local environment against the production-grade SSDLC and SLSA L3 
 
 ## Releases
 
-Tagged releases are published through GitHub Actions and carry:
+The repo exposes two release checks:
+
+- `make release-readiness` for a local snapshot rehearsal of binary archives, checksums, and the Helm package
+- the tag-driven GitHub Actions workflow for published images, draft release assets, and hosted provenance
+
+On a successful tagged release, GitHub Actions is configured to publish:
 
 - versioned binaries,
 - cosign-signed container images,
 - draft GitHub release assets for review,
 - and provenance artifacts for downstream verification.
 
-## Gemma 4 Deployment on KIND
+Treat the presence of those artifacts as a release input, not as an automatic public-readiness verdict.
 
-To deploy Gemma 4 E2B on a standard KIND cluster (CPU only):
+See [docs/release-verification.md](/Users/mchorfa/Documents/projects/runbase/ckodex-skillingest/ckodex-kserve-llm/docs/release-verification.md) for the local rehearsal contract and downstream verification commands.
 
-1. **Create HuggingFace Secret**:
-   ```bash
-   kubectl create secret generic hf-token --from-literal=token=$HF_TOKEN
-   ```
+## Gemma 4 Notes
 
-2. **Apply Model Manifest**:
-   ```bash
-   kubectl apply -f samples/gemma-4-e2b.yaml
-   ```
+Gemma 4 tuning in this repo is environment-dependent. Use the deployment guide and performance note as operator guidance, not as CI-backed benchmark evidence:
 
-3. **Verify Optimization**:
-   The operator will automatically detect the model and inject Well-Known optimizations:
-   - vLLM Image: `vllm/vllm-openai:gemma4`
-   - TurboQuant: `VLLM_TURBOQUANT: "true"`
-   - Resources: 1 NVIDIA GPU (Pod will remain Pending on CPU-only nodes)
+- [docs/gemma4-deployment-guide.md](/Users/mchorfa/Documents/projects/runbase/ckodex-skillingest/ckodex-kserve-llm/docs/gemma4-deployment-guide.md)
+- [docs/GEMMA_4_PERFORMANCE_REPORT.md](/Users/mchorfa/Documents/projects/runbase/ckodex-skillingest/ckodex-kserve-llm/docs/GEMMA_4_PERFORMANCE_REPORT.md)
 
 ## Features
 
@@ -237,7 +235,7 @@ Some features are in Active Development and require explicit opt-in via Helm `fe
 
 ### Production Hardening
 - **SSDLC Enforcement**: Zero-tolerance for unchecked errors, weak crypto, and variable shadowing via strict golangci-lint profile.
-- **SLSA L3 Provenance**: Automated provenance generation and OIDC-signed build attestations.
+- **Release Provenance**: The tag-driven release workflow generates OIDC-backed provenance artifacts and release attestations.
 - **Guaranteed QoS**: Automatic alignment of CPU/Memory requests and limits for stable scheduling.
 - **Graceful Termination**: 30-second default termination grace period for all inference workloads.
 - **Atomic Reconciliation**: High-performance status updates using SSA-style Patching with DeepEqual guards.
@@ -245,7 +243,7 @@ Some features are in Active Development and require explicit opt-in via Helm `fe
 
 ### Observability
 - **Lifecycle Events**: Native Kubernetes Event emission for all major transitions (Deployment creation, LoRA loading, Cache eviction).
-- **Prometheus Metrics**: Built-in scrapers for inference success rates and P99 latency.
+- **Prometheus Metrics**: Promotion gates require a configured Prometheus backend unless an explicit insecure compatibility fallback is enabled for development.
 - **Auditability**: Track operator decisions via `kubectl get events`.
 
 ## Development
@@ -255,6 +253,7 @@ make generate      # Generate DeepCopy + CRDs
 make build         # Build binary
 make test          # Run tests (≥80% coverage)
 make lint          # golangci-lint
+make console-check # Build the console production bundle
 make docker-build  # Build container
 ```
 

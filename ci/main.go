@@ -105,6 +105,10 @@ func runPipeline(ctx context.Context, p *core.Pipeline) error {
 		}
 	}
 
+	if err := runVerificationContracts(ctx, p); err != nil {
+		return err
+	}
+
 	log("pipeline complete")
 	return nil
 }
@@ -171,6 +175,24 @@ func runSupplyChain(ctx context.Context, p *core.Pipeline, imageRef string) erro
 			return fmt.Errorf("attestation: %w", err)
 		}
 		log("sbom and slsa provenance attached")
+	}
+
+	return nil
+}
+
+func runVerificationContracts(ctx context.Context, p *core.Pipeline) error {
+	if err := supplychain.VerifySignature(ctx, p); err != nil {
+		return fmt.Errorf("signature verification contract: %w", err)
+	}
+	if p.Cfg.CosignImagePath != "" {
+		log("signature verification contract passed")
+	}
+
+	if err := supplychain.VerifyProvenance(ctx, p); err != nil {
+		return fmt.Errorf("provenance verification contract: %w", err)
+	}
+	if p.Cfg.SLSAProvenancePath != "" && p.Cfg.SLSAArtifactPath != "" {
+		log("provenance verification contract passed")
 	}
 
 	return nil

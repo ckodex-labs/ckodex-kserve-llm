@@ -17,7 +17,8 @@ import (
 func TestBuilder_Build(t *testing.T) {
 	client := fake.NewClientBuilder().Build()
 	builder := &Builder{
-		Client: client,
+		Client:             client,
+		LocalCosignKeyPath: "/etc/cosign/cosign.pub",
 	}
 
 	llmSvc := &servingv1alpha2.LLMInferenceService{
@@ -139,7 +140,8 @@ func TestBuilder_Build_PVCVolumeMount(t *testing.T) {
 func TestBuilder_BuildStorageInitializer(t *testing.T) {
 	client := fake.NewClientBuilder().Build()
 	builder := &Builder{
-		Client: client,
+		Client:             client,
+		LocalCosignKeyPath: "/etc/cosign/cosign.pub",
 	}
 
 	llmSvc := &servingv1alpha2.LLMInferenceService{
@@ -150,6 +152,22 @@ func TestBuilder_BuildStorageInitializer(t *testing.T) {
 			Model: servingv1alpha2.ModelSpec{
 				URI: "hf://mistralai/Mistral-7B",
 			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "model-server",
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "cosign-key",
+									MountPath: "/etc/cosign",
+									ReadOnly:  true,
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -158,6 +176,14 @@ func TestBuilder_BuildStorageInitializer(t *testing.T) {
 
 	assert.Equal(t, "storage-initializer", initContainer.Name)
 	assert.Equal(t, api.StorageInitializerImage, initContainer.Image)
+	foundKeyEnv := false
+	for _, env := range initContainer.Env {
+		if env.Name == "CKODEX_LOCAL_COSIGN_KEY_PATH" && env.Value == "/etc/cosign/cosign.pub" {
+			foundKeyEnv = true
+			break
+		}
+	}
+	assert.True(t, foundKeyEnv, "storage-initializer should receive CKODEX_LOCAL_COSIGN_KEY_PATH")
 
 	// Check SecurityContext
 	require.NotNil(t, initContainer.SecurityContext)
@@ -173,6 +199,11 @@ func TestBuilder_BuildStorageInitializer(t *testing.T) {
 		}
 	}
 	assert.True(t, foundTmp, "storage-initializer should have /tmp scratch mount")
+	assert.Contains(t, initContainer.VolumeMounts, corev1.VolumeMount{
+		Name:      "cosign-key",
+		MountPath: "/etc/cosign",
+		ReadOnly:  true,
+	})
 
 	// Ckodex image fallback
 	llmSvc.Spec.Model.URI = "s3://bucket/model"

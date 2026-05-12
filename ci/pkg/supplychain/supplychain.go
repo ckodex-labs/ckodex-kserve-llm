@@ -12,6 +12,12 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/ci/pkg/core"
 )
 
+const (
+	cosignCommand  = "cosign"
+	cosignYesFlag  = "--yes"
+	cosignTypeFlag = "--type"
+)
+
 // SBOM generates a CycloneDX SBOM for the built image.
 func SBOM(_ context.Context, p *core.Pipeline, imageRef string) (*dagger.File, error) {
 	// Generate SBOM from the built image to ensure we capture the final state.
@@ -47,8 +53,8 @@ func Sign(ctx context.Context, p *core.Pipeline, imageRef string) error {
 
 	_, err := ctr.
 		WithExec([]string{
-			"cosign", "sign",
-			"--yes",
+			cosignCommand, "sign",
+			cosignYesFlag,
 			imageRef,
 		}).
 		Stdout(ctx)
@@ -72,9 +78,9 @@ func Attest(ctx context.Context, p *core.Pipeline, imageRef string, sbomFile *da
 
 	if _, err := ctr.
 		WithExec([]string{
-			"cosign", "attest",
-			"--yes",
-			"--type", "cyclonedx",
+			cosignCommand, "attest",
+			cosignYesFlag,
+			cosignTypeFlag, "cyclonedx",
 			"--predicate", "/sbom.cdx.json",
 			imageRef,
 		}).
@@ -109,9 +115,9 @@ func Attest(ctx context.Context, p *core.Pipeline, imageRef string, sbomFile *da
 	// envelope provided by the slsa-framework/slsa-github-generator.
 	_, err = ctr2.
 		WithExec([]string{
-			"cosign", "attest",
-			"--yes",
-			"--type", "slsaprovenance1",
+			cosignCommand, "attest",
+			cosignYesFlag,
+			cosignTypeFlag, "slsaprovenance1",
 			"--predicate", "/provenance.json",
 			imageRef,
 		}).
@@ -175,7 +181,7 @@ func VerifySignature(ctx context.Context, p *core.Pipeline) error {
 	ctr := p.Client.Container().
 		From(fmt.Sprintf("gcr.io/projectsigstore/cosign:%s", core.CosignVersion))
 
-	args := []string{"cosign", "verify", "--yes"}
+	args := []string{cosignCommand, "verify", cosignYesFlag}
 	if p.Cfg.CosignBundlePath != "" {
 		args = append(args, "--bundle", p.Cfg.CosignBundlePath)
 	}
@@ -196,9 +202,9 @@ func VerifyProvenance(ctx context.Context, p *core.Pipeline) error {
 
 	_, err := ctr.
 		WithExec([]string{
-			"cosign", "verify-attestation",
-			"--yes",
-			"--type", "slsaprovenance1",
+			cosignCommand, "verify-attestation",
+			cosignYesFlag,
+			cosignTypeFlag, "slsaprovenance1",
 			"--bundle", p.Cfg.SLSAProvenancePath,
 			p.Cfg.SLSAArtifactPath,
 		}).

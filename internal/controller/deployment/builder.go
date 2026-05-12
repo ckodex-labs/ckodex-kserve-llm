@@ -3,6 +3,7 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -34,8 +35,9 @@ type Builder struct {
 	OTEL_Endpoint           string // Contract: OTEL_EXPORTER_OTLP_ENDPOINT
 
 	// AirGap configuration
-	AirGappedMode bool
-	LocalRegistry string // e.g. "local-registry.corp.internal"
+	AirGappedMode      bool
+	LocalRegistry      string // e.g. "local-registry.corp.internal"
+	LocalCosignKeyPath string
 }
 
 // Build constructs the desired Deployment spec.
@@ -235,10 +237,46 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 		}
 	}
 
+	if b.LocalCosignKeyPath != "" {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  "CKODEX_LOCAL_COSIGN_KEY_PATH",
+			Value: b.LocalCosignKeyPath,
+		})
+		b.copyMatchingVolumeMounts(container, &llmSvc.Spec.Template.Spec, b.LocalCosignKeyPath)
+	}
+
 	// Apply universal restricted security context
 	b.applyRestrictedSecurityContext(container)
 
 	return container
+}
+
+func (b *Builder) copyMatchingVolumeMounts(container *corev1.Container, podSpec *corev1.PodSpec, filePath string) {
+	targetDir := filepath.Clean(filepath.Dir(filePath))
+	for _, existing := range podSpec.Containers {
+		for _, mount := range existing.VolumeMounts {
+			mountPath := filepath.Clean(mount.MountPath)
+			if mountPath != targetDir && mountPath != filepath.Clean(filePath) && !strings.HasPrefix(targetDir, mountPath+string(filepath.Separator)) {
+				continue
+			}
+			if hasVolumeMount(container.VolumeMounts, mount) {
+				continue
+			}
+			container.VolumeMounts = append(container.VolumeMounts, mount)
+		}
+	}
+}
+
+func hasVolumeMount(mounts []corev1.VolumeMount, candidate corev1.VolumeMount) bool {
+	for _, mount := range mounts {
+		if mount.Name == candidate.Name &&
+			mount.MountPath == candidate.MountPath &&
+			mount.SubPath == candidate.SubPath &&
+			mount.ReadOnly == candidate.ReadOnly {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *Builder) ensureResources(c *corev1.Container) {

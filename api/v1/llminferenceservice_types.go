@@ -122,8 +122,8 @@ type ExperimentalSpec struct {
 // ModelSpec defines the model to serve.
 type ModelSpec struct {
 	// URI is the model artifact location.
-	// Supported schemes: hf://, hf-mirror://, s3://, gs://, pvc://, oci://, seaweedfs://.
-	// +kubebuilder:validation:Pattern=`^(hf|hf-mirror|s3|swfs|gs|pvc|oci|modelpack|https?)://.*$`
+	// Supported schemes: hf://, hf-mirror://, s3://, gs://, pvc://, oci://, ocis://, seaweedfs://.
+	// +kubebuilder:validation:Pattern=`^(hf|hf-mirror|s3|swfs|gs|pvc|oci|ocis|modelpack|https?)://.*$`
 	URI string `json:"uri"`
 
 	// Name is the model identifier used in inference requests.

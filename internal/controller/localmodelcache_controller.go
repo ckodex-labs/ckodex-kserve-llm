@@ -433,6 +433,67 @@ func (r *LocalModelCacheReconciler) buildWarmupJob(
 	jobName, pvcName, namespace, nodeName string,
 ) *batchv1.Job {
 	backoffLimit := int32(3)
+	container := corev1.Container{
+		Name:            "warmup",
+		Image:           CKodexStorageInitializerImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Args:            []string{lmc.Spec.SourceModelURI, ModelMountPath},
+		Env: append(lmc.Spec.Env, []corev1.EnvVar{
+			{Name: "S3_ENDPOINT", Value: SeaweedFSFilerS3Endpoint},
+			{Name: "AWS_ENDPOINT_URL", Value: SeaweedFSFilerS3Endpoint},
+			{Name: "AWS_NO_SIGN_REQUEST", Value: "yes"},
+			{Name: "S3_USE_HTTPS", Value: "false"},
+			{Name: "S3_USE_PATH_STYLE", Value: "true"},
+		}...),
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "cache", MountPath: ModelMountPath},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser: ptr.To(int64(0)),
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultCacheCPURequest),
+				corev1.ResourceMemory: resource.MustParse(DefaultCacheMemoryRequest),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultCacheCPURequest),
+				corev1.ResourceMemory: resource.MustParse(DefaultCacheMemoryRequest),
+			},
+		},
+	}
+
+	podSpec := corev1.PodSpec{
+		NodeSelector: map[string]string{
+			"kubernetes.io/hostname": nodeName,
+		},
+		RestartPolicy:                 corev1.RestartPolicyOnFailure,
+		TerminationGracePeriodSeconds: ptr.To(int64(ASRTerminationGracePeriod)), // reusing ASR's 30s grace for storage jobs
+		Containers:                    []corev1.Container{container},
+		Volumes: []corev1.Volume{
+			{
+				Name: "cache",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvcName,
+					},
+				},
+			},
+		},
+	}
+
+	if lmc.Spec.Storage != nil {
+		if lmc.Spec.Storage.SecretName != "" {
+			podSpec.Containers[0].EnvFrom = append(podSpec.Containers[0].EnvFrom, corev1.EnvFromSource{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: lmc.Spec.Storage.SecretName},
+				},
+			})
+		}
+		if lmc.Spec.Storage.ServiceAccountName != "" {
+			podSpec.ServiceAccountName = lmc.Spec.Storage.ServiceAccountName
+		}
+	}
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -446,54 +507,7 @@ func (r *LocalModelCacheReconciler) buildWarmupJob(
 		Spec: batchv1.JobSpec{
 			BackoffLimit: &backoffLimit,
 			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					NodeSelector: map[string]string{
-						"kubernetes.io/hostname": nodeName,
-					},
-					RestartPolicy:                 corev1.RestartPolicyOnFailure,
-					TerminationGracePeriodSeconds: ptr.To(int64(ASRTerminationGracePeriod)), // reusing ASR's 30s grace for storage jobs
-					Containers: []corev1.Container{
-						{
-							Name:            "warmup",
-							Image:           CKodexStorageInitializerImage,
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							Args:            []string{lmc.Spec.SourceModelURI, ModelMountPath},
-							Env: append(lmc.Spec.Env, []corev1.EnvVar{
-								{Name: "S3_ENDPOINT", Value: SeaweedFSFilerS3Endpoint},
-								{Name: "AWS_ENDPOINT_URL", Value: SeaweedFSFilerS3Endpoint},
-								{Name: "AWS_NO_SIGN_REQUEST", Value: "yes"},
-								{Name: "S3_USE_HTTPS", Value: "false"},
-								{Name: "S3_USE_PATH_STYLE", Value: "true"},
-							}...),
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "cache", MountPath: ModelMountPath},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: ptr.To(int64(0)),
-							},
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(DefaultCacheCPURequest),
-									corev1.ResourceMemory: resource.MustParse(DefaultCacheMemoryRequest),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(DefaultCacheCPURequest),
-									corev1.ResourceMemory: resource.MustParse(DefaultCacheMemoryRequest),
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "cache",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvcName,
-								},
-							},
-						},
-					},
-				},
+				Spec: podSpec,
 			},
 		},
 	}

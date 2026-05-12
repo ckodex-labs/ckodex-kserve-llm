@@ -136,21 +136,19 @@ func main() {
 
 	// Build reconciler with feature-gated sub-reconcilers
 	reconciler := &controller.LLMInferenceServiceReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		Recorder:      mgr.GetEventRecorderFor("llminferenceservice-controller"),
-		OTEL_Endpoint: cfg.Observability.OTLPEndpoint,
-		AirGappedMode: cfg.AirGappedMode,
-		LocalRegistry: cfg.LocalRegistry,
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		Recorder:           mgr.GetEventRecorderFor("llminferenceservice-controller"),
+		OTEL_Endpoint:      cfg.Observability.OTLPEndpoint,
+		AirGappedMode:      cfg.AirGappedMode,
+		LocalRegistry:      cfg.LocalRegistry,
+		LocalCosignKeyPath: cfg.LocalCosignKeyPath,
 	}
 
 	// gRPC — independent of gateway (controls Service port definition)
 	reconciler.EnableGRPC = cfg.Features.EnableGRPC
 	reconciler.EnableHardwareSelection = cfg.Features.EnableExperimentalHardwareSelection
 	reconciler.EnableExperimentalStatusHardening = cfg.Features.EnableExperimentalStatusHardening
-
-	// M3 Vision: Real-time Performance Overlay
-	reconciler.Metrics = &observability.MockMetricsQuerier{}
 
 	// Gateway
 	if cfg.Features.EnableGateway {
@@ -346,9 +344,8 @@ func main() {
 	}
 
 	// Set up ModelOnboarding controller — drives multi-stage model promotion pipeline.
-	// When CKODEX_PROMETHEUS_URL is set, live Prometheus metrics are queried for
-	// promotion gate evaluation (success rate, P99 latency). Without it, gates pass
-	// unconditionally — safe default for clusters without a Prometheus deployment.
+	// Promotion gates fail closed unless CKODEX_PROMETHEUS_URL is configured or the
+	// explicit insecure fallback is enabled for development-only environments.
 	modelOnboardingReconciler := &controller.ModelOnboardingReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -356,6 +353,11 @@ func main() {
 	if cfg.PrometheusURL != "" {
 		modelOnboardingReconciler.Metrics = controller.NewPrometheusMetricsQuerier(cfg.PrometheusURL)
 		setupLog.Info("Prometheus gate metrics enabled", "url", cfg.PrometheusURL)
+	} else if cfg.AllowInsecurePromotionGates {
+		modelOnboardingReconciler.Metrics = controller.NewInsecurePassMetricsQuerier()
+		setupLog.Info("promotion gates running in insecure compatibility mode", "env", "CKODEX_ALLOW_INSECURE_PROMOTION_GATES")
+	} else {
+		setupLog.Info("promotion gates will fail closed until Prometheus metrics are configured")
 	}
 	if err := modelOnboardingReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ModelOnboarding")

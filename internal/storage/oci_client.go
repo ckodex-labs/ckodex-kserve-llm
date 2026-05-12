@@ -21,7 +21,7 @@ import (
 )
 
 // OCIClient provides OCI model distribution via ORAS.
-// Supports oci:// URI scheme for pull/push of model artifacts.
+// Supports oci:// and ocis:// URI schemes for pull/push of model artifacts.
 type OCIClient struct {
 	// RegistryAuth maps registry host -> auth config.
 	RegistryAuth map[string]RegistryAuthConfig
@@ -39,7 +39,7 @@ func init() {
 }
 
 func (c *OCIClient) Schemes() []string {
-	return []string{"oci"}
+	return []string{"oci", "ocis"}
 }
 
 // Pull downloads an OCI model artifact to destPath using the ORAS content store.
@@ -245,21 +245,21 @@ const (
 	MediaTypeAdapter   = "application/vnd.ckodex.model.adapter.v1" // LoRA adapters
 )
 
-// ParseOCIURI parses an oci:// URI into its components.
+// ParseOCIURI parses an oci:// or ocis:// URI into its components.
 // Format: oci://registry/repository:tag or oci://registry/repository@sha256:digest
 func ParseOCIURI(uri string) (*ModelArtifact, error) {
-	if !strings.HasPrefix(uri, "oci://") {
+	if !HasOCIScheme(uri) {
 		return nil, fmt.Errorf("not an OCI URI: %s", uri)
 	}
 
-	ref := strings.TrimPrefix(uri, "oci://")
+	ref := TrimOCIScheme(uri)
 
 	artifact := &ModelArtifact{RawURI: uri}
 
 	// Split registry/repository from reference
 	parts := strings.SplitN(ref, "/", 2)
 	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid OCI URI, expected oci://registry/repo:tag: %s", uri)
+		return nil, fmt.Errorf("invalid OCI URI, expected oci://registry/repo:tag or ocis://registry/repo:tag: %s", uri)
 	}
 	artifact.Registry = parts[0]
 
@@ -280,7 +280,7 @@ func ParseOCIURI(uri string) (*ModelArtifact, error) {
 	return artifact, nil
 }
 
-// ResolveAirGappedURI rewrites external URIs to local OCI references if 
+// ResolveAirGappedURI rewrites external URIs to local OCI references if
 // air-gapped mode is enabled.
 func ResolveAirGappedURI(uri string, localRegistry string) string {
 	if localRegistry == "" {
@@ -293,15 +293,33 @@ func ResolveAirGappedURI(uri string, localRegistry string) string {
 		return fmt.Sprintf("oci://%s/hf/%s", localRegistry, path)
 	}
 
-	// Mirroring for other OCI registries: oci://ghcr.io/ckodex/model -> oci://local-reg/ghcr.io/ckodex/model
-	if strings.HasPrefix(uri, "oci://") {
-		ref := strings.TrimPrefix(uri, "oci://")
+	// Mirroring for other OCI registries preserves whether the caller requested
+	// explicit secure OCI semantics via ocis://.
+	if HasOCIScheme(uri) {
+		ref := TrimOCIScheme(uri)
+		scheme := "oci://"
+		if strings.HasPrefix(uri, "ocis://") {
+			scheme = "ocis://"
+		}
 		if !strings.HasPrefix(ref, localRegistry) {
-			return fmt.Sprintf("oci://%s/%s", localRegistry, ref)
+			return fmt.Sprintf("%s%s/%s", scheme, localRegistry, ref)
 		}
 	}
 
 	return uri
+}
+
+// HasOCIScheme reports whether the URI uses oci:// or ocis://.
+func HasOCIScheme(uri string) bool {
+	return strings.HasPrefix(uri, "oci://") || strings.HasPrefix(uri, "ocis://")
+}
+
+// TrimOCIScheme removes either OCI scheme prefix.
+func TrimOCIScheme(uri string) string {
+	if strings.HasPrefix(uri, "ocis://") {
+		return strings.TrimPrefix(uri, "ocis://")
+	}
+	return strings.TrimPrefix(uri, "oci://")
 }
 
 // Push uploads model artifacts from srcPath to the OCI registry.

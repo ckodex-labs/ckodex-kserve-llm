@@ -163,10 +163,14 @@ type OperatorConfig struct {
 	// PrometheusURL is the base URL of the Prometheus server used for promotion gate
 	// metric queries by the ModelOnboarding controller.
 	// Format: "http://prometheus.monitoring.svc:9090" (no trailing slash).
-	// When empty, the noopMetricsQuerier is used and all gate metric checks pass
-	// unconditionally (backward-compatible default for clusters without Prometheus).
+	// When empty, promotion gates fail closed unless the operator explicitly opts
+	// into the insecure compatibility fallback via AllowInsecurePromotionGates.
 	// Override via CKODEX_PROMETHEUS_URL.
 	PrometheusURL string `json:"prometheusURL,omitempty"`
+
+	// AllowInsecurePromotionGates enables a dev-only fallback that lets model
+	// onboarding promotion gates pass without Prometheus data.
+	AllowInsecurePromotionGates bool `json:"allowInsecurePromotionGates,omitempty"`
 
 	// Version is the operator version, injected at build time.
 	// Defaults to "dev". Override via VERSION environment variable (contract).
@@ -190,7 +194,8 @@ type OperatorConfig struct {
 	LocalRegistry string `json:"localRegistry,omitempty"`
 
 	// LocalCosignKeyPath is the path to a local public key used for offline
-	// signature verification in air-gapped environments.
+	// signature verification in air-gapped environments. Configuration alone does
+	// not prove verification; controllers must still record a verification result.
 	LocalCosignKeyPath string `json:"localCosignKeyPath,omitempty"`
 }
 
@@ -358,9 +363,10 @@ func DefaultOperatorConfig() OperatorConfig {
 			ServiceName:  "ckodex-kserve-llm-operator",
 		},
 		// Empty addr → in-memory fallback; override with CKODEX_SEMANTIC_CACHE_ADDR in prod.
-		SemanticCacheAddr: "",
-		SemanticCacheTTL:  1 * time.Hour,
-		Version:           "dev",
+		SemanticCacheAddr:           "",
+		SemanticCacheTTL:            1 * time.Hour,
+		AllowInsecurePromotionGates: false,
+		Version:                     "dev",
 	}
 }
 
@@ -383,6 +389,7 @@ func (c *OperatorConfig) LoadFromEnv() {
 	envStr("CKODEX_SEMANTIC_CACHE_ADDR", &c.SemanticCacheAddr)
 	envDuration("CKODEX_SEMANTIC_CACHE_TTL", &c.SemanticCacheTTL)
 	envStr("CKODEX_PROMETHEUS_URL", &c.PrometheusURL)
+	envBool("CKODEX_ALLOW_INSECURE_PROMOTION_GATES", &c.AllowInsecurePromotionGates)
 
 	// OIS / OTel Contract Overrides
 	envStr("VERSION", &c.Version)

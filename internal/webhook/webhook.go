@@ -79,7 +79,7 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 		// so operators don't accidentally route traffic outside the authorization boundary.
 		if v.FedRAMPMode && strings.HasPrefix(llmSvc.Spec.Model.URI, "hf://") {
 			errs = append(errs, "spec.model.uri: hf:// URIs are not permitted in FedRAMP mode; "+
-				"upload the model to an authorized registry and use oci://, s3://, or pvc:// instead")
+				"upload the model to an authorized registry and use oci://, ocis://, s3://, or pvc:// instead")
 		}
 
 		uriLower := strings.ToLower(llmSvc.Spec.Model.URI)
@@ -94,7 +94,7 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 			errs = append(errs, "spec.model.uri pointing to unsafe formats (.pkl, .bin, .pt) is forbidden; use .safetensors")
 		}
 
-		validSchemes := []string{"hf://", "hf-mirror://", "s3://", "gs://", "pvc://", "oci://", "seaweedfs://", "http://", "https://"}
+		validSchemes := []string{"hf://", "hf-mirror://", "s3://", "gs://", "pvc://", "oci://", "ocis://", "seaweedfs://", "http://", "https://"}
 		valid := false
 		for _, scheme := range validSchemes {
 			if strings.HasPrefix(llmSvc.Spec.Model.URI, scheme) {

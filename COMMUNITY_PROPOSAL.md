@@ -26,10 +26,10 @@ We propose a hardened profile that layers the following capabilities onto a stan
 2. Gateway API-based routing for HTTP and gRPC inference traffic.
 3. Open Inference Signals for behavioral telemetry and policy decisions.
 4. OSCAL/Lula validation for build-time compliance evidence.
-5. Cosign signing and SLSA provenance for release artifacts.
+5. Cosign signing and SLSA provenance hooks for release artifacts.
 6. Optional air-gap support for disconnected environments.
 
-The implementation in this repository already demonstrates those ideas as a working operator, not a slide deck.
+The implementation in this repository demonstrates those ideas as a working operator, while some verification paths remain explicitly environment-dependent or pending stronger runtime proof wiring.
 
 ## What Should Be Upstreamed
 
@@ -55,7 +55,7 @@ To keep adoption realistic, the hardened profile should remain opt-in:
 
 This proposal is successful if a team can:
 
-- install a signed release,
+- review signed release artifacts and attached provenance,
 - deploy a model with clear policy boundaries,
 - generate evidence artifacts automatically,
 - and hand that evidence to security, risk, and audit reviewers without manual reconstruction.
@@ -74,4 +74,3 @@ We would value feedback on:
 - [Security Architecture](docs/SECURITY_ARCHITECTURE.md)
 - [API Deprecation Policy](docs/api-deprecation-policy.md)
 - [Enterprise Marketing Kit](docs/MARKETING_KIT.md)
-

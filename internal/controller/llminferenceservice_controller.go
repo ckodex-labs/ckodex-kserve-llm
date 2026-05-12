@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -43,6 +44,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/gateway"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/governance"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/provenance"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/security"
 )
 
@@ -74,10 +76,11 @@ type LLMInferenceServiceReconciler struct {
 	EnableHardwareSelection           bool
 	EnableExperimentalStatusHardening bool
 	OTEL_Endpoint                     string // Contract: OTEL_EXPORTER_OTLP_ENDPOINT
-	
+
 	// AirGap configuration
-	AirGappedMode bool
-	LocalRegistry string
+	AirGappedMode      bool
+	LocalRegistry      string
+	LocalCosignKeyPath string
 
 	// Modular sub-reconcilers
 	DeploymentBuilder *deployment.Builder
@@ -100,6 +103,7 @@ type LLMInferenceServiceReconciler struct {
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=llminferenceservices/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
@@ -306,12 +310,12 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 
 		details := map[string]string{
-			"replicas":        fmt.Sprintf("%d", llmSvc.Status.Replicas),
-			"ready":           fmt.Sprintf("%t", llmSvc.Status.ModelReady),
-			"model_uri":       llmSvc.Spec.Model.URI,
-			"engine":          llmSvc.Spec.Engine,
-			"exec.mode":       mode,
-			"detected_hw":     llmSvc.Status.DetectedHardware,
+			"replicas":    fmt.Sprintf("%d", llmSvc.Status.Replicas),
+			"ready":       fmt.Sprintf("%t", llmSvc.Status.ModelReady),
+			"model_uri":   llmSvc.Spec.Model.URI,
+			"engine":      llmSvc.Spec.Engine,
+			"exec.mode":   mode,
+			"detected_hw": llmSvc.Status.DetectedHardware,
 		}
 
 		r.Audit.LogUpdate(ctx, resourceRef, "controller", details)
@@ -484,13 +488,16 @@ func (r *LLMInferenceServiceReconciler) reconcileGovernanceEvidence(ctx context.
 	state := governance.AggregateStatePlanes(llmSvc, activeLoras)
 	si7 := metav1.Condition{
 		Type:               "Compliance-SI-7",
-		Status:             metav1.ConditionTrue,
-		Reason:             "IntegrityVerified",
+		Status:             metav1.ConditionFalse,
+		Reason:             "IntegrityUnverified",
 		Message:            fmt.Sprintf("Lifecycle: %s, Trust: %s, Risk: %s", state.Lifecycle, state.Trust, state.Risk),
 		LastTransitionTime: metav1.Now(),
 	}
 
-	if state.Lifecycle == "quarantined" || state.Trust == "denied" {
+	if state.Trust == "verified" || state.Trust == "trusted" {
+		si7.Status = metav1.ConditionTrue
+		si7.Reason = "IntegrityVerified"
+	} else if state.Lifecycle == "quarantined" || state.Trust == "denied" {
 		si7.Status = metav1.ConditionFalse
 		si7.Reason = "SecurityBreach"
 	}
@@ -504,16 +511,11 @@ func (r *LLMInferenceServiceReconciler) reconcileGovernanceEvidence(ctx context.
 		LastTransitionTime: metav1.Now(),
 	}
 
-	// SR-2: Supply Chain Risk Management (Provenance verification)
-	sr2Msg := "Software supply chain verified via SLSA provenance and Cosign certificates"
-	if r.AirGappedMode {
-		sr2Msg = "Software supply chain verified via offline Cosign signatures using local public keys"
-	}
 	sr2 := metav1.Condition{
 		Type:               "Compliance-SR-2",
-		Status:             metav1.ConditionTrue,
-		Reason:             "ProvenanceVerified",
-		Message:            sr2Msg,
+		Status:             metav1.ConditionFalse,
+		Reason:             "VerificationPending",
+		Message:            "No cryptographic provenance verification result has been recorded for this workload",
 		LastTransitionTime: metav1.Now(),
 	}
 
@@ -528,6 +530,44 @@ func (r *LLMInferenceServiceReconciler) reconcileGovernanceEvidence(ctx context.
 		}
 	}
 
+	totalArtifacts := 0
+	verifiedArtifacts := 0
+	if runtimeVerifiableModelURI(llmSvc.Spec.Model.URI) {
+		totalArtifacts++
+		verified, err := r.baseModelVerificationRecorded(ctx, llmSvc)
+		if err != nil {
+			return fmt.Errorf("inspect base model verification: %w", err)
+		}
+		if verified {
+			verifiedArtifacts++
+		}
+	}
+	for _, lora := range activeLoras {
+		totalArtifacts++
+		if governance.HasVerifiedSupplyChainEvidence(&lora) {
+			verifiedArtifacts++
+		}
+	}
+
+	if totalArtifacts > 0 && verifiedArtifacts == totalArtifacts {
+		sr2.Status = metav1.ConditionTrue
+		sr2.Reason = "ProvenanceVerified"
+		if r.AirGappedMode {
+			sr2.Message = "All active artifacts recorded offline provenance verification with a configured local key path"
+		} else {
+			sr2.Message = "All active artifacts recorded cryptographic provenance verification metadata"
+		}
+	} else if r.AirGappedMode && r.LocalCosignKeyPath == "" {
+		sr2.Reason = "OfflineKeyMissing"
+		sr2.Message = "Air-gapped mode is enabled, but CKODEX_LOCAL_COSIGN_KEY_PATH is not configured"
+	} else if r.AirGappedMode {
+		sr2.Reason = "OfflineVerificationPending"
+		sr2.Message = fmt.Sprintf("Offline key path %q is configured, but the controller has not recorded cryptographic verification for all active artifacts", r.LocalCosignKeyPath)
+	} else if totalArtifacts == 0 {
+		sr2.Reason = "NoVerifiableArtifacts"
+		sr2.Message = "No active artifact evidence bundles are present to prove runtime supply-chain verification"
+	}
+
 	meta.SetStatusCondition(&llmSvc.Status.Conditions, ac4)
 	meta.SetStatusCondition(&llmSvc.Status.Conditions, au2)
 	meta.SetStatusCondition(&llmSvc.Status.Conditions, si7)
@@ -536,6 +576,68 @@ func (r *LLMInferenceServiceReconciler) reconcileGovernanceEvidence(ctx context.
 
 	logger.Info("Updated governance evidence for Lula validation", "controls", "AC-4, AU-2, SI-7, SI-4, SR-2")
 	return nil
+}
+
+func runtimeVerifiableModelURI(uri string) bool {
+	return strings.HasPrefix(uri, "oci://") || strings.HasPrefix(uri, "ocis://")
+}
+
+func (r *LLMInferenceServiceReconciler) baseModelVerificationRecorded(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) (bool, error) {
+	var pods corev1.PodList
+	if err := r.List(ctx, &pods,
+		client.InNamespace(llmSvc.Namespace),
+		client.MatchingLabels{
+			"app.kubernetes.io/name":     "llminferenceservice",
+			"app.kubernetes.io/instance": llmSvc.Name,
+		},
+	); err != nil {
+		return false, err
+	}
+
+	readyPods := 0
+	for _, pod := range pods.Items {
+		if !isReadyPod(&pod) {
+			continue
+		}
+		readyPods++
+		record, err := readInitContainerVerificationRecord(&pod, "storage-initializer")
+		if err != nil {
+			return false, err
+		}
+		if record == nil || !record.Verified() {
+			return false, nil
+		}
+	}
+
+	return readyPods > 0, nil
+}
+
+func readInitContainerVerificationRecord(pod *corev1.Pod, containerName string) (*provenance.RuntimeVerificationRecord, error) {
+	for _, status := range pod.Status.InitContainerStatuses {
+		if status.Name != containerName || status.State.Terminated == nil {
+			continue
+		}
+		message := strings.TrimSpace(status.State.Terminated.Message)
+		if message == "" {
+			return nil, nil
+		}
+		record, err := provenance.ParseRuntimeVerificationRecord(message)
+		if err != nil {
+			return nil, fmt.Errorf("parse init-container verification record from pod %s: %w", pod.Name, err)
+		}
+		return record, nil
+	}
+
+	return nil, nil
+}
+
+func isReadyPod(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -548,6 +650,7 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		OTEL_Endpoint:           r.OTEL_Endpoint,
 		AirGappedMode:           r.AirGappedMode,
 		LocalRegistry:           r.LocalRegistry,
+		LocalCosignKeyPath:      r.LocalCosignKeyPath,
 	}
 	r.StatusReconciler = &status.Reconciler{
 		Client:          mgr.GetClient(),

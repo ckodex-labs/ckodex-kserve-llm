@@ -61,18 +61,14 @@ type ModelOnboardingReconciler struct {
 	Scheme *runtime.Scheme
 
 	// Metrics is the Prometheus query backend used by checkGateCriteria.
-	// When nil, a noopMetricsQuerier is used (gates pass unconditionally).
-	// Operators should inject a PrometheusMetricsQuerier in main.go by setting
-	// CKODEX_PROMETHEUS_URL in the operator environment.
+	// When nil, promotion gates fail closed because no authoritative metrics
+	// backend is configured. A dev-only fallback must be injected explicitly.
 	Metrics MetricsQuerier
 }
 
-// metricsQuerier returns the configured querier, falling back to the noop implementation.
+// metricsQuerier returns the configured querier.
 func (r *ModelOnboardingReconciler) metricsQuerier() MetricsQuerier {
-	if r.Metrics != nil {
-		return r.Metrics
-	}
-	return noopMetricsQuerier{}
+	return r.Metrics
 }
 
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=modelonboardings,verbs=get;list;watch;create;update;patch;delete
@@ -265,9 +261,8 @@ func (r *ModelOnboardingReconciler) executeStage(
 //  2. Success rate query against ckodex_inference_requests_total
 //  3. P99 latency query against ckodex_inference_request_duration_seconds_bucket (when MaxLatencyP99 is set)
 //
-// When Metrics is nil (no Prometheus URL configured) a noopMetricsQuerier is used,
-// which returns 100 % success rate and 0 ms latency — gates pass unconditionally.
-// Operators should set CKODEX_PROMETHEUS_URL to enable real gate enforcement.
+// When Metrics is nil, the gate fails closed because there is no authoritative
+// success-rate or latency backend available to prove promotion safety.
 func (r *ModelOnboardingReconciler) checkGateCriteria(
 	ctx context.Context,
 	_ *servingv1alpha2.ModelOnboarding,
@@ -286,6 +281,9 @@ func (r *ModelOnboardingReconciler) checkGateCriteria(
 	}
 
 	q := r.metricsQuerier()
+	if q == nil {
+		return fmt.Errorf("gate: promotion metrics backend is not configured")
+	}
 
 	// --- Success rate check ---
 	successRate, err := q.QuerySuccessRate(ctx, llmSvc.Spec.Model.Name, llmSvc.Namespace)

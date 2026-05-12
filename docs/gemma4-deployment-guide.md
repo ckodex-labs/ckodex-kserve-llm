@@ -1,10 +1,8 @@
 # Gemma 4 Deployment Guide
 
-This guide provides step-by-step instructions for deploying the **Gemma 4** model lineup using the CKodex KServe LLM Operator.
+This guide documents the operator defaults currently associated with the Gemma 4 model family. It is deployment guidance, not CI-backed benchmark evidence.
 
-## 🌈 The Gemma 4 Full Lineup
-
-Gemma 4 ships in four performance-optimized sizes:
+## Supported Model Guidance
 
 | Model       | Resource Profile            | Hardware Tier           | Type    | Image                     |
 | :---------- | :-------------------------- | :---------------------- | :------ | :------------------------ |
@@ -13,17 +11,13 @@ Gemma 4 ships in four performance-optimized sizes:
 | **26B-A4B** | 32 CPU / 128Gi / 1 GPU      | High-end (24GB VRAM)    | **MoE** | `vllm/vllm-openai:gemma4` |
 | **31B**     | 32 CPU / 256Gi / **2 GPUs** | Enterprise (48GB+ VRAM) | Dense   | `vllm/vllm-openai:gemma4` |
 
----
-
-## 🛠 Prerequisites
+## Prerequisites
 
 1.  **GPU Nodes**: Ensure your cluster has nodes with `nvidia.com/gpu` available.
 2.  **Operator Config**: Set `vllm.gemma4Image: "vllm/vllm-openai:gemma4"` in your Helm values.
 3.  **HuggingFace Secret**: For models like 31B, you may need an account and token to access the official Google repositories.
 
----
-
-## 📦 Deployment Steps
+## Deployment Steps
 
 ### 1. Simple Deployment (E4B)
 
@@ -41,7 +35,7 @@ spec:
   replicas: 1
 ```
 
-The operator will automatically apply the **WellKnown** optimizations:
+The operator applies its current Gemma 4 Well-Known settings:
 - Enforce TurboQuant args (`--enable-turboquant`).
 - Guaranteed QoS (Requests == Limits).
 - Optimized vLLM image.
@@ -66,9 +60,7 @@ spec:
 
 The 26B-A4B is a **MoE** model. While it has 27B total parameters, only **4B** are active during any single inference step. The operator enables **Expert Parallelism** automatically.
 
----
-
-## 🚦 Monitoring Capacity
+## Monitoring Capacity
 
 If you deploy a model that exceeds your cluster's GPU count, the operator will emit an informational event:
 
@@ -81,9 +73,7 @@ kubectl get events | grep InsufficientGPUCapacity
 kubectl get llmisvc gemma-4-31b -o jsonpath='{.status.conditions[?(@.type=="GPUCapacity")]}'
 ```
 
----
-
-## 🚀 Optimization Tips
+## Optimization Tips
 
 - **TurboQuant**: All Gemma 4 models are pre-configured with `--enable-turboquant`. This significantly reduces VRAM footprint and improves throughput.
 - **CPU KV Offloading**: For the 31B model, if you have limited GPU VRAM but plenty of system RAM, you can manually enable CPU offloading:
@@ -92,6 +82,5 @@ kubectl get llmisvc gemma-4-31b -o jsonpath='{.status.conditions[?(@.type=="GPUC
     vllmArgs: ["--cpu-offload-gb", "16"]
   ```
 
----
-> [!NOTE]
-> The operator is compatible with **vLLM v0.19.0**. If you're using custom mirrors, ensure your registry has the `vllm/vllm-openai:gemma4` image.
+
+If you're using custom mirrors, ensure your registry has the `vllm/vllm-openai:gemma4` image expected by your operator configuration.

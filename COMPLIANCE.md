@@ -13,17 +13,17 @@ This document outlines the security controls implemented by the **ckodex-kserve-
 | **SR-2** | Supply Chain Risk Mgmt | **Supply-Chain Contract** (v1.0) | `lula/supply-chain-validation.yaml` |
 
 ## 2. Governed States (L|T|R)
-The operator's internal state machine directly supports these controls:
+The operator's internal state machine supports these controls, but not every signal should be interpreted as cryptographic proof:
 
-- **Trust (T)**: Directly maps to **SI-7** and **AC-4**. A workload achieves `verified` trust only after its supply-chain provenance (Cosign) and network isolation (DPI) are cryptographically asserted.
-- **Risk (R)**: Real-time risk assessment maps to **SI-4**. If OIS signals detect anomalous tool usage or out-of-bounds metrics, the risk level escalates, potentially triggering automated quarantine.
+- **Trust (T)**: Maps to **SI-7** and **AC-4**. Most workloads are `asserted` unless the controller has recorded a verifiable provenance result in addition to network-isolation evidence.
+- **Risk (R)**: Maps to **SI-4**. If OIS signals detect anomalous tool usage or out-of-bounds metrics, the risk level escalates and can trigger quarantine.
 
 ## 3. Automated Assessment
-Compliance is not a point-in-time snapshot but a continuous property of the build and runtime:
+Compliance evidence is generated continuously, but the evidence surface is still environment-dependent:
 
 - **Build Time**: The Dagger CI pipeline runs `lula validate` against the **OSCAL Component Definition** in `lula/lula-component.yaml`.
-- **Artifacts**: Every production build generates an `oscal-assessment-results.yaml` in the `bin/` directory, providing a verifiable receipt of compliance status.
-- **Enforcement**: **FedRAMP Mode** (when enabled) acts as a high-integrity gateway, rejecting any model artifacts that do not meet the strict Supply-Chain Contract (SR-2).
+- **Artifacts**: CI exports `oscal-assessment-results.yaml` to `bin/`. On tagged releases, GitHub Actions is configured to publish signing and provenance artifacts for downstream review.
+- **Enforcement**: **FedRAMP Mode** and admission controls enforce configuration policy, but supply-chain verification should only be treated as complete when `Compliance-SR-2` is backed by recorded cryptographic results.
 
 ---
 

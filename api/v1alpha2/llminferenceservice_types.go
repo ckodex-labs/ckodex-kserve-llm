@@ -195,10 +195,12 @@ type CanarySpec struct {
 type ModelSpec struct {
 	// URI is the model artifact location.
 	// Supported schemes: hf:// (HuggingFace Hub), hf-mount:// (HuggingFace CSI lazy mount),
-	// s3://, swfs://, gs://, pvc://, oci://, modelpack://.
+	// s3://, swfs://, gs://, pvc://, oci://, ocis://, modelpack://.
 	// hf-mount:// uses the hf-csi-driver to mount repos as a FUSE/NFS filesystem —
 	// only accessed bytes are fetched, eliminating full model downloads.
-	// +kubebuilder:validation:Pattern=`^(hf|hf-mount|s3|swfs|gs|pvc|oci|modelpack|https?)://.*$`
+	// `ocis://` is an explicit secure-OCI alias and follows the same runtime
+	// verification path as `oci://`, while making the intent visible at the spec boundary.
+	// +kubebuilder:validation:Pattern=`^(hf|hf-mount|s3|swfs|gs|pvc|oci|ocis|modelpack|https?)://.*$`
 	URI string `json:"uri"`
 
 	// Name is the model identifier used in inference requests.

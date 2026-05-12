@@ -6,7 +6,7 @@ The message should be simple: this operator helps teams deploy LLM workloads wit
 
 ## Positioning Statement
 
-CKodex KServe LLM Operator is a hardened control plane for serving LLMs in environments that need more than basic autoscaling and routing. It adds verifiable release signing, policy-backed isolation, and machine-readable evidence so security and platform teams can move faster with less risk.
+CKodex KServe LLM Operator is a hardened control plane for serving LLMs in environments that need more than basic autoscaling and routing. It adds a tag-driven release path, policy-backed isolation, and machine-readable evidence so security and platform teams can evaluate the system without starting from scratch.
 
 ## Audience-Specific Messages
 
@@ -18,7 +18,7 @@ CKodex KServe LLM Operator is a hardened control plane for serving LLMs in envir
 
 ### Security and Risk
 
-- Signed artifacts and provenance are part of the delivery path.
+- Signed artifacts and provenance are part of the intended tagged-release path.
 - Identity, traffic, and telemetry are policy-driven.
 - Compliance evidence is generated as part of the pipeline instead of being assembled later.
 
@@ -30,11 +30,11 @@ CKodex KServe LLM Operator is a hardened control plane for serving LLMs in envir
 
 ## Proof Points
 
-- GitHub release artifacts are drafted, versioned, and signed.
-- Container images are signed with cosign.
-- SBOM and provenance artifacts are produced during release.
+- The tag-driven release workflow is configured to draft GitHub release artifacts.
+- The tag-driven release workflow is configured to publish container images and provenance artifacts.
+- SBOM export and Lula/OSCAL validation are part of the CI path.
 - Lula validation generates OSCAL assessment results.
-- The operator supports air-gap and local-key verification paths.
+- The operator supports air-gap deployment and local-key verification configuration paths.
 
 ## Core Claim
 
@@ -42,7 +42,7 @@ This operator is designed to help regulated teams adopt AI safely and repeatably
 
 ## Short Launch Copy
 
-We are open sourcing a hardened KServe-based operator for regulated LLM deployments. It combines workload identity, policy controls, signed releases, and OSCAL evidence so platform and security teams can move faster without giving up control.
+We are open sourcing a hardened KServe-based operator for regulated LLM deployments. It combines workload identity, policy controls, a reproducible release path, and OSCAL evidence so platform and security teams can evaluate stronger controls without rebuilding everything themselves.
 
 ## Longer Web Copy
 
@@ -50,7 +50,7 @@ Modern LLM adoption fails when teams have to choose between speed and control. O
 
 ## Community Announcement Copy
 
-We are sharing a hardened KServe LLM Operator for teams that need verifiable controls around AI workloads. The project focuses on reusable patterns: signed releases, provenance, policy-based traffic control, and machine-readable evidence. We welcome feedback from platform, security, and AI teams that want to make regulated LLM serving more practical.
+We are sharing a hardened KServe LLM Operator for teams that need stronger controls around AI workloads. The project focuses on reusable patterns: tag-driven release workflows, provenance artifacts, policy-based traffic control, and machine-readable evidence. We welcome feedback from platform, security, and AI teams that want to make regulated LLM serving more practical.
 
 ## Suggested Call To Action
 
@@ -63,6 +63,5 @@ We are sharing a hardened KServe LLM Operator for teams that need verifiable con
 
 - Say "designed for regulated environments" rather than "compliant by default."
 - Say "evidence generation" rather than "audit solved."
-- Say "signed and provenance-backed" rather than "fully secure."
+- Say "tagged releases are configured to publish signed and provenance-backed artifacts" rather than "fully secure."
 - Avoid promising certifications the project does not own.
-

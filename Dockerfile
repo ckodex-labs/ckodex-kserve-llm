@@ -21,6 +21,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -a -ldflags="-s -w" -o storage-initializer cmd/storage-initializer/main.go
 
+FROM gcr.io/projectsigstore/cosign:v3.0.4 AS cosign
+
 # Runtime stage — distroless for minimal attack surface
 FROM gcr.io/distroless/static:nonroot AS manager
 WORKDIR /
@@ -32,5 +34,6 @@ ENTRYPOINT ["/manager"]
 FROM gcr.io/distroless/static:nonroot AS storage-initializer
 WORKDIR /
 COPY --from=builder /workspace/storage-initializer .
+COPY --from=cosign /ko-app/cosign /cosign
 USER 65532:65532
 ENTRYPOINT ["/storage-initializer"]

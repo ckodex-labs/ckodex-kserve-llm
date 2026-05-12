@@ -66,7 +66,8 @@ func TestDefaultOperatorConfig_ObservabilityDefaults(t *testing.T) {
 
 func TestDefaultOperatorConfig_PrometheusURLEmpty(t *testing.T) {
 	cfg := config.DefaultOperatorConfig()
-	assert.Empty(t, cfg.PrometheusURL, "no Prometheus URL by default — noop querier is safe fallback")
+	assert.Empty(t, cfg.PrometheusURL, "no Prometheus URL by default")
+	assert.False(t, cfg.AllowInsecurePromotionGates, "promotion gates should fail closed by default")
 }
 
 // ---- LoadFromEnv -------------------------------------------------------------
@@ -110,6 +111,15 @@ func TestLoadFromEnv_StringFields(t *testing.T) {
 	assert.Equal(t, "https://idp.corp.internal", cfg.Auth.IssuerURL)
 	assert.Equal(t, "inference-service", cfg.Auth.Audience)
 	assert.Equal(t, "http://prometheus.monitoring:9090", cfg.PrometheusURL)
+}
+
+func TestLoadFromEnv_AllowInsecurePromotionGates(t *testing.T) {
+	setEnv(t, "CKODEX_ALLOW_INSECURE_PROMOTION_GATES", "true")
+
+	cfg := config.DefaultOperatorConfig()
+	cfg.LoadFromEnv()
+
+	assert.True(t, cfg.AllowInsecurePromotionGates)
 }
 
 func TestLoadFromEnv_ContractOverrides(t *testing.T) {

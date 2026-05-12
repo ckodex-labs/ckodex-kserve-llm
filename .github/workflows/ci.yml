@@ -25,12 +25,37 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Set up GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: v2.15.4
+
+      - name: Build console
+        working-directory: console
+        run: |
+          npm ci
+          npm run build
+
       - name: Run Dagger Pipeline
         shell: bash
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           GOCACHE: ${{ runner.temp }}/go-build
         run: go run ./ci/main.go
+
+      - name: Rehearse release artifacts
+        run: make release-readiness
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -47,3 +72,13 @@ jobs:
           name: sbom
           path: sbom/
           retention-days: 90
+
+      - name: Upload release snapshot artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: release-snapshot
+          path: |
+            dist/
+            bin/release-readiness.json
+          retention-days: 30

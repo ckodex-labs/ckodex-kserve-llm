@@ -28,7 +28,7 @@ Compliance is tracked via a composite state machine represented as three "State 
 | Plane | State | Trigger | NIST 800-53 Mapping |
 | :--- | :--- | :--- | :--- |
 | **Lifecycle (L)** | `active` | Successful deployment and health check. | **CP-2** (Contingency Planning) |
-| **Trust (T)** | `verified` | Cryptographic assertion of Identity + DPI Isolation. | **AC-4**, **IA-2** |
+| **Trust (T)** | `asserted` → `verified` | `verified` is reserved for workloads whose runtime verification record shows successful signature, provenance, and SBOM attestation checks. | **AC-4**, **IA-2** |
 | **Risk (R)** | `normal` | Real-time analysis of OIS signals (Inference behavioral monitoring). | **SI-4** (Monitoring) |
 
 ## 3. Evidence-as-Code (OSCAL)
@@ -51,7 +51,7 @@ The following snippet is an actual assessment result for **SI-7 (Software Integr
 # oscal-assessment-results.yaml (Snippet)
 observations:
   - title: "Software Supply Chain Integrity"
-    description: "Verified via SLSA provenance and Cosign certificates"
+    description: "Passes only when the controller has observed a runtime verification record for signature, provenance, and SBOM attestations"
     status: "pass"
     relevant-evidence:
       - description: "InferenceService status.conditions[Compliance-SR-2] is True"

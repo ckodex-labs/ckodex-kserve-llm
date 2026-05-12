@@ -6,29 +6,32 @@ Licensed under the Apache License, Version 2.0.
 package controller
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
-	"time"
+	"net/http"
+	"strings"
 	"sync"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"k8s.io/apimachinery/pkg/types"
-
-	"bytes"
-	"encoding/json"
-	"net/http"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/governance"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/provenance"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/storage"
 	"github.com/sony/gobreaker"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,9 +49,9 @@ type LLMLoraAdapterReconciler struct {
 	Recorder       record.EventRecorder
 	CircuitBreaker *gobreaker.CircuitBreaker
 	Audit          *observability.AuditLogger
-	
+
 	// Warmup tracking to prevent duplicate warmup requests
-	warmupMu sync.Mutex
+	warmupMu   sync.Mutex
 	warmupDone map[string]bool
 }
 
@@ -61,6 +64,7 @@ const (
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=localmodelcaches,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=llminferenceservices,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 
 func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -185,6 +189,14 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: 5000000000}, nil // 5 seconds
 	}
 
+	if updated, err := r.hydrateVerificationEvidence(ctx, &lora, &existingCache); err != nil {
+		logger.Error(err, "Failed to read LoRA runtime verification evidence", "adapter", lora.Name)
+	} else if updated {
+		if err := r.Status().Update(ctx, &lora); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	// 3. Evidence Plane: Canonical Governance Checks
 	engine := governance.NewDefaultEngine()
 	valid, reason := engine.Check(ctx, &lora)
@@ -206,8 +218,8 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if lora.Status.StatePlanes.Lifecycle != "active" {
 		patch := client.MergeFrom(lora.DeepCopy())
 		governance.TransitionStates(&lora, true, "")
-		r.Recorder.Eventf(&lora, corev1.EventTypeNormal, "GovernancePass", "All conformance vectors passed. Transitioning to active.")
-		observability.GovernanceState.WithLabelValues("active", "verified").Set(1)
+		r.Recorder.Eventf(&lora, corev1.EventTypeNormal, "GovernancePass", "Conformance vectors passed. Adapter remains %s while stronger verification is pending.", lora.Status.StatePlanes.Trust)
+		observability.GovernanceState.WithLabelValues(lora.Status.StatePlanes.Lifecycle, lora.Status.StatePlanes.Trust).Set(1)
 		if err := r.Status().Patch(ctx, &lora, patch); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -250,6 +262,77 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *LLMLoraAdapterReconciler) hydrateVerificationEvidence(ctx context.Context, lora *servingv1alpha2.LLMLoraAdapter, cache *servingv1alpha2.LocalModelCache) (bool, error) {
+	if !storage.HasOCIScheme(lora.Spec.Model.URI) {
+		return false, nil
+	}
+	if len(cache.Status.NodeStatuses) == 0 {
+		return false, nil
+	}
+
+	verifiedNodes := 0
+	var latestRecord *provenance.RuntimeVerificationRecord
+	for _, nodeStatus := range cache.Status.NodeStatuses {
+		if nodeStatus.Phase != "Ready" {
+			return false, nil
+		}
+		jobName := fmt.Sprintf("%s-%s-%s", warmupJobPrefix, nodeStatus.ModelURIHash,
+			fmt.Sprintf("%x", sha256.Sum256([]byte(nodeStatus.NodeName)))[:8])
+		record, err := readJobVerificationRecord(ctx, r.Client, cache.Namespace, jobName)
+		if err != nil {
+			return false, err
+		}
+		if record == nil || !record.Verified() {
+			return false, nil
+		}
+		verifiedNodes++
+		latestRecord = record
+	}
+
+	if latestRecord == nil || verifiedNodes == 0 {
+		return false, nil
+	}
+
+	verifiedAt, err := time.Parse(time.RFC3339, latestRecord.VerifiedAt)
+	if err != nil {
+		verifiedAt = time.Now().UTC()
+	}
+	now := metav1.NewTime(verifiedAt)
+
+	lora.Status.EvidenceBundle.SignatureDigest = latestRecord.SignatureDigest
+	lora.Status.EvidenceBundle.AttestationURI = latestRecord.AttestationURI
+	lora.Status.EvidenceBundle.SBOMDigest = latestRecord.SBOMDigest
+	lora.Status.EvidenceBundle.LastVerifiedAt = &now
+	lora.Status.StatePlanes.Trust = "verified"
+	return true, nil
+}
+
+func readJobVerificationRecord(ctx context.Context, c client.Client, namespace, jobName string) (*provenance.RuntimeVerificationRecord, error) {
+	var pods corev1.PodList
+	if err := c.List(ctx, &pods, client.InNamespace(namespace), client.MatchingLabels{"job-name": jobName}); err != nil {
+		return nil, err
+	}
+
+	for _, pod := range pods.Items {
+		for _, status := range pod.Status.ContainerStatuses {
+			if status.Name != "warmup" || status.State.Terminated == nil {
+				continue
+			}
+			message := status.State.Terminated.Message
+			if strings.TrimSpace(message) == "" {
+				continue
+			}
+			record, err := provenance.ParseRuntimeVerificationRecord(message)
+			if err != nil {
+				return nil, fmt.Errorf("parse warmup verification record from pod %s: %w", pod.Name, err)
+			}
+			return record, nil
+		}
+	}
+
+	return nil, nil
 }
 
 func (r *LLMLoraAdapterReconciler) registerWithTargetService(ctx context.Context, lora *servingv1alpha2.LLMLoraAdapter, svc *servingv1alpha2.LLMInferenceService) error {
@@ -318,7 +401,7 @@ func (r *LLMLoraAdapterReconciler) registerWithTargetService(ctx context.Context
 		logger.Info("Successfully sent load_lora_adapter request", "pod", pod.Name)
 		r.Recorder.Eventf(lora, corev1.EventTypeNormal, "Registered",
 			"Successfully loaded LoRA adapter on pod %s", pod.Name)
-		
+
 		// 3. Proactive Warmup (M3 Vision)
 		r.warmupMu.Lock()
 		warmupKey := fmt.Sprintf("%s/%s/%s", pod.Name, lora.Name, lora.Spec.AdapterName)
@@ -326,7 +409,9 @@ func (r *LLMLoraAdapterReconciler) registerWithTargetService(ctx context.Context
 			r.warmupMu.Unlock()
 			go r.performWarmup(ctx, podIP, lora.Spec.AdapterName)
 			r.warmupMu.Lock()
-			if r.warmupDone == nil { r.warmupDone = make(map[string]bool) }
+			if r.warmupDone == nil {
+				r.warmupDone = make(map[string]bool)
+			}
 			r.warmupDone[warmupKey] = true
 		}
 		r.warmupMu.Unlock()
@@ -407,16 +492,16 @@ func removeString(slice []string, s string) []string {
 func (r *LLMLoraAdapterReconciler) performWarmup(ctx context.Context, podIP, adapterName string) {
 	logger := log.FromContext(ctx)
 	url := fmt.Sprintf("http://%s:8000/v1/completions", podIP)
-	
+
 	// Minimal warmup request to trigger weight allocation in VRAM
 	warmupReq := map[string]interface{}{
-		"model":       adapterName,
-		"prompt":      " ",
-		"max_tokens":  1,
-		"echo":        false,
+		"model":      adapterName,
+		"prompt":     " ",
+		"max_tokens": 1,
+		"echo":       false,
 	}
 	body, _ := json.Marshal(warmupReq)
-	
+
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		logger.Error(err, "Warmup request failed", "pod", podIP)
@@ -437,18 +522,22 @@ func (r *LLMLoraAdapterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
 				pod, ok := obj.(*corev1.Pod)
-				if !ok { return nil }
-				
+				if !ok {
+					return nil
+				}
+
 				// Find service name from labels
 				svcName, ok := pod.Labels["app.kubernetes.io/instance"]
-				if !ok { return nil }
-				
+				if !ok {
+					return nil
+				}
+
 				// List all adapters in the same namespace
 				var adapters servingv1alpha2.LLMLoraAdapterList
 				if err := mgr.GetClient().List(ctx, &adapters, client.InNamespace(pod.Namespace)); err != nil {
 					return nil
 				}
-				
+
 				var requests []reconcile.Request
 				for _, adapter := range adapters.Items {
 					if adapter.Spec.TargetService == svcName {

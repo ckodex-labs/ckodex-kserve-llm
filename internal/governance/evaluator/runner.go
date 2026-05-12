@@ -5,6 +5,9 @@ Copyright 2026 CKodex Authors.
 package evaluator
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -33,7 +36,15 @@ func GenerateEvidence(adapter *servingv1alpha2.LLMLoraAdapter, report *EvalRepor
 	now := metav1.NewTime(report.VerificationTime)
 	adapter.Status.EvidenceBundle.LastVerifiedAt = &now
 
-	// Mock signature of the report
-	adapter.Status.EvidenceBundle.SignatureDigest = fmt.Sprintf("sha256:%x", report.VerificationTime.UnixNano())
+	// Evaluation receipts are asserted-only until an external verifier publishes
+	// a registry-backed attestation. We still hash the actual report payload so
+	// the receipt is deterministic and reviewable.
+	payload, err := json.Marshal(report)
+	if err == nil {
+		sum := sha256.Sum256(payload)
+		adapter.Status.EvidenceBundle.SignatureDigest = "sha256:" + hex.EncodeToString(sum[:])
+	} else {
+		adapter.Status.EvidenceBundle.SignatureDigest = fmt.Sprintf("sha256:%x", report.VerificationTime.UnixNano())
+	}
 	adapter.Status.EvidenceBundle.AttestationURI = "ckodex://eval-runner/reports/" + adapter.Name
 }

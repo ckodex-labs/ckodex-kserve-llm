@@ -19,6 +19,7 @@ import (
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/governance"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 )
 
@@ -125,10 +126,14 @@ func (r *LLMEvaluationReconciler) finalizeEvaluation(ctx context.Context, adapte
 	patch := client.MergeFrom(adapter.DeepCopy())
 
 	if success {
-		adapter.Status.StatePlanes.Trust = "verified"
-		adapter.Status.StatePlanes.Lifecycle = "active" // Automatic promotion if verified
 		now := metav1.Now()
 		adapter.Status.EvidenceBundle.LastVerifiedAt = &now
+		adapter.Status.StatePlanes.Lifecycle = "active"
+		if governance.HasVerifiedSupplyChainEvidence(adapter) {
+			adapter.Status.StatePlanes.Trust = "verified"
+		} else {
+			adapter.Status.StatePlanes.Trust = "asserted"
+		}
 	} else {
 		adapter.Status.StatePlanes.Lifecycle = "quarantined"
 		adapter.Status.StatePlanes.Trust = "denied"

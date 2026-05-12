@@ -167,6 +167,13 @@ console-dev: ## Start console in development mode
 console-build: ## Build console production bundle
 	cd console && npm run build
 
+.PHONY: console-check
+console-check: console-build ## CI-visible console production gate
+
+.PHONY: release-readiness
+release-readiness: ## Rehearse local release artifacts and fail on hidden repo mutations
+	bash hack/release-readiness.sh
+
 .PHONY: console-img
 console-img: ## Build console docker image
 	docker build -t ckodex/console:latest ./console

@@ -17,7 +17,7 @@ import (
 func AggregateStatePlanes(foundation *servingv1alpha2.LLMInferenceService, adapters []servingv1alpha2.LLMLoraAdapter) servingv1alpha2.StatePlanes {
 	effective := servingv1alpha2.StatePlanes{
 		Lifecycle: "active",
-		Trust:     "trusted", // Start with highest, downgrade as we encounter weaker trust
+		Trust:     "asserted",
 		Risk:      "normal",
 	}
 
@@ -38,14 +38,14 @@ func AggregateStatePlanes(foundation *servingv1alpha2.LLMInferenceService, adapt
 		3:  "trusted",
 	}
 
-	currentTrustScore := trustScores["asserted"] // Default to asserted if ready
+	currentTrustScore := trustScores["asserted"]
 
-	// Check Foundation Trust via Governance Conditions
+	// Foundation readiness and network policy enforcement are asserted signals.
+	// They can deny trust when broken, but they do not by themselves prove
+	// software integrity or provenance verification.
 	for _, cond := range foundation.Status.Conditions {
 		if cond.Type == "Compliance-AC-4" {
-			if cond.Status == metav1.ConditionTrue && cond.Reason == "DPIVerified" {
-				currentTrustScore = trustScores["verified"]
-			} else if cond.Status == metav1.ConditionFalse {
+			if cond.Status == metav1.ConditionFalse {
 				currentTrustScore = trustScores["denied"]
 			}
 			break

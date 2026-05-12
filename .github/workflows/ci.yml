@@ -47,11 +47,13 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
-      - name: Set up GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: v2.15.4
+      - name: Install GoReleaser
+        shell: bash
+        run: |
+          curl -sSL https://github.com/goreleaser/goreleaser/releases/download/v2.15.4/goreleaser_Linux_x86_64.tar.gz \
+            | tar -xz goreleaser
+          sudo mv goreleaser /usr/local/bin/goreleaser
+          goreleaser --version
 
       - name: Build console
         if: steps.console.outputs.available == 'true'

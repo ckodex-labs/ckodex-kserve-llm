@@ -28,6 +28,10 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 * **Lint your code**: `make lint`.
 * **Ensure all commits are signed** (DCO). We use the Developer Certificate of Origin to track ownership.
 * **Keep PRs focused**: One feature or bug fix per PR.
+* **Hardened Contribution Rules**:
+    * **Supply-Chain Enforcement**: All code must be pushed to SLSA-compatible build paths; floating tags are prohibited.
+    * **Compliance-as-Code**: PRs introducing security controls (RBAC, NetworkPolicy, DPI) MUST include a corresponding **Lula Validation** in the `lula/` directory.
+    * **OIS Instrumentation**: Any new data-plane features must emit **Open Inference Signals (OIS) v0.1** telemetry via OpenTelemetry.
 
 ## Development Setup
 

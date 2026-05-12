@@ -137,13 +137,14 @@ func TestExecuteStage_Gate_NilCriteria_Passes(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestExecuteStage_Gate_WithCriteria_PassesViaNoopQuerier uses noop metrics (100% success, 0ms latency).
-func TestExecuteStage_Gate_WithCriteria_PassesViaNoopQuerier(t *testing.T) {
+// TestExecuteStage_Gate_WithCriteria_PassesViaExplicitInsecureFallback uses the
+// opt-in compatibility fallback when no Prometheus backend is present.
+func TestExecuteStage_Gate_WithCriteria_PassesViaExplicitInsecureFallback(t *testing.T) {
 	scheme := newControllerScheme(t)
-	// Metrics is nil → noopMetricsQuerier returns 100% success, 0ms latency.
 	r := &ModelOnboardingReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-		Scheme: scheme,
+		Client:  fake.NewClientBuilder().WithScheme(scheme).Build(),
+		Scheme:  scheme,
+		Metrics: NewInsecurePassMetricsQuerier(),
 	}
 
 	ob := simpleModelOnboarding("my-model")
@@ -262,30 +263,26 @@ func TestExecuteStage_UnknownType_NoOp(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// ---- noopMetricsQuerier -----------------------------------------------------
+// ---- insecurePassMetricsQuerier ---------------------------------------------
 
-// TestNoopMetricsQuerier_QuerySuccessRate always returns 100.
-func TestNoopMetricsQuerier_QuerySuccessRate(t *testing.T) {
-	q := noopMetricsQuerier{}
+func TestInsecurePassMetricsQuerier_QuerySuccessRate(t *testing.T) {
+	q := insecurePassMetricsQuerier{}
 	rate, err := q.QuerySuccessRate(context.Background(), "model", "ns")
 	require.NoError(t, err)
 	assert.Equal(t, float64(100), rate)
 }
 
-// TestNoopMetricsQuerier_QueryP99LatencyMS always returns 0.
-func TestNoopMetricsQuerier_QueryP99LatencyMS(t *testing.T) {
-	q := noopMetricsQuerier{}
+func TestInsecurePassMetricsQuerier_QueryP99LatencyMS(t *testing.T) {
+	q := insecurePassMetricsQuerier{}
 	ms, err := q.QueryP99LatencyMS(context.Background(), "model", "ns")
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), ms)
 }
 
-// TestModelOnboardingReconciler_MetricsQuerier_Nil_ReturnsNoop verifies fallback to noop.
-func TestModelOnboardingReconciler_MetricsQuerier_Nil_ReturnsNoop(t *testing.T) {
+func TestModelOnboardingReconciler_MetricsQuerier_Nil_ReturnsNil(t *testing.T) {
 	r := &ModelOnboardingReconciler{Metrics: nil}
 	q := r.metricsQuerier()
-	_, isNoop := q.(noopMetricsQuerier)
-	assert.True(t, isNoop, "expected noopMetricsQuerier when Metrics is nil")
+	assert.Nil(t, q)
 }
 
 // TestModelOnboardingReconciler_MetricsQuerier_Set_ReturnsMock verifies injected querier.

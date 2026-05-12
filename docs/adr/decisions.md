@@ -7,7 +7,7 @@ Accepted
 We need a Kubernetes operator for managing LLM inference workloads. KServe v0.17 introduces the `LLMInferenceService` CRD pattern alongside the Gateway Inference Extension (InferencePool, InferenceModel).
 
 ## Decision
-- Build a standalone operator inspired by KServe v0.17 `LLMInferenceService` but under `serving.ckodex.io/v1alpha2` API group
+- Build a standalone operator inspired by KServe v0.17 `LLMInferenceService` but under `serving.ckodex.com/v1` API group
 - Use Gateway API (HTTPRoute + GRPCRoute) instead of Knative for routing
 - V2 Open Inference Protocol as the primary data plane protocol
 - Support OCI model distribution alongside `hf://`, `s3://`, `gs://`, `pvc://`
@@ -51,7 +51,7 @@ LLM inference workloads require secure identity and mTLS between all components.
 
 ## Decision
 - Operator manages SPIRE Server (StatefulSet) and Agent (DaemonSet) directly
-- SPIFFE ID format: `spiffe://ckodex.io/ns/{ns}/sa/{sa}/model/{model}`
+- SPIFFE ID format: `spiffe://ckodex.com/ns/{ns}/sa/{sa}/model/{model}`
 - X.509 SVIDs for mTLS, JWT SVIDs for API auth
 - Workload attestation via K8s namespace + service account selectors
 

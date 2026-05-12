@@ -71,10 +71,10 @@ leaderElection:
 # Verify signatures: cosign verify <image>@<digest> --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 vllm:
   # vllm/vllm-openai:v0.19.0 — dedicated Gemma 4 image also available: vllm/vllm-openai:gemma4
-  defaultImage: "vllm/vllm-openai:v0.19.0"
+  defaultImage: "vllm/vllm-openai:v0.20.0"
   gemma4Image: "vllm/vllm-openai:gemma4"
-  cpuImage: "vllm/vllm-openai-cpu:v0.19.0"
-  rocmImage: "vllm/vllm-openai:v0.19.0-rocm"
+  cpuImage: "vllm/vllm-openai-cpu:v0.20.0"
+  rocmImage: "vllm/vllm-openai:v0.20.0-rocm"
   # kserve/storage-initializer:v0.14.1
   storageInitializerImage: "kserve/storage-initializer:v0.14.1"
 
@@ -112,7 +112,7 @@ gemma4:
 
 # EPP Scheduler defaults
 scheduler:
-  image: "us-central1-docker.pkg.dev/k8s-staging-gateway-api/gateway-api-inference-extension/epp:main"
+  image: "ghcr.io/llm-d/llm-d-inference-scheduler:v0.7.1"
   replicas: 1
   resources:
     limits:
@@ -160,6 +160,24 @@ observability:
   logging:
     level: info
     format: json
+
+# Feature Gates
+# Controls which subsystems and experimental features are enabled.
+features:
+  # enableSecurity enables SPIFFE/SPIRE, eBPF, OPA, and Vault integration.
+  enableSecurity: false
+  # enableAutoscaler enables HPA/KEDA/WVA autoscaling.
+  enableAutoscaler: true
+  # enableGateway enables Gateway API resource management.
+  enableGateway: true
+  # enableScheduler enables the EPP scheduler.
+  enableScheduler: true
+  # enableExperimentalAgents enables the Agent and SkillRegistry controllers (M3).
+  enableExperimentalAgents: false
+  # enableExperimentalHardwareSelection enables hardware-specific image tag selection.
+  enableExperimentalHardwareSelection: false
+  # enableExperimentalStatusHardening enables the new DeploymentReady status check.
+  enableExperimentalStatusHardening: false
 
 # Chaos engine
 chaos:

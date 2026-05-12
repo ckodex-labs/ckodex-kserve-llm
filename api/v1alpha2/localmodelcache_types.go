@@ -37,8 +37,8 @@ type LocalModelCacheList struct {
 // LocalModelCacheSpec defines the desired state of LocalModelCache.
 type LocalModelCacheSpec struct {
 	// SourceModelURI is the model artifact to cache.
-	// Supported schemes: hf://, s3://, swfs://, gs://, pvc://, oci://.
-	// +kubebuilder:validation:Pattern=`^(hf|s3|swfs|gs|pvc|oci|https?)://.*$`
+	// Supported schemes: hf://, s3://, swfs://, gs://, pvc://, oci://, ocis://.
+	// +kubebuilder:validation:Pattern=`^(hf|s3|swfs|gs|pvc|oci|ocis|https?)://.*$`
 	SourceModelURI string `json:"sourceModelUri"`
 
 	// ModelSize is the expected model size for PVC provisioning.

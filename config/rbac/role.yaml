@@ -18,9 +18,14 @@ rules:
   - ""
   resources:
   - events
+  - secrets
   verbs:
   - create
+  - get
+  - list
   - patch
+  - update
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -32,17 +37,6 @@ rules:
   verbs:
   - create
   - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
   - get
   - list
   - patch
@@ -105,6 +99,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - policy
   resources:
   - poddisruptionbudgets
@@ -121,7 +127,10 @@ rules:
   resources:
   - agents
   - asrinferenceservices
+  - coactorgroups
   - embeddinginferenceservices
+  - inferenceactors
+  - inferencesessions
   - llminferenceservices
   - llmloraadapters
   - localmodelcaches
@@ -153,37 +162,16 @@ rules:
   resources:
   - agents/status
   - asrinferenceservices/status
+  - coactorgroups/status
   - embeddinginferenceservices/status
+  - inferenceactors/status
+  - inferencesessions/status
   - llminferenceservices/status
   - llmloraadapters/status
   - localmodelcaches/status
   - modelonboardings/status
   - multimodalinferenceservices/status
   - skillregistries/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - serving.ckodex.io
-  resources:
-  - coactorgroups
-  - inferenceactors
-  - inferencesessions
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - serving.ckodex.io
-  resources:
-  - coactorgroups/status
-  - inferenceactors/status
-  - inferencesessions/status
   verbs:
   - get
   - patch

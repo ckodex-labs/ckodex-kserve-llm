@@ -7,10 +7,15 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,7 +30,9 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/provenance"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/security"
 )
 
@@ -242,6 +249,9 @@ func reconcilerWithNodes(t *testing.T, nodes ...corev1.Node) (*LLMInferenceServi
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
+	_ = policyv1.AddToScheme(scheme)
 	_ = servingv1alpha2.AddToScheme(scheme)
 
 	cb := fake.NewClientBuilder().WithScheme(scheme)
@@ -265,6 +275,14 @@ func reconcilerWithNodes(t *testing.T, nodes ...corev1.Node) (*LLMInferenceServi
 		},
 		CleanupReconciler: &cleanup.Reconciler{
 			Client: cl,
+		},
+		PDBReconciler: &reconciler.PDBReconciler{
+			Client: cl,
+			Scheme: scheme,
+		},
+		ServiceReconciler: &reconciler.ServiceReconciler{
+			Client: cl,
+			Scheme: scheme,
 		},
 	}
 	return r, context.Background()
@@ -403,6 +421,119 @@ func TestBuildDeployment_HFMountWithSecret(t *testing.T) {
 	}
 }
 
+func TestReconcileGovernanceEvidence_SR2FailsClosedWithoutVerifiedArtifacts(t *testing.T) {
+	r := &LLMInferenceServiceReconciler{
+		AirGappedMode:      true,
+		LocalCosignKeyPath: "/etc/cosign/cosign.pub",
+	}
+	llmSvc := baseLLMInferenceService()
+
+	err := r.reconcileGovernanceEvidence(context.Background(), llmSvc, nil)
+	require.NoError(t, err)
+
+	sr2 := meta.FindStatusCondition(llmSvc.Status.Conditions, "Compliance-SR-2")
+	require.NotNil(t, sr2)
+	assert.Equal(t, metav1.ConditionFalse, sr2.Status)
+	assert.Equal(t, "OfflineVerificationPending", sr2.Reason)
+
+	si7 := meta.FindStatusCondition(llmSvc.Status.Conditions, "Compliance-SI-7")
+	require.NotNil(t, si7)
+	assert.Equal(t, metav1.ConditionFalse, si7.Status)
+	assert.Equal(t, "IntegrityUnverified", si7.Reason)
+}
+
+func TestReconcileGovernanceEvidence_SR2PassesWithVerifiedBaseModel(t *testing.T) {
+	record := provenance.RuntimeVerificationRecord{
+		Subject:             "oci://registry.example.com/model@sha256:abc",
+		Scheme:              "oci",
+		SignatureVerified:   true,
+		AttestationVerified: true,
+		SBOMVerified:        true,
+		SignatureDigest:     "sha256:abc",
+		AttestationURI:      "oci://registry.example.com/model@sha256:abc#attestation:slsaprovenance1",
+		SBOMDigest:          "sha256:def",
+		VerifiedAt:          "2026-05-11T12:00:00Z",
+	}
+	message, err := json.Marshal(record)
+	require.NoError(t, err)
+
+	svc := baseLLMInferenceService()
+	svc.Namespace = "default"
+	svc.Spec.Model.URI = "oci://registry.example.com/model@sha256:abc"
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "svc-pod",
+			Namespace: "default",
+			Labels: map[string]string{
+				"app.kubernetes.io/name":     "llminferenceservice",
+				"app.kubernetes.io/instance": svc.Name,
+			},
+		},
+		Status: corev1.PodStatus{
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+			},
+			InitContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "storage-initializer",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 0,
+							Message:  string(message),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, servingv1alpha2.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+	r := &LLMInferenceServiceReconciler{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build(),
+	}
+
+	err = r.reconcileGovernanceEvidence(context.Background(), svc, nil)
+	require.NoError(t, err)
+
+	sr2 := meta.FindStatusCondition(svc.Status.Conditions, "Compliance-SR-2")
+	require.NotNil(t, sr2)
+	assert.Equal(t, metav1.ConditionTrue, sr2.Status)
+	assert.Equal(t, "ProvenanceVerified", sr2.Reason)
+}
+
+func TestReconcileGovernanceEvidence_SR2PassesWithVerifiedArtifacts(t *testing.T) {
+	r := &LLMInferenceServiceReconciler{}
+	llmSvc := baseLLMInferenceService()
+	now := metav1.Now()
+	activeLoras := []servingv1alpha2.LLMLoraAdapter{
+		{
+			Status: servingv1alpha2.LLMLoraAdapterStatus{
+				StatePlanes: servingv1alpha2.StatePlanes{
+					Lifecycle: "active",
+					Trust:     "verified",
+					Risk:      "normal",
+				},
+				EvidenceBundle: servingv1alpha2.EvidenceBundle{
+					SignatureDigest: "sha256:dummy",
+					AttestationURI:  "https://example.invalid/attestation",
+					SBOMDigest:      "sha256:sbom",
+					LastVerifiedAt:  &now,
+				},
+			},
+		},
+	}
+
+	err := r.reconcileGovernanceEvidence(context.Background(), llmSvc, activeLoras)
+	require.NoError(t, err)
+
+	sr2 := meta.FindStatusCondition(llmSvc.Status.Conditions, "Compliance-SR-2")
+	require.NotNil(t, sr2)
+	assert.Equal(t, metav1.ConditionTrue, sr2.Status)
+	assert.Equal(t, "ProvenanceVerified", sr2.Reason)
+}
+
 func assertEnvVar(t *testing.T, envs []corev1.EnvVar, name, expected string) {
 	t.Helper()
 	for _, ev := range envs {
@@ -471,5 +602,5 @@ func TestCleanupResources(t *testing.T) {
 
 	// 3. Verify CM is deleted
 	err = cl.Get(ctx, k8stypes.NamespacedName{Name: cmName, Namespace: security.SPIRERegistrationNamespace}, &foundCM)
-	assert.True(t, errors.IsNotFound(err), "ConfigMap should have been deleted by cleanupResources")
+	assert.True(t, apierrors.IsNotFound(err), "ConfigMap should have been deleted by cleanupResources")
 }

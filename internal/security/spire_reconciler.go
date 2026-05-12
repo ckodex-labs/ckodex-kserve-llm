@@ -12,16 +12,13 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -29,9 +26,9 @@ import (
 
 const (
 	// SPIREAgentImage is the SPIRE Agent container image.
-	SPIREAgentImage = "ghcr.io/spiffe/spire-agent:1.14.0"
+	SPIREAgentImage = "ghcr.io/spiffe/spire-agent:1.14.5"
 	// SPIREServerImage is the SPIRE Server container image.
-	SPIREServerImage = "ghcr.io/spiffe/spire-server:1.14.0"
+	SPIREServerImage = "ghcr.io/spiffe/spire-server:1.14.5"
 	// SPIFFEHelperImage is the SPIFFE helper sidecar image that manages SVID rotation.
 	SPIFFEHelperImage = "ghcr.io/spiffe/spiffe-helper:0.9.0"
 	// SPIFFETrustDomain is the trust domain for SPIFFE IDs.
@@ -44,13 +41,26 @@ const (
 type SPIREReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// VClusterMode indicates we are running in a virtual cluster.
+	VClusterMode bool
+	// HostNamespace is the physical shadow namespace in the host cluster.
+	HostNamespace string
 }
 
 // SPIFFEIDForService generates a SPIFFE ID for a given service.
 // Format: spiffe://ckodex.com/ns/{namespace}/sa/{serviceaccount}/model/{modelname}
-func SPIFFEIDForService(namespace, serviceAccount, modelName string) string {
+func (r *SPIREReconciler) SPIFFEIDForService(namespace, serviceAccount, modelName string) string {
+	ns := namespace
+	if r.VClusterMode && r.HostNamespace != "" {
+		// In vcluster mode, we use the virtual namespace for the tenant's logic,
+		// but we can also offer a mode where the host-cluster SPIRE expects the 
+		// physical (shadow) namespace. For now, we stay consistent with the virtual 
+		// view unless the host-cluster SPIRE is configured otherwise.
+		ns = namespace 
+	}
 	return fmt.Sprintf("spiffe://%s/ns/%s/sa/%s/model/%s",
-		SPIFFETrustDomain, namespace, serviceAccount, modelName)
+		SPIFFETrustDomain, ns, serviceAccount, modelName)
 }
 
 // ReconcileSPIRE ensures SPIRE Server and Agent are deployed.
@@ -153,146 +163,6 @@ func (r *SPIREReconciler) reconcileSPIREAgent(ctx context.Context, namespace str
 	return nil
 }
 
-// NetworkPolicyReconciler manages default-deny + explicit allow network policies.
-type NetworkPolicyReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
-}
-
-// ReconcileNetworkPolicies creates default-deny + explicit allow network policies.
-// Three policies are reconciled per LLMInferenceService:
-//  1. deny-all-ingress  — blocks all ingress by default (whitelist model)
-//  2. allow-gateway     — permits ingress from the EPP scheduler (ports 8000/8001)
-//  3. allow-egress      — permits egress to DNS (53 UDP+TCP) and SPIRE Agent (8081)
-//
-// Without policy 3, vLLM pods cannot resolve hostnames (model download fails)
-// and cannot obtain SPIFFE SVIDs from the SPIRE Agent.
-func (np *NetworkPolicyReconciler) ReconcileNetworkPolicies(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
-	logger := log.FromContext(ctx).WithValues("component", "network-policy")
-
-	podSelector := metav1.LabelSelector{
-		MatchLabels: map[string]string{"app.kubernetes.io/instance": llmSvc.Name},
-	}
-
-	// 1. Default-deny all ingress.
-	deny := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: llmSvc.Name + "-deny-all", Namespace: llmSvc.Namespace,
-		},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: podSelector,
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
-			Ingress:     []networkingv1.NetworkPolicyIngressRule{},
-		},
-	}
-
-	// 2. Allow ingress from the EPP scheduler (ports 8000 = HTTP inference, 8001 = metrics).
-	protoTCP := corev1.ProtocolTCP
-	allow := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: llmSvc.Name + "-allow-gateway", Namespace: llmSvc.Namespace,
-		},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: podSelector,
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
-			Ingress: []networkingv1.NetworkPolicyIngressRule{
-				{
-					From: []networkingv1.NetworkPolicyPeer{
-						{PodSelector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{"serving.ckodex.com/role": "scheduler"},
-						}},
-					},
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 8000}, Protocol: &protoTCP},
-						{Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 8001}, Protocol: &protoTCP},
-					},
-				},
-			},
-		},
-	}
-
-	// 3. Egress: DNS resolution + HTTPS payload fetches + SPIRE Agent.
-	// Without DNS/HTTPS egress vLLM cannot resolve/download from huggingface.co or mirrors.
-	// Without SPIRE egress the pod cannot obtain a SVID for mTLS.
-	protoUDP := corev1.ProtocolUDP
-	dnsPort := intstr.FromInt32(53)
-	spirePort := intstr.FromInt32(8081)
-	httpsPort := intstr.FromInt32(443)
-	egress := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: llmSvc.Name + "-allow-egress", Namespace: llmSvc.Namespace,
-		},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: podSelector,
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
-			Egress: []networkingv1.NetworkPolicyEgressRule{
-				{
-					// DNS (UDP+TCP) and HTTPS (TCP) for artifact downloads
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Port: &dnsPort, Protocol: &protoUDP},
-						{Port: &dnsPort, Protocol: &protoTCP},
-						{Port: &httpsPort, Protocol: &protoTCP},
-					},
-				},
-				{
-					// SPIRE Agent gRPC endpoint (Workload API)
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Port: &spirePort, Protocol: &protoTCP},
-					},
-					To: []networkingv1.NetworkPolicyPeer{
-						{PodSelector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{"app.kubernetes.io/name": "spire-agent"},
-						}},
-					},
-				},
-			},
-		},
-	}
-
-	// 4. Intra-cluster LWS (LeaderWorkerSet): allow pod-to-pod communication within the same deployment.
-	// Required for NCCL/MPI tensor parallel gradient exchanges.
-	allowIntra := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: llmSvc.Name + "-allow-lws-intra", Namespace: llmSvc.Namespace,
-		},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: podSelector,
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress},
-			Ingress: []networkingv1.NetworkPolicyIngressRule{
-				{
-					From: []networkingv1.NetworkPolicyPeer{
-						{PodSelector: &podSelector},
-					},
-				},
-			},
-			Egress: []networkingv1.NetworkPolicyEgressRule{
-				{
-					To: []networkingv1.NetworkPolicyPeer{
-						{PodSelector: &podSelector},
-					},
-				},
-			},
-		},
-	}
-
-	for _, policy := range []*networkingv1.NetworkPolicy{deny, allow, egress, allowIntra} {
-		if err := controllerutil.SetControllerReference(llmSvc, policy, np.Scheme); err != nil {
-			return fmt.Errorf("set owner reference on %s: %w", policy.Name, err)
-		}
-		var existing networkingv1.NetworkPolicy
-		if err := np.Get(ctx, types.NamespacedName{Name: policy.Name, Namespace: policy.Namespace}, &existing); err != nil {
-			if apierrors.IsNotFound(err) {
-				if createErr := np.Create(ctx, policy); createErr != nil {
-					return fmt.Errorf("create network policy %s: %w", policy.Name, createErr)
-				}
-			}
-		}
-	}
-
-	logger.Info("network policies reconciled", "policies", 4)
-	return nil
-}
-
 // InjectSidecar injects the SPIFFE Workload API volume and SPIFFE helper sidecar into a PodSpec.
 //
 // Three changes are made:
@@ -336,7 +206,7 @@ func (r *SPIREReconciler) InjectSidecar(podSpec *corev1.PodSpec, llmSvc *serving
 	}
 
 	// 3. SPIFFE helper sidecar — manages SVID rotation and writes PEM files.
-	spiffeID := SPIFFEIDForService(llmSvc.Namespace, llmSvc.Name, llmSvc.Name)
+	spiffeID := r.SPIFFEIDForService(llmSvc.Namespace, llmSvc.Name, llmSvc.Name)
 	sidecar := corev1.Container{
 		Name:  "spiffe-sidecar",
 		Image: SPIFFEHelperImage,

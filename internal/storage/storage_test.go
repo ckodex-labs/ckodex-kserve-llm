@@ -10,7 +10,7 @@ import (
 )
 
 func TestRegistry(t *testing.T) {
-	schemes := []string{"hf", "huggingface", "github", "gitlab", "artifactory", "oci", "seaweedfs", "modelpack"}
+	schemes := []string{"hf", "huggingface", "github", "gitlab", "artifactory", "oci", "ocis", "seaweedfs", "modelpack"}
 
 	for _, s := range schemes {
 		client, err := GetClient(s)

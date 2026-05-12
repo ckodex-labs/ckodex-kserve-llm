@@ -38,9 +38,18 @@ type SeaweedFSConfig struct {
 
 // DefaultSeaweedFSConfig returns production defaults.
 func DefaultSeaweedFSConfig() SeaweedFSConfig {
+	filerURL := os.Getenv("SEAWEEDFS_FILER_URL")
+	if filerURL == "" {
+		filerURL = "http://seaweedfs-filer.storage:8888"
+	}
+	basePath := os.Getenv("SEAWEEDFS_BASE_PATH")
+	if basePath == "" {
+		basePath = "/models"
+	}
+
 	return SeaweedFSConfig{
-		FilerURL: "http://seaweedfs-filer.storage:8888",
-		BasePath: "/models",
+		FilerURL: filerURL,
+		BasePath: basePath,
 		Timeout:  5 * time.Minute,
 	}
 }
@@ -55,14 +64,17 @@ type SeaweedFSArtifact struct {
 	Path string
 }
 
-// ParseSeaweedFSURI parses a seaweedfs:// URI into its components.
-// Format: seaweedfs://filer-host:port/path/to/model
+// ParseSeaweedFSURI parses a seaweedfs:// or swfs:// URI into its components.
+// Format: seaweedfs://filer-host:port/path/to/model or swfs://filer-host:port/path/to/model
 func ParseSeaweedFSURI(uri string) (*SeaweedFSArtifact, error) {
-	if !strings.HasPrefix(uri, "seaweedfs://") {
+	ref := ""
+	if strings.HasPrefix(uri, "seaweedfs://") {
+		ref = strings.TrimPrefix(uri, "seaweedfs://")
+	} else if strings.HasPrefix(uri, "swfs://") {
+		ref = strings.TrimPrefix(uri, "swfs://")
+	} else {
 		return nil, fmt.Errorf("not a SeaweedFS URI: %s", uri)
 	}
-
-	ref := strings.TrimPrefix(uri, "seaweedfs://")
 	parts := strings.SplitN(ref, "/", 2)
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("invalid SeaweedFS URI, expected seaweedfs://host:port/path: %s", uri)
@@ -80,7 +92,7 @@ func init() {
 }
 
 func (s *SeaweedFSClient) Schemes() []string {
-	return []string{"seaweedfs"}
+	return []string{"seaweedfs", "swfs"}
 }
 
 // Pull downloads a model artifact from SeaweedFS to the destPath.

@@ -46,7 +46,8 @@ e2e-test: ## Run E2E tests (requires KIND cluster)
 
 .PHONY: build
 build: generate fmt vet ## Build manager binary
-	go build -o bin/manager -ldflags="-s -w" cmd/manager/main.go
+	@version=$$( [ -n "$$VERSION" ] && echo "$$VERSION" || echo "dev" ); \
+	go build -o bin/manager -ldflags="-s -w -X github.com/ckodex-labs/kserve-llm-operator/internal/version.Version=$$version" cmd/manager/main.go
 
 .PHONY: run
 run: generate fmt vet ## Run controller locally against cluster
@@ -155,3 +156,24 @@ k6-all: ## Full k6 suite: smoke → stress → bench
 .PHONY: k6-teardown
 k6-teardown: ## Teardown k6: kill port-forwards and delete test CRs
 	$(MAKE) -f test/k6/Makefile k6-teardown
+
+##@ Console Dashboard
+
+.PHONY: console-dev
+console-dev: ## Start console in development mode
+	cd console && npm run dev
+
+.PHONY: console-build
+console-build: ## Build console production bundle
+	cd console && npm run build
+
+.PHONY: console-check
+console-check: console-build ## CI-visible console production gate
+
+.PHONY: release-readiness
+release-readiness: ## Rehearse local release artifacts and fail on hidden repo mutations
+	bash hack/release-readiness.sh
+
+.PHONY: console-img
+console-img: ## Build console docker image
+	docker build -t ckodex/console:latest ./console

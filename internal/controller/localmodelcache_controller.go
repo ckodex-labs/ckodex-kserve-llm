@@ -9,9 +9,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/google/uuid"
 	"sort"
 	"time"
-	"github.com/google/uuid"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -22,27 +22,28 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 	"k8s.io/utils/ptr"
 )
 
 const (
 	// labelLocalCache identifies PVCs belonging to a LocalModelCache.
-	labelLocalCache = "serving.ckodex.io/local-cache"
+	labelLocalCache = "serving.ckodex.com/local-cache"
 	// labelNode identifies the node a PVC is pinned to.
-	labelNode = "serving.ckodex.io/node"
+	labelNode = "serving.ckodex.com/node"
 	// labelModelHash identifies the content-addressable model URI hash.
-	labelModelHash = "serving.ckodex.io/model-hash"
+	labelModelHash = "serving.ckodex.com/model-hash"
 	// defaultCacheNamespace is where cache PVCs are created for cluster-scoped resources.
 	defaultCacheNamespace = "default"
 	// warmupJobPrefix is the prefix for cache-warming Jobs.
-	warmupJobPrefix       = "lmc-warmup"
+	warmupJobPrefix = "lmc-warmup"
 )
 
 // LocalModelCacheReconciler reconciles a LocalModelCache object
@@ -87,7 +88,11 @@ func (r *LocalModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	readyCount := int32(0)
 	now := metav1.Now()
 
+	// Track seen nodes to identify stale entries in status later
+	seenTargetNodes := make(map[string]bool)
+
 	for _, nodeName := range targetNodes {
+		seenTargetNodes[nodeName] = true
 		status, err := r.reconcileNodeCache(ctx, lmc, nodeName, modelHash, now)
 		if err != nil {
 			logger.Error(err, "Failed to reconcile cache for node", "node", nodeName)
@@ -101,17 +106,54 @@ func (r *LocalModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
+	// 2b. Stale Node Status Cleanup: Remove entries from status for nodes no longer in targetNodes
+	// This handles nodes being removed from warmNodes or the nodeGroup selector.
+	finalNodeStatuses := []servingv1alpha2.NodeCacheStatus{}
+	for _, prev := range lmc.Status.NodeStatuses {
+		if seenTargetNodes[prev.NodeName] {
+			// Find the entry in the newly computed nodeStatuses
+			found := false
+			for _, current := range nodeStatuses {
+				if current.NodeName == prev.NodeName {
+					finalNodeStatuses = append(finalNodeStatuses, current)
+					found = true
+					break
+				}
+			}
+			if !found {
+				// This shouldn't happen if the loop above covered all targetNodes,
+				// but keep as fallback.
+				finalNodeStatuses = append(finalNodeStatuses, prev)
+			}
+		} else {
+			logger.Info("Cleanup: Removing stale node status", "node", prev.NodeName)
+		}
+	}
+	// Add new nodes that weren't in prev status
+	for _, current := range nodeStatuses {
+		alreadyAdded := false
+		for _, added := range finalNodeStatuses {
+			if added.NodeName == current.NodeName {
+				alreadyAdded = true
+				break
+			}
+		}
+		if !alreadyAdded {
+			finalNodeStatuses = append(finalNodeStatuses, current)
+		}
+	}
+
 	// 3. LRU eviction: if maxCacheSize is set, evict oldest entries.
-	if err := r.evictLRU(ctx, lmc, nodeStatuses); err != nil {
+	if err := r.evictLRU(ctx, lmc, finalNodeStatuses); err != nil {
 		logger.Error(err, "LRU eviction failed")
 		r.Recorder.Event(lmc, corev1.EventTypeWarning, "EvictionFailed", err.Error())
 	}
 
 	// 4. Build CachedModels status and size aggregation.
-	cachedModels, totalSize := r.buildCachedModelsStatus(lmc, nodeStatuses)
+	cachedModels, totalSize := r.buildCachedModelsStatus(lmc, finalNodeStatuses)
 
 	// 5. Update status.
-	lmc.Status.NodeStatuses = nodeStatuses
+	lmc.Status.NodeStatuses = finalNodeStatuses
 	lmc.Status.CachedNodes = readyCount
 	lmc.Status.CachedModels = cachedModels
 	lmc.Status.TotalCacheSize = totalSize.String()
@@ -303,6 +345,13 @@ func (r *LocalModelCacheReconciler) reconcileNodeCache(
 		// Evaluate Job status.
 		status.Phase = jobPhase(job)
 		if status.Phase == "Ready" {
+			// Record metrics on transition to Ready
+			if job.Status.CompletionTime != nil && job.Status.StartTime != nil {
+				duration := job.Status.CompletionTime.Sub(job.Status.StartTime.Time).Seconds()
+				observability.LMCDownloadDuration.WithLabelValues(lmc.Spec.SourceModelURI, nodeName).Observe(duration)
+				observability.LMCWarmingAttempts.WithLabelValues(lmc.Spec.SourceModelURI, nodeName, "success").Inc()
+			}
+
 			// Preserve existing LastUsed if possible, otherwise use now.
 			status.LastUsed = &now
 			for _, prev := range lmc.Status.NodeStatuses {
@@ -313,6 +362,28 @@ func (r *LocalModelCacheReconciler) reconcileNodeCache(
 			}
 			q := lmc.Spec.ModelSizeQuantity()
 			status.SizeBytes = q.Value()
+			observability.LMCCacheSize.WithLabelValues(lmc.Spec.SourceModelURI, nodeName).Set(float64(status.SizeBytes))
+		} else if status.Phase == "Failed" {
+			// Record metrics on transition to Failed
+			observability.LMCWarmingAttempts.WithLabelValues(lmc.Spec.SourceModelURI, nodeName, "failed").Inc()
+
+			// Self-Healing
+			// Self-Healing: If Job failed, check failure time.
+			// Recover by deleting the Job if it's been failed for > 5 minutes,
+			// allowing it to be recreated on next reconcile.
+			var failedTime *metav1.Time
+			for _, cond := range job.Status.Conditions {
+				if cond.Type == batchv1.JobFailed && cond.Status == corev1.ConditionTrue {
+					failedTime = &cond.LastTransitionTime
+					break
+				}
+			}
+			if failedTime != nil && time.Since(failedTime.Time) > 5*time.Minute {
+				log.FromContext(ctx).Info("Self-Healing: Deleting failed Job for re-warm", "job", jobName, "node", nodeName)
+				r.Recorder.Eventf(lmc, corev1.EventTypeNormal, "CacheSelfHealing", "Deleting failed Job %s for re-warm", jobName)
+				_ = r.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground))
+				status.Phase = "Pending" // Will be recreated next loop
+			}
 		}
 		status.LastTransitionTime = &now
 	}
@@ -335,7 +406,7 @@ func (r *LocalModelCacheReconciler) buildCachePVC(
 				labelModelHash:  modelHash,
 			},
 			Annotations: map[string]string{
-				"serving.ckodex.io/model-uri": lmc.Spec.SourceModelURI,
+				"serving.ckodex.com/model-uri": lmc.Spec.SourceModelURI,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -362,6 +433,67 @@ func (r *LocalModelCacheReconciler) buildWarmupJob(
 	jobName, pvcName, namespace, nodeName string,
 ) *batchv1.Job {
 	backoffLimit := int32(3)
+	container := corev1.Container{
+		Name:            "warmup",
+		Image:           CKodexStorageInitializerImage,
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Args:            []string{lmc.Spec.SourceModelURI, ModelMountPath},
+		Env: append(lmc.Spec.Env, []corev1.EnvVar{
+			{Name: "S3_ENDPOINT", Value: SeaweedFSFilerS3Endpoint},
+			{Name: "AWS_ENDPOINT_URL", Value: SeaweedFSFilerS3Endpoint},
+			{Name: "AWS_NO_SIGN_REQUEST", Value: "yes"},
+			{Name: "S3_USE_HTTPS", Value: "false"},
+			{Name: "S3_USE_PATH_STYLE", Value: "true"},
+		}...),
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "cache", MountPath: ModelMountPath},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser: ptr.To(int64(0)),
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultCacheCPURequest),
+				corev1.ResourceMemory: resource.MustParse(DefaultCacheMemoryRequest),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultCacheCPURequest),
+				corev1.ResourceMemory: resource.MustParse(DefaultCacheMemoryRequest),
+			},
+		},
+	}
+
+	podSpec := corev1.PodSpec{
+		NodeSelector: map[string]string{
+			"kubernetes.io/hostname": nodeName,
+		},
+		RestartPolicy:                 corev1.RestartPolicyOnFailure,
+		TerminationGracePeriodSeconds: ptr.To(int64(ASRTerminationGracePeriod)), // reusing ASR's 30s grace for storage jobs
+		Containers:                    []corev1.Container{container},
+		Volumes: []corev1.Volume{
+			{
+				Name: "cache",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvcName,
+					},
+				},
+			},
+		},
+	}
+
+	if lmc.Spec.Storage != nil {
+		if lmc.Spec.Storage.SecretName != "" {
+			podSpec.Containers[0].EnvFrom = append(podSpec.Containers[0].EnvFrom, corev1.EnvFromSource{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: lmc.Spec.Storage.SecretName},
+				},
+			})
+		}
+		if lmc.Spec.Storage.ServiceAccountName != "" {
+			podSpec.ServiceAccountName = lmc.Spec.Storage.ServiceAccountName
+		}
+	}
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -375,54 +507,7 @@ func (r *LocalModelCacheReconciler) buildWarmupJob(
 		Spec: batchv1.JobSpec{
 			BackoffLimit: &backoffLimit,
 			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					NodeSelector: map[string]string{
-						"kubernetes.io/hostname": nodeName,
-					},
-					RestartPolicy:                 corev1.RestartPolicyOnFailure,
-					TerminationGracePeriodSeconds: ptr.To(int64(ASRTerminationGracePeriod)), // reusing ASR's 30s grace for storage jobs
-					Containers: []corev1.Container{
-						{
-							Name:            "warmup",
-							Image:           CKodexStorageInitializerImage,
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							Args:            []string{lmc.Spec.SourceModelURI, ModelMountPath},
-							Env: append(lmc.Spec.Env, []corev1.EnvVar{
-								{Name: "S3_ENDPOINT", Value: SeaweedFSFilerS3Endpoint},
-								{Name: "AWS_ENDPOINT_URL", Value: SeaweedFSFilerS3Endpoint},
-								{Name: "AWS_NO_SIGN_REQUEST", Value: "yes"},
-								{Name: "S3_USE_HTTPS", Value: "false"},
-								{Name: "S3_USE_PATH_STYLE", Value: "true"},
-							}...),
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "cache", MountPath: ModelMountPath},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: ptr.To(int64(0)),
-							},
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(DefaultCacheCPURequest),
-									corev1.ResourceMemory: resource.MustParse(DefaultCacheMemoryRequest),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse(DefaultCacheCPURequest),
-									corev1.ResourceMemory: resource.MustParse(DefaultCacheMemoryRequest),
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "cache",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: pvcName,
-								},
-							},
-						},
-					},
-				},
+				Spec: podSpec,
 			},
 		},
 	}
@@ -573,7 +658,7 @@ func (r *LocalModelCacheReconciler) buildCachedModelsStatus(
 func (r *LocalModelCacheReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.APIReader = mgr.GetAPIReader()
 	return ctrl.NewControllerManagedBy(mgr).
-		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
 		For(&servingv1alpha2.LocalModelCache{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&batchv1.Job{}).

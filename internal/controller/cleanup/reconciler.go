@@ -13,7 +13,7 @@ type Reconciler struct {
 	Client client.Client
 }
 
-func (r *Reconciler) HandleFinalizer(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, finalizer string) (bool, error) {
+func (r *Reconciler) HandleFinalizer(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, finalizer string, cleanupFunc func() error) (bool, error) {
 	if llmSvc.DeletionTimestamp.IsZero() {
 		if !controllerutil.ContainsFinalizer(llmSvc, finalizer) {
 			controllerutil.AddFinalizer(llmSvc, finalizer)
@@ -26,7 +26,13 @@ func (r *Reconciler) HandleFinalizer(ctx context.Context, llmSvc *servingv1alpha
 
 	// Deletion in progress
 	if controllerutil.ContainsFinalizer(llmSvc, finalizer) {
-		// External dependency cleanup logic would go here
+		// Execute external dependency cleanup logic
+		if cleanupFunc != nil {
+			if err := cleanupFunc(); err != nil {
+				return false, err
+			}
+		}
+
 		controllerutil.RemoveFinalizer(llmSvc, finalizer)
 		if err := r.Client.Update(ctx, llmSvc); err != nil {
 			return false, err

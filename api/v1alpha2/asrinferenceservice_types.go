@@ -36,8 +36,8 @@ func DefaultASRRuntimeImage(r ASRRuntime) string {
 	case ASRRuntimeFasterWhisper:
 		return "ghcr.io/fedirz/faster-whisper-server:latest-cpu"
 	default:
-		// ASRRuntimeTransformers: no canonical public image.
-		// TODO(ckodex): publish ckodex-labs/asr-transformers-server and set default here.
+		// ASRRuntimeTransformers has no canonical public default image in this repo.
+		// Users must set spec.runtimeImage explicitly for that runtime.
 		return ""
 	}
 }

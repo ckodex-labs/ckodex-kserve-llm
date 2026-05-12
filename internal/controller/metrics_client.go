@@ -161,18 +161,20 @@ func (p *PrometheusMetricsQuerier) queryScalar(ctx context.Context, promQL strin
 	return v, nil
 }
 
-// noopMetricsQuerier is used when no Prometheus URL is configured.
-// It always passes gates by returning values that satisfy any threshold —
-// this preserves backward-compatibility for operators that have not yet
-// wired up a Prometheus endpoint.
-//
-// Operators should set PrometheusURL in OperatorConfig to enable real gate enforcement.
-type noopMetricsQuerier struct{}
+// insecurePassMetricsQuerier is a dev-only fallback that allows promotion gates
+// to pass without a metrics backend. It must only be enabled explicitly.
+type insecurePassMetricsQuerier struct{}
 
-func (noopMetricsQuerier) QuerySuccessRate(_ context.Context, _, _ string) (float64, error) {
-	return 100, nil // assume 100 % success — no data
+// NewInsecurePassMetricsQuerier returns the explicit dev-only fallback used
+// when operators choose compatibility over fail-closed promotion checks.
+func NewInsecurePassMetricsQuerier() MetricsQuerier {
+	return insecurePassMetricsQuerier{}
 }
 
-func (noopMetricsQuerier) QueryP99LatencyMS(_ context.Context, _, _ string) (int64, error) {
-	return 0, nil // assume 0 ms — no data
+func (insecurePassMetricsQuerier) QuerySuccessRate(_ context.Context, _, _ string) (float64, error) {
+	return 100, nil
+}
+
+func (insecurePassMetricsQuerier) QueryP99LatencyMS(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
 }

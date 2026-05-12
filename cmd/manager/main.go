@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -33,6 +34,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/health"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/security"
+	appversion "github.com/ckodex-labs/kserve-llm-operator/internal/version"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/webhook"
 )
 
@@ -56,12 +58,14 @@ func main() {
 		enableLeaderElection bool
 		webhookPort          int
 		developmentMode      bool
+		showVersion          bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8091", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8087", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "Webhook server port.")
+	flag.BoolVar(&showVersion, "version", false, "Print the operator version and exit.")
 
 	flag.BoolVar(&developmentMode, "development", false, "Enable development-mode logging (console output, DPanic, no sampling). Production defaults to JSON.")
 
@@ -69,7 +73,13 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
+	if showVersion {
+		fmt.Println(appversion.Version)
+		return
+	}
+
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	setupLog.Info("operator version", "version", appversion.Version)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -119,19 +129,26 @@ func main() {
 		"enableAutoscaler", cfg.Features.EnableAutoscaler,
 		"enableSecurity", cfg.Features.EnableSecurity,
 		"enableOTelPipeline", cfg.Features.EnableOTelPipeline,
+		"enableExperimentalAgents", cfg.Features.EnableExperimentalAgents,
 		"auditSinkType", cfg.AuditSink.Type,
 		"piiRedaction", cfg.AuditSink.PIIRedaction,
 	)
 
 	// Build reconciler with feature-gated sub-reconcilers
 	reconciler := &controller.LLMInferenceServiceReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("LLMInferenceService"), //nolint:staticcheck
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		Recorder:           mgr.GetEventRecorderFor("llminferenceservice-controller"),
+		OTEL_Endpoint:      cfg.Observability.OTLPEndpoint,
+		AirGappedMode:      cfg.AirGappedMode,
+		LocalRegistry:      cfg.LocalRegistry,
+		LocalCosignKeyPath: cfg.LocalCosignKeyPath,
 	}
 
 	// gRPC — independent of gateway (controls Service port definition)
 	reconciler.EnableGRPC = cfg.Features.EnableGRPC
+	reconciler.EnableHardwareSelection = cfg.Features.EnableExperimentalHardwareSelection
+	reconciler.EnableExperimentalStatusHardening = cfg.Features.EnableExperimentalStatusHardening
 
 	// Gateway
 	if cfg.Features.EnableGateway {
@@ -158,6 +175,14 @@ func main() {
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
 		}
+		reconciler.ToolSurface = &security.ToolSurfaceReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}
+		reconciler.ExternalSecret = &security.ExternalSecretReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}
 		reconciler.Vault = &security.VaultReconciler{
 			Client: mgr.GetClient(),
 			Scheme: mgr.GetScheme(),
@@ -180,12 +205,17 @@ func main() {
 		// InjectSidecar appends the CSI volume + spiffe-helper container to every
 		// vLLM Deployment, providing zero-trust workload identity via mTLS.
 		reconciler.SPIRE = &security.SPIREReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
+			Client:        mgr.GetClient(),
+			Scheme:        mgr.GetScheme(),
+			VClusterMode:  cfg.VClusterMode,
+			HostNamespace: cfg.HostNamespace,
 		}
 		reconciler.SPIRERegistration = &security.SPIRERegistrationReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
+			Client:          mgr.GetClient(),
+			Scheme:          mgr.GetScheme(),
+			VClusterMode:    cfg.VClusterMode,
+			HostNamespace:   cfg.HostNamespace,
+			SpireReconciler: reconciler.SPIRE,
 		}
 		setupLog.Info("security reconcilers enabled",
 			"components", "NetworkPolicy+Vault+OPA+eBPF+SPIRE",
@@ -254,9 +284,20 @@ func main() {
 		Client:     mgr.GetClient(),
 		Scheme:     mgr.GetScheme(),
 		HTTPClient: &http.Client{},
-		Recorder:   mgr.GetEventRecorderFor("LLMLoraAdapter"), //nolint:staticcheck
+		Recorder:   mgr.GetEventRecorderFor("llmloraadapter-controller"),
+		Audit:      reconciler.Audit,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LLMLoraAdapter")
+		os.Exit(1)
+	}
+
+	// Set up LLM Evaluation controller
+	if err := (&controller.LLMEvaluationReconciler{
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		AuditLogger: reconciler.Audit,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LLMEvaluation")
 		os.Exit(1)
 	}
 
@@ -274,34 +315,37 @@ func main() {
 	if err := (&controller.LocalModelCacheReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("LocalModelCache"), //nolint:staticcheck // TODO(ckodex): migrate to GetEventRecorder once Recorder field adopts events.EventRecorder
+		Recorder: mgr.GetEventRecorderFor("localmodelcache-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LocalModelCache")
 		os.Exit(1)
 	}
 
 	// Set up Agent controller — validates model + skill registry bindings.
-	if err := (&controller.AgentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Agent")
-		os.Exit(1)
-	}
+	// Experimental: gated behind EnableExperimentalAgents feature flag.
+	if cfg.Features.EnableExperimentalAgents {
+		if err := (&controller.AgentReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "Agent")
+			os.Exit(1)
+		}
 
-	// Set up SkillRegistry controller — validates skill entries and maintains entryCount.
-	if err := (&controller.SkillRegistryReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "SkillRegistry")
-		os.Exit(1)
+		// Set up SkillRegistry controller — validates skill entries and maintains entryCount.
+		if err := (&controller.SkillRegistryReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "SkillRegistry")
+			os.Exit(1)
+		}
+		setupLog.Info("experimental Agent and SkillRegistry controllers enabled")
 	}
 
 	// Set up ModelOnboarding controller — drives multi-stage model promotion pipeline.
-	// When CKODEX_PROMETHEUS_URL is set, live Prometheus metrics are queried for
-	// promotion gate evaluation (success rate, P99 latency). Without it, gates pass
-	// unconditionally — safe default for clusters without a Prometheus deployment.
+	// Promotion gates fail closed unless CKODEX_PROMETHEUS_URL is configured or the
+	// explicit insecure fallback is enabled for development-only environments.
 	modelOnboardingReconciler := &controller.ModelOnboardingReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -309,6 +353,11 @@ func main() {
 	if cfg.PrometheusURL != "" {
 		modelOnboardingReconciler.Metrics = controller.NewPrometheusMetricsQuerier(cfg.PrometheusURL)
 		setupLog.Info("Prometheus gate metrics enabled", "url", cfg.PrometheusURL)
+	} else if cfg.AllowInsecurePromotionGates {
+		modelOnboardingReconciler.Metrics = controller.NewInsecurePassMetricsQuerier()
+		setupLog.Info("promotion gates running in insecure compatibility mode", "env", "CKODEX_ALLOW_INSECURE_PROMOTION_GATES")
+	} else {
+		setupLog.Info("promotion gates will fail closed until Prometheus metrics are configured")
 	}
 	if err := modelOnboardingReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ModelOnboarding")
@@ -319,7 +368,7 @@ func main() {
 	if err := (&controller.ASRInferenceServiceReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("ASRInferenceService"), //nolint:staticcheck
+		Recorder: mgr.GetEventRecorderFor("asrinferenceservice-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ASRInferenceService")
 		os.Exit(1)

@@ -1,0 +1,38 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: gemma-4-oci
+  namespace: default
+spec:
+  model:
+    # OCI URI scheme with registry, repository, and tag/digest.
+    # The operator automatically detects "gemma-4" in the path and applies
+    # TurboQuant and GPU memory optimizations.
+    uri: oci://ghcr.io/ckodex-labs/models/gemma-4-e2b-it:latest
+    name: gemma-4-it
+    storage:
+      # Optional: Reference to a secret with OCI_REGISTRY_USERNAME/PASSWORD
+      # or .dockerconfigjson for private pull.
+      secretRef:
+        name: oci-registry-creds
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute:
+        hostnames:
+        - gemma-oci.serving.ckodex.com
+    scheduler:
+      pool: {}
+  template:
+    spec:
+      containers:
+      - name: llm-server
+        resources:
+          # Resources will be defaulted by WellKnown config if not specified,
+          # but we can explicitly provide them here.
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1

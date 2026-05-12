@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
 // newControllerScheme builds a scheme with all serving types registered.
@@ -155,7 +156,7 @@ func TestSkillRegistryReconcile_ValidRegistry_ReadyTrue(t *testing.T) {
 		types.NamespacedName{Name: "my-registry", Namespace: "default"}, &updated))
 
 	// Finalizer should be added.
-	assert.Contains(t, updated.Finalizers, FinalizerName)
+	assert.Contains(t, updated.Finalizers, api.FinalizerName)
 
 	// Status via status subresource.
 	assert.Equal(t, int32(2), updated.Status.EntryCount)
@@ -417,7 +418,7 @@ func TestAgentReconcile_AddsFinalizer(t *testing.T) {
 	var updated servingv1alpha2.Agent
 	require.NoError(t, r.Get(context.Background(),
 		types.NamespacedName{Name: "bot", Namespace: "default"}, &updated))
-	assert.Contains(t, updated.Finalizers, FinalizerName)
+	assert.Contains(t, updated.Finalizers, api.FinalizerName)
 }
 
 func TestAgentReconcile_ModelReady_AgentReady(t *testing.T) {
@@ -563,7 +564,7 @@ func TestAgentReconcile_Deletion_RemovesFinalizer(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "del-agent",
 			Namespace:         "default",
-			Finalizers:        []string{FinalizerName},
+			Finalizers:        []string{api.FinalizerName},
 			DeletionTimestamp: &now,
 		},
 	}
@@ -582,5 +583,5 @@ func TestAgentReconcile_Deletion_RemovesFinalizer(t *testing.T) {
 		return
 	}
 	require.NoError(t, err)
-	assert.NotContains(t, updated.Finalizers, FinalizerName)
+	assert.NotContains(t, updated.Finalizers, api.FinalizerName)
 }

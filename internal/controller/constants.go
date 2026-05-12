@@ -6,9 +6,6 @@ Licensed under the Apache License, Version 2.0.
 package controller
 
 const (
-	// FinalizerName is the finalizer for resource cleanup.
-	FinalizerName = "serving.ckodex.com/finalizer"
-
 	// DefaultVLLMImage is the default vLLM container image.
 	// Pinned to a specific version — never use :latest (supply chain risk, air-gapped incompatible).
 	// Update: change the tag, rebuild, then update the digest comment below.

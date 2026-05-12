@@ -112,6 +112,49 @@ type LLMInferenceServiceSpec struct {
 	// HTTPRoute with two weighted backends instead of a single backend.
 	// +optional
 	Canary *CanarySpec `json:"canary,omitempty"`
+
+	// Engine specifies the inference engine to use.
+	// Defaults to 'vllm'. Supported: 'vllm', 'quant-cpp'.
+	// +kubebuilder:default="vllm"
+	// +optional
+	Engine string `json:"engine,omitempty"`
+
+	// ToolSurface declares reachable APIs and external connectors for this service.
+	// +optional
+	ToolSurface *ToolSurface `json:"toolSurface,omitempty"`
+
+	// Observability configures telemetry sinks (logs, traces, metrics).
+	// +optional
+	Observability *ObservabilitySpec `json:"observability,omitempty"`
+}
+
+// ObservabilitySpec configures telemetry for an inference service.
+type ObservabilitySpec struct {
+	// Sink select the telemetry destination for Vector and Audit signals.
+	// +optional
+	Sink *TelemetrySink `json:"sink,omitempty"`
+}
+
+// TelemetrySink defines a destination for OIS signals.
+type TelemetrySink struct {
+	// Type of sink: "stdout", "otlp", "loki", "elasticsearch".
+	// +kubebuilder:validation:Enum=stdout;otlp;loki;elasticsearch
+	Type string `json:"type"`
+
+	// Endpoint for the sink (e.g., "http://otel-collector:4318").
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+}
+
+// ToolSurface defines allowed external reachability.
+type ToolSurface struct {
+	// AllowedAPIs is a list of FQDNs that the model is permitted to reach.
+	// +optional
+	AllowedAPIs []string `json:"allowedApis,omitempty"`
+
+	// AllowedCIDRs is a list of network ranges the model is permitted to reach.
+	// +optional
+	AllowedCIDRs []string `json:"allowedCidrs,omitempty"`
 }
 
 // SLOSpec declares the service level objectives for an LLMInferenceService.
@@ -152,10 +195,12 @@ type CanarySpec struct {
 type ModelSpec struct {
 	// URI is the model artifact location.
 	// Supported schemes: hf:// (HuggingFace Hub), hf-mount:// (HuggingFace CSI lazy mount),
-	// s3://, swfs://, gs://, pvc://, oci://, modelpack://.
+	// s3://, swfs://, gs://, pvc://, oci://, ocis://, modelpack://.
 	// hf-mount:// uses the hf-csi-driver to mount repos as a FUSE/NFS filesystem —
 	// only accessed bytes are fetched, eliminating full model downloads.
-	// +kubebuilder:validation:Pattern=`^(hf|hf-mount|s3|swfs|gs|pvc|oci|modelpack|https?)://.*$`
+	// `ocis://` is an explicit secure-OCI alias and follows the same runtime
+	// verification path as `oci://`, while making the intent visible at the spec boundary.
+	// +kubebuilder:validation:Pattern=`^(hf|hf-mount|s3|swfs|gs|pvc|oci|ocis|modelpack|https?)://.*$`
 	URI string `json:"uri"`
 
 	// Name is the model identifier used in inference requests.
@@ -166,6 +211,12 @@ type ModelSpec struct {
 	// Mirrors LocalModelCache credential support.
 	// +optional
 	Storage *StorageSpec `json:"storage,omitempty"`
+
+	// HardwareAware enables automatic hardware-specific artifact selection.
+	// When true, the operator appends hardware suffixes to OCI tags (e.g., -nvidia).
+	// Requires ENABLE_EXPERIMENTAL_HARDWARE_SELECTION feature gate.
+	// +optional
+	HardwareAware bool `json:"hardwareAware,omitempty"`
 }
 
 // StorageSpec configures storage credentials for model download.
@@ -189,6 +240,57 @@ type StorageSpec struct {
 	// VaultAddr is the address of the HashiCorp Vault server.
 	// +optional
 	VaultAddr string `json:"vaultAddr,omitempty"`
+
+	// ExternalSecret configures native integration with external-secrets.io.
+	// When set, the operator creates an ExternalSecret resource to sync
+	// credentials from an external provider (Vault, AWS SM, etc.).
+	// +optional
+	ExternalSecret *ExternalSecretSpec `json:"externalSecret,omitempty"`
+}
+
+// ExternalSecretSpec defines the desired state of the managed ExternalSecret.
+type ExternalSecretSpec struct {
+	// SecretStoreRef references the SecretStore/ClusterSecretStore to use.
+	SecretStoreRef SecretStoreRef `json:"secretStoreRef"`
+
+	// RefreshInterval is how often to re-sync the secret from the provider.
+	// +kubebuilder:default="1h"
+	// +optional
+	RefreshInterval string `json:"refreshInterval,omitempty"`
+
+	// Data defines the mapping of remote keys to local secret keys.
+	// +optional
+	Data []ExternalSecretData `json:"data,omitempty"`
+}
+
+// SecretStoreRef references a SecretStore or ClusterSecretStore.
+type SecretStoreRef struct {
+	// Name of the SecretStore.
+	Name string `json:"name"`
+
+	// Kind of the SecretStore (SecretStore or ClusterSecretStore).
+	// +kubebuilder:default="SecretStore"
+	// +optional
+	Kind string `json:"kind,omitempty"`
+}
+
+// ExternalSecretData defines a single mapping of a remote secret to a local key.
+type ExternalSecretData struct {
+	// SecretKey is the key in the resulting Kubernetes Secret.
+	SecretKey string `json:"secretKey"`
+
+	// RemoteRef defines where to fetch the secret from the provider.
+	RemoteRef ExternalSecretRemoteRef `json:"remoteRef"`
+}
+
+// ExternalSecretRemoteRef defines the remote key and optional property.
+type ExternalSecretRemoteRef struct {
+	// Key is the name/path of the secret in the external provider.
+	Key string `json:"key"`
+
+	// Property is the specific field to extract from the remote secret.
+	// +optional
+	Property string `json:"property,omitempty"`
 }
 
 // ParallelismSpec configures distributed inference parallelism.
@@ -369,6 +471,29 @@ type HTTPRouteSpec struct {
 	// Hostnames are the hostnames to match.
 	// +optional
 	Hostnames []string `json:"hostnames,omitempty"`
+
+	// Resilience configures timeouts and retries for this route.
+	// +optional
+	Resilience *ResilienceSpec `json:"resilience,omitempty"`
+}
+
+// ResilienceSpec defines timeout and retry parameters for inference routing.
+// Based on Gateway API GEP-1735 and implementation-specific extensions (Envoy).
+type ResilienceSpec struct {
+	// Timeout defines the request timeout.
+	// +kubebuilder:default="30s"
+	// +optional
+	Timeout string `json:"timeout,omitempty"`
+
+	// MaxRetries is the maximum number of retry attempts.
+	// +kubebuilder:default=3
+	// +optional
+	MaxRetries int32 `json:"maxRetries,omitempty"`
+
+	// RetryOn specifies the conditions under which to retry.
+	// +kubebuilder:default="5xx,connect-failure,refused-stream"
+	// +optional
+	RetryOn string `json:"retryOn,omitempty"`
 }
 
 // SchedulerSpec configures the KV-cache aware scheduler.
@@ -427,6 +552,10 @@ type ConfigReference struct {
 
 // LLMInferenceServiceStatus defines the observed state of LLMInferenceService.
 type LLMInferenceServiceStatus struct {
+	// StatePlanes represents the governed composite state of the model system.
+	// +optional
+	StatePlanes StatePlanes `json:"statePlanes,omitempty"`
+
 	// Conditions represent the latest available observations.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -451,6 +580,28 @@ type LLMInferenceServiceStatus struct {
 	// Optimized indicates whether the model is running with WellKnown optimizations applied.
 	// +optional
 	Optimized bool `json:"optimized,omitempty"`
+
+	// DetectedHardware is the hardware type identified by the operator for this service.
+	// +optional
+	DetectedHardware string `json:"detectedHardware,omitempty"`
+
+	// AdaptiveMetrics represents real-time performance and load pressure.
+	// +optional
+	AdaptiveMetrics *AdaptiveMetrics `json:"adaptiveMetrics,omitempty"`
+}
+
+// AdaptiveMetrics represents real-time performance data for the service.
+type AdaptiveMetrics struct {
+	// P50Latency is the median end-to-end latency.
+	P50Latency string `json:"p50Latency,omitempty"`
+	// P95Latency is the 95th percentile latency.
+	P95Latency string `json:"p95Latency,omitempty"`
+	// P99Latency is the 99th percentile latency.
+	P99Latency string `json:"p99Latency,omitempty"`
+	// QueueDepth is the number of pending requests in the priority queue.
+	QueueDepth int64 `json:"queueDepth,omitempty"`
+	// LoadLevel is the current graceful degradation state (None, Light, Moderate, Severe).
+	LoadLevel string `json:"loadLevel,omitempty"`
 }
 
 // Condition types for LLMInferenceService.

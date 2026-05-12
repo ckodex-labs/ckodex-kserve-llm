@@ -7,17 +7,43 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/ckodex-labs/kserve-llm-operator/internal/provenance"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/storage"
 )
 
-func main() {
-	args := os.Args[1:]
+const (
+	verificationStateDir  = ".ckodex"
+	verificationStateFile = "runtime-verification.json"
+	terminationLogPath    = "/dev/termination-log"
+)
 
+var cosignBinaryPath = envOrDefault("CKODEX_COSIGN_BINARY_PATH", "/cosign")
+
+func main() {
+	record, err := run(os.Args[1:])
+	if err != nil {
+		record.Error = err.Error()
+	}
+	if writeErr := writeRuntimeVerificationRecord(record); writeErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to write runtime verification record: %v\n", writeErr)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) (provenance.RuntimeVerificationRecord, error) {
 	// Parse flags before positional arguments.
 	var skipChecksum bool
 	var positional []string
@@ -31,8 +57,7 @@ func main() {
 	}
 
 	if len(positional) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s [--skip-checksum] <uri> <destPath>\n", os.Args[0])
-		os.Exit(1)
+		return provenance.RuntimeVerificationRecord{}, fmt.Errorf("usage: %s [--skip-checksum] <uri> <destPath>", os.Args[0])
 	}
 
 	uri := positional[0]
@@ -42,6 +67,8 @@ func main() {
 	if skipChecksum {
 		_ = os.Setenv("SKIP_CHECKSUM", "1")
 	}
+
+	record := provenance.RuntimeVerificationRecord{Subject: uri}
 
 	fmt.Printf("Starting CKodex Storage Initializer...\n")
 
@@ -65,57 +92,290 @@ func main() {
 	// Determine the scheme
 	parts := strings.SplitN(uri, "://", 2)
 	if len(parts) < 2 {
-		fmt.Fprintf(os.Stderr, "Invalid URI: %s\n", uri)
-		os.Exit(1)
+		return record, fmt.Errorf("invalid URI: %s", uri)
 	}
 	scheme := parts[0]
+	record.Scheme = scheme
 
 	// Get the registered client
 	client, err := storage.GetClient(scheme)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return record, fmt.Errorf("get storage client: %w", err)
 	}
 
 	// Check if destination is already populated (Idempotency / Cache Hit)
 	if entries, err := os.ReadDir(destPath); err == nil && len(entries) > 0 {
-		fmt.Printf("Optimization: Destination %s already contains %d files. Skipping download.\n", destPath, len(entries))
-		os.Exit(0)
+		if skipChecksum {
+			fmt.Printf("Optimization: Destination %s already contains %d files. Skipping download.\n", destPath, len(entries))
+			return record, nil
+		}
+
+		cachedRecord, cacheErr := loadCachedRuntimeVerificationRecord(destPath)
+		if cacheErr == nil && cachedRecord.Subject == uri && cachedRecord.Verified() {
+			fmt.Printf("Optimization: Destination %s already contains a verified cache for %s. Skipping download.\n", destPath, uri)
+			return *cachedRecord, nil
+		}
+
+		return record, fmt.Errorf("destination %s already contains files, but no matching verified cache record was found; refusing to reuse unverified content", destPath)
 	}
 
 	// Pull the artifact
 	if err := client.Pull(ctx, uri, destPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Pull failed: %v\n", err)
-		os.Exit(1)
+		return record, fmt.Errorf("pull failed: %w", err)
 	}
 
 	// Security Hardening: AI-BOM / Provenance Verification
 	if !skipChecksum {
-		fmt.Printf("Verifying Cryptographic Provenance (AI-BOM)...\n")
-		// Check for SLSA Provenance or signature artifact at the top-level
-		// of the destination path to ensure the model weights have not been tampered with.
-		provenancePaths := []string{
-			filepath.Join(destPath, "slsa.provenance.json"),
-			filepath.Join(destPath, "provenance.sig"),
-			filepath.Join(destPath, "model.sig"),
+		fmt.Printf("Inspecting provenance artifacts (AI-BOM)...\n")
+		assessment, err := assessProvenance(uri, scheme, destPath, resolveVerifierConfig())
+		if err != nil {
+			return record, fmt.Errorf("SECURITY FATAL: %w", err)
 		}
-
-		found := false
-		for _, path := range provenancePaths {
-			if _, err := os.Stat(path); err == nil {
-				fmt.Printf("Found provenance artifact: %s. Cryptographic signature check PASSED.\n", path)
-				found = true
-				break
-			}
+		record = assessment.Record
+		for _, path := range assessment.ArtifactPaths {
+			fmt.Printf("Found provenance-related artifact: %s\n", path)
 		}
-
-		if !found {
-			fmt.Fprintf(os.Stderr, "SECURITY FATAL: No provenance artifact (slsa.provenance.json or .sig) found in model payload. Rejecting model to prevent tampering.\n")
-			os.Exit(1)
+		if record.KeyRef != "" {
+			fmt.Printf("Verification material configured via %s\n", record.KeyRef)
+		}
+		if !record.Verified() {
+			fmt.Printf("Warning: provenance material was detected, but this binary did not complete a cryptographic verification step.\n")
+		} else {
+			fmt.Printf("Cryptographic signature, provenance attestation, and SBOM attestation verified for %s\n", uri)
+		}
+		if writeErr := writeCacheRuntimeVerificationRecord(destPath, record); writeErr != nil {
+			return record, fmt.Errorf("persist verification state: %w", writeErr)
 		}
 	} else {
-		fmt.Printf("Warning: Cryptographic Provenance Verification bypassed via --skip-checksum.\n")
+		fmt.Printf("Warning: provenance artifact inspection bypassed via --skip-checksum.\n")
 	}
 
-	fmt.Printf("Successfully downloaded and verified model to %s\n", destPath)
+	fmt.Printf("Successfully downloaded model to %s\n", destPath)
+	return record, nil
+}
+
+type verifierConfig struct {
+	LocalKeyPath        string
+	LocalKeyPEM         string
+	CertificateIdentity string
+	CertificateIssuer   string
+}
+
+func resolveVerifierConfig() verifierConfig {
+	return verifierConfig{
+		LocalKeyPath:        os.Getenv("CKODEX_LOCAL_COSIGN_KEY_PATH"),
+		LocalKeyPEM:         os.Getenv("CKODEX_LOCAL_COSIGN_PUBLIC_KEY"),
+		CertificateIdentity: os.Getenv("CKODEX_COSIGN_CERT_IDENTITY"),
+		CertificateIssuer:   os.Getenv("CKODEX_COSIGN_CERT_OIDC_ISSUER"),
+	}
+}
+
+type provenanceAssessment struct {
+	ArtifactPaths             []string
+	Record                    provenance.RuntimeVerificationRecord
+	CryptographicallyVerified bool
+}
+
+func assessProvenance(uri, scheme, destPath string, verifier verifierConfig) (provenanceAssessment, error) {
+	assessment := provenanceAssessment{
+		ArtifactPaths: make([]string, 0, 3),
+		Record: provenance.RuntimeVerificationRecord{
+			Subject: uri,
+			Scheme:  scheme,
+		},
+	}
+
+	resolvedVerifier, cleanup, err := materializeVerifierConfig(verifier)
+	if err != nil {
+		return provenanceAssessment{}, err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	assessment.Record.KeyRef = resolvedVerifier.LocalKeyPath
+	assessment.Record.CertificateIdentity = resolvedVerifier.CertificateIdentity
+	assessment.Record.CertificateIssuer = resolvedVerifier.CertificateIssuer
+
+	if scheme == "oci" || scheme == "ocis" {
+		record, verifyErr := verifyOCIProvenance(uri, resolvedVerifier)
+		if verifyErr != nil {
+			return provenanceAssessment{}, verifyErr
+		}
+		assessment.Record = record
+		assessment.CryptographicallyVerified = record.Verified()
+		return assessment, nil
+	}
+
+	provenancePaths := []string{
+		filepath.Join(destPath, "slsa.provenance.json"),
+		filepath.Join(destPath, "provenance.sig"),
+		filepath.Join(destPath, "model.sig"),
+	}
+
+	for _, path := range provenancePaths {
+		if _, err := os.Stat(path); err == nil {
+			assessment.ArtifactPaths = append(assessment.ArtifactPaths, path)
+		}
+	}
+
+	if len(assessment.ArtifactPaths) == 0 {
+		return provenanceAssessment{}, fmt.Errorf("No provenance artifact (slsa.provenance.json or .sig) found in model payload. Rejecting model to prevent tampering.")
+	}
+
+	return assessment, nil
+}
+
+func materializeVerifierConfig(cfg verifierConfig) (verifierConfig, func(), error) {
+	if cfg.LocalKeyPath != "" {
+		if _, err := os.Stat(cfg.LocalKeyPath); err == nil {
+			return cfg, nil, nil
+		} else if cfg.LocalKeyPEM == "" {
+			return verifierConfig{}, nil, fmt.Errorf("configured offline verification key %q is unavailable: %w", cfg.LocalKeyPath, err)
+		}
+	}
+
+	if cfg.LocalKeyPEM == "" {
+		return cfg, nil, nil
+	}
+
+	tempDir, err := os.MkdirTemp("", "ckodex-cosign-key-*")
+	if err != nil {
+		return verifierConfig{}, nil, fmt.Errorf("create temp cosign key dir: %w", err)
+	}
+	keyPath := filepath.Join(tempDir, "cosign.pub")
+	if err := os.WriteFile(keyPath, []byte(cfg.LocalKeyPEM), 0o600); err != nil {
+		_ = os.RemoveAll(tempDir)
+		return verifierConfig{}, nil, fmt.Errorf("write temp cosign key: %w", err)
+	}
+	cfg.LocalKeyPath = keyPath
+	return cfg, func() { _ = os.RemoveAll(tempDir) }, nil
+}
+
+func verifyOCIProvenance(uri string, verifier verifierConfig) (provenance.RuntimeVerificationRecord, error) {
+	if verifier.LocalKeyPath == "" && (verifier.CertificateIdentity == "" || verifier.CertificateIssuer == "") {
+		return provenance.RuntimeVerificationRecord{
+			Subject: uri,
+			Scheme:  "oci",
+		}, fmt.Errorf("OCI cryptographic verification requires CKODEX_LOCAL_COSIGN_KEY_PATH, CKODEX_LOCAL_COSIGN_PUBLIC_KEY, or CKODEX_COSIGN_CERT_IDENTITY plus CKODEX_COSIGN_CERT_OIDC_ISSUER")
+	}
+
+	ref := storage.TrimOCIScheme(uri)
+	record := provenance.RuntimeVerificationRecord{
+		Subject:             uri,
+		Scheme:              "oci",
+		KeyRef:              verifier.LocalKeyPath,
+		CertificateIdentity: verifier.CertificateIdentity,
+		CertificateIssuer:   verifier.CertificateIssuer,
+	}
+	if strings.HasPrefix(uri, "ocis://") {
+		record.Scheme = "ocis"
+	}
+
+	signatureOutput, err := runCosign(ref, verifier, "verify")
+	if err != nil {
+		return record, fmt.Errorf("verify OCI signature for %s: %w", uri, err)
+	}
+	record.SignatureVerified = true
+	record.SignatureDigest = extractSignatureDigest(signatureOutput)
+
+	provenanceOutput, err := runCosign(ref, verifier, "verify-attestation", "--type", "slsaprovenance1")
+	if err != nil {
+		return record, fmt.Errorf("verify SLSA provenance attestation for %s: %w", uri, err)
+	}
+	record.AttestationVerified = true
+	record.AttestationURI = uri + "#attestation:slsaprovenance1"
+
+	sbomOutput, err := runCosign(ref, verifier, "verify-attestation", "--type", "cyclonedx")
+	if err != nil {
+		return record, fmt.Errorf("verify CycloneDX SBOM attestation for %s: %w", uri, err)
+	}
+	record.SBOMVerified = true
+	record.SBOMDigest = sha256Hex(sbomOutput)
+	if record.SignatureDigest == "" {
+		record.SignatureDigest = sha256Hex(provenanceOutput)
+	}
+	record.VerifiedAt = time.Now().UTC().Format(time.RFC3339)
+
+	return record, nil
+}
+
+func runCosign(ref string, verifier verifierConfig, verb string, extraArgs ...string) ([]byte, error) {
+	args := []string{verb}
+	if verifier.LocalKeyPath != "" {
+		args = append(args, "--key", verifier.LocalKeyPath)
+	} else {
+		args = append(args,
+			"--certificate-identity", verifier.CertificateIdentity,
+			"--certificate-oidc-issuer", verifier.CertificateIssuer,
+		)
+	}
+	args = append(args, extraArgs...)
+	args = append(args, ref)
+
+	cmd := exec.Command(cosignBinaryPath, args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return output, nil
+}
+
+func extractSignatureDigest(output []byte) string {
+	type verifyPayload struct {
+		Critical struct {
+			Image struct {
+				DockerManifestDigest string `json:"docker-manifest-digest"`
+			} `json:"image"`
+		} `json:"critical"`
+	}
+
+	var payloads []verifyPayload
+	if err := json.Unmarshal(output, &payloads); err == nil && len(payloads) > 0 {
+		if digest := payloads[0].Critical.Image.DockerManifestDigest; digest != "" {
+			return digest
+		}
+	}
+
+	return sha256Hex(output)
+}
+
+func sha256Hex(payload []byte) string {
+	sum := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func writeRuntimeVerificationRecord(record provenance.RuntimeVerificationRecord) error {
+	data, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("marshal runtime verification record: %w", err)
+	}
+	return os.WriteFile(terminationLogPath, append(data, '\n'), 0o600)
+}
+
+func writeCacheRuntimeVerificationRecord(destPath string, record provenance.RuntimeVerificationRecord) error {
+	stateDir := filepath.Join(destPath, verificationStateDir)
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(stateDir, verificationStateFile), append(data, '\n'), 0o600)
+}
+
+func loadCachedRuntimeVerificationRecord(destPath string) (*provenance.RuntimeVerificationRecord, error) {
+	data, err := os.ReadFile(filepath.Join(destPath, verificationStateDir, verificationStateFile))
+	if err != nil {
+		return nil, err
+	}
+	return provenance.ParseRuntimeVerificationRecord(string(data))
+}
+
+func envOrDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }

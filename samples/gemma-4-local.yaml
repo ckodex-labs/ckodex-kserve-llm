@@ -1,0 +1,44 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: gemma-4-local
+  namespace: default
+spec:
+  model:
+    # pvc:// URI scheme allows serving from a pre-populated PersistentVolumeClaim.
+    # The operator mounts the PVC directly into /mnt/models, bypassing downloads.
+    uri: pvc://model-storage-pvc
+    name: gemma-4-local
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute:
+        hostnames:
+        - gemma-local.serving.ckodex.com
+    scheduler:
+      pool: {}
+  template:
+    spec:
+      containers:
+      - name: llm-server
+        resources:
+          # Custom local resources
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-storage-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: standard

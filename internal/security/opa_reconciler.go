@@ -9,12 +9,23 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+// GVK constants for Gatekeeper
+var (
+	ConstraintTemplateGVK = schema.GroupVersionKind{
+		Group:   "templates.gatekeeper.sh",
+		Version: "v1",
+		Kind:    "ConstraintTemplate",
+	}
 )
 
 // OPAReconciler generates Gatekeeper ConstraintTemplate + Constraint resources
@@ -57,28 +68,61 @@ func DefaultOPAConfig() OPAConfig {
 func (o *OPAReconciler) ReconcileOPA(ctx context.Context, namespace string, cfg OPAConfig) error {
 	logger := log.FromContext(ctx).WithValues("component", "opa")
 
-	// 1. Resource Quota constraint
+	// 1. Check if Gatekeeper is available
+	exists, err := o.isGVKAvailable()
+	if err != nil {
+		return fmt.Errorf("check Gatekeeper availability: %w", err)
+	}
+	if !exists {
+		logger.Info("Gatekeeper templates.gatekeeper.sh/v1 CRDs not found, skipping OPA reconciliation")
+		return nil
+	}
+
+	// 2. Resource Quota constraint
 	if err := o.reconcileResourceQuota(ctx, namespace, cfg); err != nil {
 		return fmt.Errorf("reconcile resource quota constraint: %w", err)
 	}
 
-	// 2. Image Allowlist constraint
+	// 3. Image Allowlist constraint
 	if err := o.reconcileImageAllowlist(ctx, namespace, cfg); err != nil {
 		return fmt.Errorf("reconcile image allowlist constraint: %w", err)
 	}
 
-	// 3. Security Policy constraint
+	// 4. Security Policy constraint
 	if err := o.reconcileSecurityPolicy(ctx, namespace); err != nil {
 		return fmt.Errorf("reconcile security policy constraint: %w", err)
 	}
 
-	// 4. Model Access constraint (tenant-based isolation)
+	// 5. Model Access constraint (tenant-based isolation)
 	if err := o.reconcileModelAccess(ctx, namespace); err != nil {
 		return fmt.Errorf("reconcile model access constraint: %w", err)
 	}
 
 	logger.Info("OPA constraints reconciled")
 	return nil
+}
+
+// isGVKAvailable checks if Gatekeeper ConstraintTemplate CRD is registered.
+func (o *OPAReconciler) isGVKAvailable() (bool, error) {
+	if o.Client == nil {
+		return false, nil
+	}
+
+	if mapper := o.RESTMapper(); mapper != nil {
+		_, err := mapper.RESTMapping(ConstraintTemplateGVK.GroupKind(), ConstraintTemplateGVK.Version)
+		if err == nil {
+			return true, nil
+		}
+		if !meta.IsNoMatchError(err) {
+			return false, err
+		}
+	}
+
+	if o.Scheme != nil && o.Scheme.Recognizes(ConstraintTemplateGVK) {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // reconcileResourceQuota creates a ConstraintTemplate + Constraint for GPU/replica limits.

@@ -7,7 +7,8 @@ This guide provides a step-by-step workflow for onboarding a new Large Language 
 CKodex supports multiple model distribution schemes. Select the one best suited for your infrastructure:
 
 - **`hf://<repo-id>`**: Direct download from Hugging Face Hub (requires `HUGGING_FACE_HUB_TOKEN` if private).
-- **`oci://<registry>/<image>:<tag>`**: Models packaged as OCI artifacts (standard for air-gapped or high-security environments).
+- **`oci://<registry>/<image>:<tag>`**: Models packaged as OCI artifacts.
+- **`ocis://<registry>/<image>:<tag>`**: Same OCI transport, but with explicit secure-OCI intent. It routes through the same runtime signature, provenance, and SBOM attestation verification path as `oci://`.
 - **`s3://<bucket>/<path>`**: Models stored in S3-compatible object storage.
 - **`pvc://<claim-name>/<path>`**: Pre-existing models on a PersistentVolumeClaim.
 - **`modelpack://<name>`**: CKodex-optimized model packages with built-in metadata.
@@ -17,7 +18,7 @@ CKodex supports multiple model distribution schemes. Select the one best suited 
 To avoid multi-gigabyte downloads during pod startup, use `LocalModelCache` to pre-warm nodes.
 
 ```yaml
-apiVersion: serving.ckodex.io/v1alpha2
+apiVersion: serving.ckodex.com/v1alpha2
 kind: LocalModelCache
 metadata:
   name: llama-3-8b-cache
@@ -36,7 +37,7 @@ The operator will create a `storage-initializer` Job on each target node to popu
 Define the `LLMInferenceService` to manage the serving workload.
 
 ```yaml
-apiVersion: serving.ckodex.io/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: LLMInferenceService
 metadata:
   name: llama-3-8b
@@ -64,7 +65,7 @@ spec:
 For production workloads, use the `ModelOnboarding` CRD to automate the promotion cycle.
 
 ```yaml
-apiVersion: serving.ckodex.io/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: ModelOnboarding
 metadata:
   name: llama-3-8b-promotion

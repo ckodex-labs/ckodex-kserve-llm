@@ -33,6 +33,7 @@ func TestDefaultOperatorConfig_FeatureGates(t *testing.T) {
 	assert.False(t, cfg.Features.EnableSessions)
 	assert.False(t, cfg.Features.EnableGRPC)
 	assert.False(t, cfg.Features.EnableWebhooks)
+	assert.False(t, cfg.Features.EnableExperimentalAgents)
 }
 
 func TestDefaultOperatorConfig_AuditSink(t *testing.T) {
@@ -65,7 +66,8 @@ func TestDefaultOperatorConfig_ObservabilityDefaults(t *testing.T) {
 
 func TestDefaultOperatorConfig_PrometheusURLEmpty(t *testing.T) {
 	cfg := config.DefaultOperatorConfig()
-	assert.Empty(t, cfg.PrometheusURL, "no Prometheus URL by default — noop querier is safe fallback")
+	assert.Empty(t, cfg.PrometheusURL, "no Prometheus URL by default")
+	assert.False(t, cfg.AllowInsecurePromotionGates, "promotion gates should fail closed by default")
 }
 
 // ---- LoadFromEnv -------------------------------------------------------------
@@ -109,6 +111,26 @@ func TestLoadFromEnv_StringFields(t *testing.T) {
 	assert.Equal(t, "https://idp.corp.internal", cfg.Auth.IssuerURL)
 	assert.Equal(t, "inference-service", cfg.Auth.Audience)
 	assert.Equal(t, "http://prometheus.monitoring:9090", cfg.PrometheusURL)
+}
+
+func TestLoadFromEnv_AllowInsecurePromotionGates(t *testing.T) {
+	setEnv(t, "CKODEX_ALLOW_INSECURE_PROMOTION_GATES", "true")
+
+	cfg := config.DefaultOperatorConfig()
+	cfg.LoadFromEnv()
+
+	assert.True(t, cfg.AllowInsecurePromotionGates)
+}
+
+func TestLoadFromEnv_ContractOverrides(t *testing.T) {
+	setEnv(t, "OTEL_EXPORTER_OTLP_ENDPOINT", "http://contract-otel:4318")
+	setEnv(t, "VERSION", "v1.2.3-contract")
+
+	cfg := config.DefaultOperatorConfig()
+	cfg.LoadFromEnv()
+
+	assert.Equal(t, "http://contract-otel:4318", cfg.Observability.OTLPEndpoint)
+	assert.Equal(t, "v1.2.3-contract", cfg.Version)
 }
 
 func TestLoadFromEnv_SemanticCacheFields(t *testing.T) {
@@ -209,6 +231,7 @@ func TestDefaultFeatureGates_FromEnv_AllGates(t *testing.T) {
 		{"CKODEX_FEATURE_ENABLE_SESSIONS", func(f config.FeatureGates) bool { return f.EnableSessions }},
 		{"CKODEX_FEATURE_ENABLE_GRPC", func(f config.FeatureGates) bool { return f.EnableGRPC }},
 		{"CKODEX_FEATURE_ENABLE_WEBHOOKS", func(f config.FeatureGates) bool { return f.EnableWebhooks }},
+		{"CKODEX_FEATURE_ENABLE_EXPERIMENTAL_AGENTS", func(f config.FeatureGates) bool { return f.EnableExperimentalAgents }},
 	}
 
 	defaults := config.DefaultFeatureGates()

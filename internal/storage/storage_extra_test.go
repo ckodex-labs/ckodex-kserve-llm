@@ -38,6 +38,15 @@ func TestParseOCIURI_TagReference(t *testing.T) {
 	assert.Empty(t, a.Digest)
 }
 
+func TestParseOCIURI_OCISTagReference(t *testing.T) {
+	a, err := ParseOCIURI("ocis://ghcr.io/ckodex/llama3:v1.2")
+	require.NoError(t, err)
+	assert.Equal(t, "ghcr.io", a.Registry)
+	assert.Equal(t, "ckodex/llama3", a.Repository)
+	assert.Equal(t, "v1.2", a.Reference)
+	assert.Equal(t, "ocis://ghcr.io/ckodex/llama3:v1.2", a.RawURI)
+}
+
 func TestParseOCIURI_DigestReference(t *testing.T) {
 	a, err := ParseOCIURI("oci://ghcr.io/ckodex/llama3@sha256:abc123")
 	require.NoError(t, err)
@@ -69,6 +78,11 @@ func TestParseOCIURI_MissingRepository_Error(t *testing.T) {
 	_, err := ParseOCIURI("oci://ghcr.io")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid OCI URI")
+}
+
+func TestResolveAirGappedURI_PreservesOCISScheme(t *testing.T) {
+	resolved := ResolveAirGappedURI("ocis://ghcr.io/ckodex/model:tag", "registry.corp.internal")
+	assert.Equal(t, "ocis://registry.corp.internal/ghcr.io/ckodex/model:tag", resolved)
 }
 
 // ============================================================================

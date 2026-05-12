@@ -25,18 +25,52 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install Dagger CLI
+      - name: Detect console sources
+        id: console
+        shell: bash
         run: |
-          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=0.15.0 sh
-          sudo mv bin/dagger /usr/local/bin/dagger
-          dagger version
+          if [[ -f console/package.json && -f console/package-lock.json ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Console gate skipped::console/package.json and console/package-lock.json are not present in this checkout. The repo currently stores console as a gitlink without a .gitmodules mapping, so Actions cannot populate it from a fresh clone."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      # All pipeline logic lives in ci/main.go (Go, not shell).
-      # No untrusted github.event.* context is interpolated into run: commands.
-      - name: Run pipeline (lint + test + build + scan)
-        run: go run ./ci/main.go
+      - name: Set up Node.js
+        if: steps.console.outputs.available == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Install GoReleaser
+        shell: bash
+        run: |
+          curl -sSL https://github.com/goreleaser/goreleaser/releases/download/v2.15.4/goreleaser_Linux_x86_64.tar.gz \
+            | tar -xz goreleaser
+          sudo mv goreleaser /usr/local/bin/goreleaser
+          goreleaser --version
+
+      - name: Build console
+        if: steps.console.outputs.available == 'true'
+        working-directory: console
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run Dagger Pipeline
+        shell: bash
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          GOCACHE: ${{ runner.temp }}/go-build
+        run: go run ./ci/main.go
+
+      - name: Rehearse release artifacts
+        run: make release-readiness
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -53,3 +87,13 @@ jobs:
           name: sbom
           path: sbom/
           retention-days: 90
+
+      - name: Upload release snapshot artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: release-snapshot
+          path: |
+            dist/
+            bin/release-readiness.json
+          retention-days: 30

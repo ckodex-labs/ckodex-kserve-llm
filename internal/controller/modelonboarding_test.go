@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
 // ---- mockMetricsQuerier --------------------------------------------------
@@ -204,11 +205,8 @@ func TestCheckGateCriteria_ZeroMaxLatency_SkipsP99Check(t *testing.T) {
 	assert.NoError(t, r.checkGateCriteria(context.Background(), &servingv1alpha2.ModelOnboarding{}, llmSvc, gate))
 }
 
-// ---- noopMetricsQuerier (used when Metrics == nil) ----------------------
-
-func TestCheckGateCriteria_NilMetrics_UsesNoop(t *testing.T) {
+func TestCheckGateCriteria_NilMetrics_FailsClosed(t *testing.T) {
 	scheme := newControllerScheme(t)
-	// Metrics is nil → noopMetricsQuerier returns 100%/0ms → gate always passes.
 	r := &ModelOnboardingReconciler{
 		Client:  fake.NewClientBuilder().WithScheme(scheme).Build(),
 		Scheme:  scheme,
@@ -216,7 +214,9 @@ func TestCheckGateCriteria_NilMetrics_UsesNoop(t *testing.T) {
 	}
 	llmSvc := readyLLMSvcWithReplicas("llama3", 1)
 	gate := &servingv1alpha2.GateCriteria{MinSuccessRate: 99}
-	assert.NoError(t, r.checkGateCriteria(context.Background(), &servingv1alpha2.ModelOnboarding{}, llmSvc, gate))
+	err := r.checkGateCriteria(context.Background(), &servingv1alpha2.ModelOnboarding{}, llmSvc, gate)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "promotion metrics backend is not configured")
 }
 
 // ---- nextStageIndex ------------------------------------------------------
@@ -323,7 +323,7 @@ func TestModelOnboardingReconcile_AddsFinalizer(t *testing.T) {
 	var updated servingv1alpha2.ModelOnboarding
 	require.NoError(t, r.Get(context.Background(),
 		types.NamespacedName{Name: "pipeline", Namespace: "default"}, &updated))
-	assert.Contains(t, updated.Finalizers, FinalizerName)
+	assert.Contains(t, updated.Finalizers, api.FinalizerName)
 }
 
 func TestModelOnboardingReconcile_NoStages_Completes(t *testing.T) {

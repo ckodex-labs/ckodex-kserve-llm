@@ -19,7 +19,7 @@ Hot-swap latency is typically 200–800 ms depending on adapter size and GPU mem
 ## Apply a LoRA Adapter
 
 ```yaml
-apiVersion: serving.ckodex.com/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: LLMLoraAdapter
 metadata:
   name: customer-support-v3

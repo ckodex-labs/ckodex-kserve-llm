@@ -78,6 +78,12 @@ spec:
                   For faster-whisper, use hf://openai/whisper-large-v3 or similar.
                   For transformers, use hf://CohereLabs/cohere-transcribe-03-2026.
                 properties:
+                  hardwareAware:
+                    description: |-
+                      HardwareAware enables automatic hardware-specific artifact selection.
+                      When true, the operator appends hardware suffixes to OCI tags (e.g., -nvidia).
+                      Requires ENABLE_EXPERIMENTAL_HARDWARE_SELECTION feature gate.
+                    type: boolean
                   name:
                     description: |-
                       Name is the model identifier used in inference requests.
@@ -88,6 +94,66 @@ spec:
                       Storage configures credentials for model download.
                       Mirrors LocalModelCache credential support.
                     properties:
+                      externalSecret:
+                        description: |-
+                          ExternalSecret configures native integration with external-secrets.io.
+                          When set, the operator creates an ExternalSecret resource to sync
+                          credentials from an external provider (Vault, AWS SM, etc.).
+                        properties:
+                          data:
+                            description: Data defines the mapping of remote keys to
+                              local secret keys.
+                            items:
+                              description: ExternalSecretData defines a single mapping
+                                of a remote secret to a local key.
+                              properties:
+                                remoteRef:
+                                  description: RemoteRef defines where to fetch the
+                                    secret from the provider.
+                                  properties:
+                                    key:
+                                      description: Key is the name/path of the secret
+                                        in the external provider.
+                                      type: string
+                                    property:
+                                      description: Property is the specific field
+                                        to extract from the remote secret.
+                                      type: string
+                                  required:
+                                  - key
+                                  type: object
+                                secretKey:
+                                  description: SecretKey is the key in the resulting
+                                    Kubernetes Secret.
+                                  type: string
+                              required:
+                              - remoteRef
+                              - secretKey
+                              type: object
+                            type: array
+                          refreshInterval:
+                            default: 1h
+                            description: RefreshInterval is how often to re-sync the
+                              secret from the provider.
+                            type: string
+                          secretStoreRef:
+                            description: SecretStoreRef references the SecretStore/ClusterSecretStore
+                              to use.
+                            properties:
+                              kind:
+                                default: SecretStore
+                                description: Kind of the SecretStore (SecretStore
+                                  or ClusterSecretStore).
+                                type: string
+                              name:
+                                description: Name of the SecretStore.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - secretStoreRef
+                        type: object
                       secretRef:
                         description: SecretRef is a reference to a Secret containing
                           storage credentials.

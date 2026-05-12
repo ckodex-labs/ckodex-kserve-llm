@@ -1,0 +1,123 @@
+version: "2"
+run:
+  issues-exit-code: 1
+  tests: true
+linters:
+  default: none
+  enable:
+    - asciicheck
+    - bodyclose
+    - dogsled
+    - durationcheck
+    - errcheck
+    - errorlint
+    - exhaustive
+    - goconst
+    - gocritic
+    - gocyclo
+    - gosec
+    - govet
+    - misspell
+    - nakedret
+    - nilerr
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - staticcheck
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+  settings:
+    gocyclo:
+      min-complexity: 15
+    gosec:
+      includes:
+        - G101
+        - G102
+        - G103
+        - G104
+        - G106
+        - G107
+        - G108
+        - G109
+        - G110
+        - G111
+        - G112
+        - G113
+        - G114
+        - G201
+        - G202
+        - G203
+        - G204
+        - G301
+        - G302
+        - G303
+        - G304
+        - G305
+        - G306
+        - G307
+        - G401
+        - G402
+        - G403
+        - G404
+        - G501
+        - G502
+        - G503
+        - G504
+        - G505
+        - G601
+    govet:
+      enable-all: true
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - goconst
+          - gosec
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

@@ -14,7 +14,7 @@ Every tenant must occupy one or more dedicated Kubernetes namespaces.
 ### 2. Multi-Tenant Identity (SPIRE)
 The operator automatically manages **SPIFFE** identities for all inference workloads.
 
-- **Workload ID**: `spiffe://ckodex.io/ns/{ns}/sa/{sa}/model/{model}`
+- **Workload ID**: `spiffe://ckodex.com/ns/{ns}/sa/{sa}/model/{model}`
 - **mTLS Enforcement**: The Gateway and sidecars use these SVIDs to guarantee that only authorized clients (from the allowed tenant ID) can communicate with the inference backend.
 
 ## Security & Compliance Silos
@@ -28,7 +28,7 @@ Use `LLMInferenceServiceConfig` to apply pre-validated security profiles (Compli
 
 ### Example Tenant Config:
 ```yaml
-apiVersion: serving.ckodex.io/v1alpha2
+apiVersion: serving.ckodex.com/v1alpha2
 kind: LLMInferenceServiceConfig
 metadata:
   name: healthcare-tenant-std

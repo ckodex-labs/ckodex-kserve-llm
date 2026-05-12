@@ -94,6 +94,7 @@ func TestValidator_ValidateCreate_ValidSchemes(t *testing.T) {
 		"gs://bucket/model",
 		"pvc://my-pvc/model",
 		"oci://registry.corp/model:tag",
+		"ocis://registry.corp/model:tag",
 		"seaweedfs://seaweedfs.corp/model",
 		"http://internal/model",
 		"https://internal/model",
@@ -123,6 +124,14 @@ func TestValidator_ValidateCreate_FedRAMPMode_AcceptsOCI(t *testing.T) {
 	v := &webhook.LLMInferenceServiceValidator{FedRAMPMode: true}
 	svc := minimalValidSvc()
 	svc.Spec.Model.URI = "oci://registry.corp/llama3:latest"
+	_, err := v.ValidateCreate(context.Background(), svc)
+	assert.NoError(t, err)
+}
+
+func TestValidator_ValidateCreate_FedRAMPMode_AcceptsOCIS(t *testing.T) {
+	v := &webhook.LLMInferenceServiceValidator{FedRAMPMode: true}
+	svc := minimalValidSvc()
+	svc.Spec.Model.URI = "ocis://registry.corp/llama3:latest"
 	_, err := v.ValidateCreate(context.Background(), svc)
 	assert.NoError(t, err)
 }

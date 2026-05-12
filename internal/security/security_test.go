@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -33,6 +34,17 @@ func secScheme(t *testing.T) *runtime.Scheme {
 	require.NoError(t, appsv1.AddToScheme(s))
 	require.NoError(t, corev1.AddToScheme(s))
 	require.NoError(t, networkingv1.AddToScheme(s))
+
+	// Register unstructured GVKs for isGVKAvailable checks
+	s.AddKnownTypeWithName(ExternalSecretGVK, &unstructured.Unstructured{})
+	s.AddKnownTypeWithName(ConstraintTemplateGVK, &unstructured.Unstructured{})
+	s.AddKnownTypeWithName(TracingPolicyGVK, &unstructured.Unstructured{})
+	s.AddKnownTypeWithName(schema.GroupVersionKind{
+		Group:   "networking.istio.io",
+		Version: "v1beta1",
+		Kind:    "Sidecar",
+	}, &unstructured.Unstructured{})
+
 	return s
 }
 
@@ -423,18 +435,21 @@ func TestReconcileOPA_Idempotent(t *testing.T) {
 // ---- SPIFFEIDForService ----------------------------------------------------
 
 func TestSPIFFEIDForService_Format(t *testing.T) {
-	id := SPIFFEIDForService("prod", "vllm-sa", "llama3")
+	r := &SPIREReconciler{}
+	id := r.SPIFFEIDForService("prod", "vllm-sa", "llama3")
 	assert.Equal(t, "spiffe://ckodex.com/ns/prod/sa/vllm-sa/model/llama3", id)
 }
 
 func TestSPIFFEIDForService_TrustDomain(t *testing.T) {
-	id := SPIFFEIDForService("any", "sa", "model")
+	r := &SPIREReconciler{}
+	id := r.SPIFFEIDForService("any", "sa", "model")
 	assert.Contains(t, id, "spiffe://"+SPIFFETrustDomain+"/")
 }
 
 func TestSPIFFEIDForService_DifferentInputs(t *testing.T) {
-	a := SPIFFEIDForService("ns1", "sa1", "m1")
-	b := SPIFFEIDForService("ns2", "sa2", "m2")
+	r := &SPIREReconciler{}
+	a := r.SPIFFEIDForService("ns1", "sa1", "m1")
+	b := r.SPIFFEIDForService("ns2", "sa2", "m2")
 	assert.NotEqual(t, a, b)
 }
 
@@ -630,11 +645,11 @@ func TestReconcileNetworkPolicies_DenyAllCreated(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
 
 	var policy networkingv1.NetworkPolicy
 	require.NoError(t, np.Get(context.Background(),
-		types.NamespacedName{Name: "llama3-deny-all", Namespace: "default"}, &policy))
+		types.NamespacedName{Name: "llama3-deny-all-ingress", Namespace: "default"}, &policy))
 
 	assert.Contains(t, policy.Spec.PolicyTypes, networkingv1.PolicyTypeIngress)
 	assert.Empty(t, policy.Spec.Ingress, "deny-all must have empty ingress rules")
@@ -649,7 +664,7 @@ func TestReconcileNetworkPolicies_AllowGatewayCreated(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
 
 	var policy networkingv1.NetworkPolicy
 	require.NoError(t, np.Get(context.Background(),
@@ -674,18 +689,18 @@ func TestReconcileNetworkPolicies_AllowEgressCreated_DNSAndSPIRE(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
 
 	var policy networkingv1.NetworkPolicy
 	require.NoError(t, np.Get(context.Background(),
-		types.NamespacedName{Name: "llama3-allow-egress", Namespace: "default"}, &policy))
+		types.NamespacedName{Name: "llama3-egress-lockdown", Namespace: "default"}, &policy))
 
 	assert.Contains(t, policy.Spec.PolicyTypes, networkingv1.PolicyTypeEgress)
-	require.Len(t, policy.Spec.Egress, 2, "must have DNS+HTTPS rule + SPIRE Agent rule")
+	require.Len(t, policy.Spec.Egress, 2, "must have DNS rule + SPIRE Agent rule")
 
-	// DNS/HTTPS rule: ports 53 and 443, no To selector
+	// DNS rule: ports 53 UDP and 53 TCP
 	dnsPorts := policy.Spec.Egress[0].Ports
-	require.Len(t, dnsPorts, 3)
+	require.Len(t, dnsPorts, 2)
 	assert.Equal(t, int32(53), dnsPorts[0].Port.IntVal, "first rule must be port 53")
 
 	// SPIRE rule: port 8081, scoped to spire-agent pod selector
@@ -703,11 +718,11 @@ func TestReconcileNetworkPolicies_FourPoliciesCreated(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
 
 	var list networkingv1.NetworkPolicyList
 	require.NoError(t, np.List(context.Background(), &list))
-	assert.Len(t, list.Items, 4)
+	assert.Len(t, list.Items, 5)
 }
 
 func TestReconcileNetworkPolicies_Idempotent(t *testing.T) {
@@ -719,12 +734,36 @@ func TestReconcileNetworkPolicies_Idempotent(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
-	require.NoError(t, np.ReconcileNetworkPolicies(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
 
 	var list networkingv1.NetworkPolicyList
 	require.NoError(t, np.List(context.Background(), &list))
-	assert.Len(t, list.Items, 4, "idempotent — no duplicate policies created")
+	assert.Len(t, list.Items, 5, "idempotent — no duplicate policies created")
+}
+
+func TestReconcileNetworkPolicies_SanitizesInvalidCIDR(t *testing.T) {
+	scheme := secScheme(t)
+	svc := minimalLLMSvc("invalid-cidr", "default")
+	svc.Spec.ToolSurface = &servingv1alpha2.ToolSurface{
+		AllowedCIDRs: []string{"999.999.999.999/99", "invalid-ip", "10.0.0.0/24"},
+	}
+
+	np := &NetworkPolicyReconciler{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme: scheme,
+	}
+
+	// Should not return error even with malformed CIDRs, should just skip them or fail gracefully
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
+
+	var policy networkingv1.NetworkPolicy
+	require.NoError(t, np.Get(context.Background(),
+		client.ObjectKey{Name: "invalid-cidr-allow-tools", Namespace: "default"}, &policy))
+
+	// Should only have the valid CIDR
+	require.Len(t, policy.Spec.Egress, 1)
+	assert.Equal(t, "10.0.0.0/24", policy.Spec.Egress[0].To[0].IPBlock.CIDR)
 }
 
 // ---- EbpfReconciler.ReconcileEbpfPolicy ------------------------------------
@@ -829,8 +868,9 @@ func TestReconcileRegistrationEntry_CreatesConfigMap(t *testing.T) {
 	svc := minimalLLMSvc("llama3", "default")
 
 	r := &SPIRERegistrationReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
-		Scheme: scheme,
+		Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:          scheme,
+		SpireReconciler: &SPIREReconciler{},
 	}
 
 	require.NoError(t, r.ReconcileRegistrationEntry(context.Background(), svc))
@@ -851,8 +891,9 @@ func TestReconcileRegistrationEntry_Idempotent(t *testing.T) {
 	svc := minimalLLMSvc("phi3", "staging")
 
 	r := &SPIRERegistrationReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
-		Scheme: scheme,
+		Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:          scheme,
+		SpireReconciler: &SPIREReconciler{},
 	}
 
 	require.NoError(t, r.ReconcileRegistrationEntry(context.Background(), svc))
@@ -864,8 +905,9 @@ func TestReconcileRegistrationEntry_EntryContainsTTL(t *testing.T) {
 	svc := minimalLLMSvc("gemma", "prod")
 
 	r := &SPIRERegistrationReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
-		Scheme: scheme,
+		Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:          scheme,
+		SpireReconciler: &SPIREReconciler{},
 	}
 
 	require.NoError(t, r.ReconcileRegistrationEntry(context.Background(), svc))
@@ -886,8 +928,9 @@ func TestReconcileRegistrationEntry_EntryContainsDNSSAN(t *testing.T) {
 	svc := minimalLLMSvc("mistral", "default")
 
 	r := &SPIRERegistrationReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
-		Scheme: scheme,
+		Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:          scheme,
+		SpireReconciler: &SPIREReconciler{},
 	}
 
 	require.NoError(t, r.ReconcileRegistrationEntry(context.Background(), svc))
@@ -908,8 +951,9 @@ func TestDeleteRegistrationEntry_RemovesConfigMap(t *testing.T) {
 	svc := minimalLLMSvc("llama3", "default")
 
 	r := &SPIRERegistrationReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
-		Scheme: scheme,
+		Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:          scheme,
+		SpireReconciler: &SPIREReconciler{},
 	}
 
 	require.NoError(t, r.ReconcileRegistrationEntry(context.Background(), svc))

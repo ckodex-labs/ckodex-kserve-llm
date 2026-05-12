@@ -15,8 +15,6 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 )
 
-
-
 func makeContainer(name, image string, args []string, env []corev1.EnvVar) corev1.Container {
 	return corev1.Container{
 		Name:  name,

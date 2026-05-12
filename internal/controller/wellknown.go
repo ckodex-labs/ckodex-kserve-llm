@@ -19,14 +19,16 @@ import (
 // GetWellKnownConfig returns a predefined configuration for a known model URI.
 // Returns nil if the model is not well-known.
 func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceConfigSpec {
-	// Normalize URI (handle both hf:// and hf-mirror://)
-	normalizedURI := modelURI
-	if strings.HasPrefix(modelURI, "hf-mirror://") {
-		normalizedURI = "hf://" + strings.TrimPrefix(modelURI, "hf-mirror://")
+	// Helper to check for Gemma 4 variants regardless of URI scheme (hf://, oci://, swfs://, etc.)
+	isGemma4 := func(variant string) bool {
+		// Matches patterns like "google/gemma-4-E2B-it", "oci://registry/gemma-4-e2b", "swfs://filer/gemma-4-e2b", etc.
+		normalizedMatch := strings.ToLower(modelURI)
+		return strings.Contains(normalizedMatch, "gemma-4") &&
+			strings.Contains(normalizedMatch, strings.ToLower(variant))
 	}
 
 	switch {
-	case strings.Contains(normalizedURI, "google/gemma-4-E2B-it"):
+	case isGemma4("E2B"):
 		// 5B params, Any-to-Any, Dense. Single GPU (8 GB VRAM).
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
@@ -36,6 +38,8 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 					"--trust-remote-code",
 					"--enforce-eager",
 					"--enable-turboquant",
+					"--gpu-memory-utilization", "0.95",
+					"--max-num-seqs", "256",
 				},
 				EnableTurboQuant: true,
 				Resources: &corev1.ResourceRequirements{
@@ -52,7 +56,7 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				},
 			},
 		}
-	case strings.Contains(normalizedURI, "google/gemma-4-E4B-it"):
+	case isGemma4("E4B"):
 		// 8B params, Any-to-Any, Dense. Single GPU (16 GB VRAM).
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
@@ -62,6 +66,8 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 					"--trust-remote-code",
 					"--enforce-eager",
 					"--enable-turboquant",
+					"--gpu-memory-utilization", "0.95",
+					"--max-num-seqs", "128",
 				},
 				EnableTurboQuant: true,
 				Resources: &corev1.ResourceRequirements{
@@ -78,7 +84,7 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				},
 			},
 		}
-	case strings.Contains(normalizedURI, "google/gemma-4-26B-A4B-it"):
+	case isGemma4("26B-A4B"):
 		// 27B total / 4B active params. MoE architecture! Expert parallelism.
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			Parallelism: &servingv1alpha2.ParallelismSpec{
@@ -107,7 +113,7 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				},
 			},
 		}
-	case strings.Contains(normalizedURI, "google/gemma-4-31B-it"):
+	case isGemma4("31B"):
 		// 33B params, Dense. Needs 2× GPU with TP=2.
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			Parallelism: &servingv1alpha2.ParallelismSpec{
@@ -136,7 +142,7 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				},
 			},
 		}
-	case strings.Contains(normalizedURI, "meta-llama/Llama-3.1-8B-it"):
+	case strings.Contains(modelURI, "meta-llama/Llama-3.1-8B-it"):
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
 				Args: []string{
@@ -152,7 +158,7 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				},
 			},
 		}
-	case strings.Contains(normalizedURI, "meta-llama/Llama-3.1-70B-it"):
+	case strings.Contains(modelURI, "meta-llama/Llama-3.1-70B-it"):
 		tps := int32(4)
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			Parallelism: &servingv1alpha2.ParallelismSpec{
@@ -172,7 +178,7 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				},
 			},
 		}
-	case strings.Contains(normalizedURI, "mistralai/Mistral-7B-v0.3"):
+	case strings.Contains(modelURI, "mistralai/Mistral-7B-v0.3"):
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
 				Args: []string{
@@ -203,16 +209,17 @@ func (r *LLMInferenceServiceReconciler) ApplyConfigToSpec(spec *servingv1alpha2.
 		if spec.Parallelism == nil {
 			spec.Parallelism = cfg.Parallelism.DeepCopy()
 		} else {
-			// Merge parallelism fields
-			if cfg.Parallelism.Tensor != nil {
+			// Merge parallelism fields - ONLY if not already set by user
+			if cfg.Parallelism.Tensor != nil && spec.Parallelism.Tensor == nil {
 				spec.Parallelism.Tensor = cfg.Parallelism.Tensor
 			}
-			if cfg.Parallelism.Data != nil {
+			if cfg.Parallelism.Data != nil && spec.Parallelism.Data == nil {
 				spec.Parallelism.Data = cfg.Parallelism.Data
 			}
-			if cfg.Parallelism.Expert {
-				spec.Parallelism.Expert = true
-			}
+			// Expert parallelism is a boolean flag, if WellKnown says true and user hasn't set it (implicit false),
+			// we can't easily distinguish "User set false" vs "User didn't set".
+			// But usually, if the user didn't specify Parallelism at all, we use defaults.
+			// If they DID specify something, we respect their explicit choice for Expert.
 		}
 	}
 
@@ -234,14 +241,43 @@ func (r *LLMInferenceServiceReconciler) ApplyConfigToSpec(spec *servingv1alpha2.
 				c.Image = cfg.VLLMDefaults.Image
 			}
 			if len(cfg.VLLMDefaults.Args) > 0 {
-				c.Args = append(c.Args, cfg.VLLMDefaults.Args...)
+				// Only append args that aren't already present
+				for _, arg := range cfg.VLLMDefaults.Args {
+					found := false
+					conflicted := false
+
+					for _, existing := range c.Args {
+						if existing == arg {
+							found = true
+							break
+						}
+						// Specific logic for A/B testing: suppress --enable if --disable is present
+						if arg == "--enable-turboquant" && existing == "--disable-turboquant" {
+							conflicted = true
+							break
+						}
+					}
+					if !found && !conflicted {
+						c.Args = append(c.Args, arg)
+					}
+				}
 			}
 			if cfg.VLLMDefaults.Resources != nil {
 				mergeResources(&c.Resources, cfg.VLLMDefaults.Resources)
 			}
 			// Phase 4: Handle TurboQuant env injection
 			if cfg.VLLMDefaults.EnableTurboQuant {
-				c.Env = append(c.Env, corev1.EnvVar{Name: "VLLM_TURBOQUANT", Value: "true"})
+				// Only inject if not already overridden by user
+				found := false
+				for _, e := range c.Env {
+					if e.Name == "VLLM_TURBOQUANT" {
+						found = true
+						break
+					}
+				}
+				if !found {
+					c.Env = append(c.Env, corev1.EnvVar{Name: "VLLM_TURBOQUANT", Value: "true"})
+				}
 			}
 		}
 	}
@@ -306,21 +342,27 @@ func mergePodSpec(base, override *corev1.PodSpec) {
 	}
 }
 
-func mergeResources(base, override *corev1.ResourceRequirements) {
-	if override.Requests != nil {
+func mergeResources(base, defaultResources *corev1.ResourceRequirements) {
+	if defaultResources.Requests != nil {
 		if base.Requests == nil {
 			base.Requests = make(corev1.ResourceList)
 		}
-		for k, v := range override.Requests {
-			base.Requests[k] = v
+		// Default-if-Missing: Only add resources that the user hasn't specified
+		for k, v := range defaultResources.Requests {
+			if _, exists := base.Requests[k]; !exists {
+				base.Requests[k] = v
+			}
 		}
 	}
-	if override.Limits != nil {
+	if defaultResources.Limits != nil {
 		if base.Limits == nil {
 			base.Limits = make(corev1.ResourceList)
 		}
-		for k, v := range override.Limits {
-			base.Limits[k] = v
+		// Default-if-Missing: Only add limits that the user hasn't specified
+		for k, v := range defaultResources.Limits {
+			if _, exists := base.Limits[k]; !exists {
+				base.Limits[k] = v
+			}
 		}
 	}
 }

@@ -3,9 +3,13 @@ set -euo pipefail
 # OCI used now
 
 # CRDs
-helm install kserve-crd oci://ghcr.io/kserve/charts/kserve-crd --version v0.17.0
+kubectl apply --server-side -f https://github.com/kserve/kserve/releases/download/v0.17.0/kserve-crds.yaml
+# Skipping helm upgrade for kserve-crd to avoid ownership conflicts with kubectl apply
+# helm upgrade --install kserve-crd oci://ghcr.io/kserve/charts/kserve-crd --version v0.17.0 \
+#   --namespace kserve --create-namespace
 # Resources + Standard mode + Gateway API (LLMInferenceService ready)
-helm install kserve oci://ghcr.io/kserve/charts/kserve --version v0.17.0 \
+helm upgrade --install kserve oci://ghcr.io/kserve/charts/kserve-resources --version v0.17.0 \
+  --namespace kserve --create-namespace \
   --set kserve.controller.deploymentMode=Standard \
   --set kserve.controller.gateway.ingressGateway.enableGatewayApi=true \
   --set kserve.controller.gateway.ingressGateway.kserveGateway=kserve/kserve-ingress-gateway \

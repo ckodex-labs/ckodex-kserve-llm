@@ -3,11 +3,6 @@ version: 2
 
 project_name: kserve-llm-operator
 
-before:
-  hooks:
-    - go mod tidy
-    - go generate ./...
-
 builds:
   - id: manager
     main: ./cmd/manager/main.go
@@ -35,14 +30,18 @@ builds:
       - arm64
 
 archives:
-  - formats:
+  - id: manager
+    ids:
+      - manager
+    formats:
       - tar.gz
-    # use zip for windows archives
-    format_overrides:
-      - goos: windows
-        formats:
-          - zip
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .ProjectName }}_manager_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - id: storage-initializer
+    ids:
+      - storage-initializer
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_storage-initializer_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: 'checksums.txt'
@@ -65,47 +64,16 @@ release:
   draft: true # Start as draft for manual review
   prerelease: auto
 
-# Docker Images
-dockers_v2:
-  - id: manager
-    ids:
-      - manager
-    images:
-      - "ghcr.io/ckodex-labs/kserve-llm-operator:{{ .Version }}"
-    dockerfile: Dockerfile
-    platforms:
-      - linux/amd64
-      - linux/arm64
-    flags:
-      - "--target=manager"
-    build_args:
-      VERSION: "{{ .Version }}"
+# Container images are built, pushed, and signed by the Dagger release path in
+# .github/workflows/release.yml. GoReleaser is limited to binary archives and
+# checksum assets so the tag workflow has a single source of truth for images.
 
-  - id: storage-initializer
-    ids:
-      - storage-initializer
-    images:
-      - "ghcr.io/ckodex-labs/storage-initializer:{{ .Version }}"
-    dockerfile: Dockerfile
-    platforms:
-      - linux/amd64
-      - linux/arm64
-    flags:
-      - "--target=storage-initializer"
-
-# Image Signing (Cosign)
 signs:
-  - id: cosign
-    cmd: cosign
-    artifacts: images
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
     args:
-      - "sign"
-      - "--key"
-      - "env://COSIGN_PRIVATE_KEY"
+      - sign-blob
+      - "--bundle=${signature}"
       - "${artifact}"
-    env:
-      - COSIGN_PASSWORD= # Set in CI secrets if needed
-
-# SLSA Provenance
-provenance:
-  enabled: true
+      - "--yes"
+    artifacts: checksum

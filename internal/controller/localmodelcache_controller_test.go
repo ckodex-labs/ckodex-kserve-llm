@@ -212,8 +212,15 @@ func TestBuildCachePVC(t *testing.T) {
 func TestBuildWarmupJob(t *testing.T) {
 	r := &LocalModelCacheReconciler{Recorder: record.NewFakeRecorder(10)}
 	lmc := makeLocalModelCache("my-cache")
+	lmc.Spec.Storage = &servingv1alpha2.LocalModelStorageSpec{
+		SecretName:         "storage-secret",
+		ServiceAccountName: "cache-sa",
+	}
 	job := r.buildWarmupJob(lmc, "warmup-job", "pvc-name", "default", "node-1")
 
 	assert.Equal(t, "warmup-job", job.Name)
 	assert.Equal(t, "node-1", job.Spec.Template.Spec.NodeSelector["kubernetes.io/hostname"])
+	assert.Equal(t, "cache-sa", job.Spec.Template.Spec.ServiceAccountName)
+	require.Len(t, job.Spec.Template.Spec.Containers[0].EnvFrom, 1)
+	assert.Equal(t, "storage-secret", job.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name)
 }

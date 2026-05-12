@@ -16,11 +16,12 @@ import (
 
 // Reconciler handles LLMInferenceService status updates.
 type Reconciler struct {
-	Client client.Client
+	Client          client.Client
+	EnableHardening bool
 }
 
 // Update updates the LLMInferenceService status based on the underlying deployment and well-known configs.
-func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, llmSvcBeforePatch *servingv1alpha2.LLMInferenceService, isOptimized bool) error {
+func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, llmSvcBeforePatch *servingv1alpha2.LLMInferenceService, isOptimized bool, metrics *servingv1alpha2.AdaptiveMetrics) error {
 	// 1. Check Deployment Readiness
 	var deploy appsv1.Deployment
 	err := r.Client.Get(ctx, types.NamespacedName{Name: llmSvc.Name, Namespace: llmSvc.Namespace}, &deploy)
@@ -38,7 +39,28 @@ func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInfe
 
 	llmSvc.Status.ObservedGeneration = llmSvc.Generation
 
-	// 2. Ready Condition
+	// 2. DeploymentReady Condition (Experimental)
+	if r.EnableHardening {
+		deployReadyStatus := metav1.ConditionFalse
+		deployReadyReason := "DeploymentUnavailable"
+		deployReadyMessage := "Waiting for deployment pods to become ready"
+		if llmSvc.Status.ModelReady {
+			deployReadyStatus = metav1.ConditionTrue
+			deployReadyReason = "DeploymentAvailable"
+			deployReadyMessage = "Deployment has ready replicas"
+		}
+
+		deployCondition := metav1.Condition{
+			Type:               servingv1alpha2.ConditionDeploymentReady,
+			Status:             deployReadyStatus,
+			Reason:             deployReadyReason,
+			Message:            deployReadyMessage,
+			ObservedGeneration: llmSvc.Generation,
+		}
+		r.setCondition(&llmSvc.Status.Conditions, deployCondition)
+	}
+
+	// 3. Ready Condition
 	newStatus := metav1.ConditionFalse
 	if llmSvc.Status.ModelReady {
 		newStatus = metav1.ConditionTrue
@@ -81,12 +103,20 @@ func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInfe
 	}
 	r.setCondition(&llmSvc.Status.Conditions, optCondition)
 
-	// 5. Final Patch
+	// 5. Set Adaptive Metrics (M3 Vision)
+	if metrics != nil {
+		llmSvc.Status.AdaptiveMetrics = metrics
+	}
+
+	// 5. Final CAS-compliant update
 	if !equality.Semantic.DeepEqual(&llmSvcBeforePatch.Status, &llmSvc.Status) {
-		err := r.Client.Status().Patch(ctx, llmSvc, client.MergeFrom(llmSvcBeforePatch))
+		// Standardize on Update with ResourceVersion (CAS) for high-integrity states.
+		// controller-runtime handles the ResourceVersion check during Update.
+		err := r.Client.Status().Update(ctx, llmSvc)
 		if err != nil {
 			if apierrors.IsConflict(err) {
-				return nil // Benign conflict
+				// Return the error to trigger a requeue and Refetch
+				return fmt.Errorf("conflict during status CAS update: %w", err)
 			}
 			return err
 		}

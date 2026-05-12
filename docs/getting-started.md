@@ -56,7 +56,7 @@ The operator includes a **WellKnown** model registry. This means it already know
 Apply the following manifest. Even with minimal configuration, the operator will apply best-practice defaults.
 
 ```yaml
-apiVersion: serving.ckodex.com/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: LLMInferenceService
 metadata:
   name: gemma-4-e2b

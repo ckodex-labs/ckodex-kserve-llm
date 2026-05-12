@@ -17,8 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -31,8 +31,8 @@ type SessionReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=serving.ckodex.io,resources=inferencesessions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=serving.ckodex.io,resources=inferencesessions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=serving.ckodex.com,resources=inferencesessions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=serving.ckodex.com,resources=inferencesessions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch
 
 func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -230,8 +230,8 @@ type ActorReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=serving.ckodex.io,resources=inferenceactors,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=serving.ckodex.io,resources=inferenceactors/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=serving.ckodex.com,resources=inferenceactors,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=serving.ckodex.com,resources=inferenceactors/status,verbs=get;update;patch
 
 func (r *ActorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("actor", req.NamespacedName)
@@ -302,8 +302,8 @@ type CoactorGroupReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=serving.ckodex.io,resources=coactorgroups,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=serving.ckodex.io,resources=coactorgroups/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=serving.ckodex.com,resources=coactorgroups,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=serving.ckodex.com,resources=coactorgroups/status,verbs=get;update;patch
 
 func (r *CoactorGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("coactorgroup", req.NamespacedName)

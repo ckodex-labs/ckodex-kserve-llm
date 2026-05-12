@@ -7,36 +7,77 @@
 
 An opinionated Kubernetes operator for managing LLM inference workloads. Built on KServe v0.17 architecture with the V2 Open Inference Protocol, Gateway API (HTTPRoute + GRPCRoute), and comprehensive platform features.
 
+- **[Component Version Inventory](COMPONENTS.md)**: Track exact versions of vLLM, SPIRE, Gatekeeper, and other orchestrated components.
+
 ## Architecture
 
 ```mermaid
 graph TD
-    subgraph CP["Control Plane"]
+    subgraph CP["Control Plane (Hardened)"]
         direction TB
         CM["Controller Manager"]
         WH["Webhooks (V+M)"]
+        RT["ToolSurface Reconciler<br/>(Istio DPI)"]
         GR["Gateway Reconciler<br/>(HTTPRoute+GRPCRoute)"]
         
         AS["Autoscaler<br/>(HPA/KEDA)"]
         SS["SPIRE Server"]
-        ES["EPP Scheduler<br/>(KV-Cache Aware)"]
-        
-        CM --> AS
-        GR --> ES
     end
 
-    subgraph DP["Data Plane"]
+    subgraph OP["Observability Plane"]
+        CON["Next.js Console"]
+        AUD["Shared Audit Log<br/>(jsonl)"]
+        PROM["Prometheus"]
+    end
+
+    subgraph DP["Data Plane (Governed)"]
         direction LR
-        V1["vLLM Pod 1<br/>(V2+gRPC)"]
-        V2["vLLM Pod 2<br/>(V2+gRPC)"]
-        VN["vLLM Pod N<br/>(V2+gRPC)"]
-        LWS["LeaderWorkerSet (LWS)<br/>(Multi-GPU)"]
+        V1["vLLM Pod 1<br/>(Istio Sidecar)"]
+        V2["vLLM Pod 2<br/>(Istio Sidecar)"]
+        LWS["LeaderWorkerSet<br/>(Multi-GPU)"]
     end
 
-    CP --> DP
+    CM --> RT
+    RT --> DP
+    CM --> AS
+    CM --> AUD
+    CON --> AUD
+    GR --> DP
 ```
 
+> [!NOTE]
+> For a deep dive into our defense-in-depth strategy, mTLS enforcement, and OPA policy layers, see the **[Security Architecture](docs/SECURITY_ARCHITECTURE.md)** guide.
+
+## Production Hardening Features
+
+### Governed State Planes (L|T|R)
+The operator implements a **Governed Composite State Machine** that aggregates safety and compliance metadata across the model system:
+- **Lifecycle (L)**: `pending` → `active` → `quarantined`. Tracks the operational readiness of the model.
+- **Trust (T)**: `unknown` → `asserted` → `verified`. Most runtime paths are currently **asserted** by default; `verified` should only be treated as true when the controller records cryptographic evidence rather than placeholder or inferred status.
+- **Risk (R)**: `normal` → `evaluating` → `high`. Real-time risk assessment based on behavioral declared intent and tool usage.
+
+### Deep Packet Inspection (DPI)
+Models requiring external tool access (`ToolSurface.AllowedAPIs`) are isolated via **Istio Egress Filtering**:
+- Automatic `ServiceEntry` and `VirtualService` generation for FQDN targets.
+- Sidecar-level egress isolation prevents unauthorized data exfiltration.
+- Contributes network-isolation evidence, but does not by itself prove software provenance.
+
+### Real-time Monitoring Console
+A built-in Next.js dashboard provides a unified view of the governed fleet:
+- **Lattice Visualization**: Real-time status of `L|T|R` state planes for every model.
+- **Live Audit Feed**: Event-driven streaming of operator and inference decisions.
+- **Shared Audit Plane**: Uses a high-performance persistent volume for real-time log ingestion.
+
+### Evidence Hooks
+The repository ships machine-readable evidence hooks, but not every runtime path is cryptographically verified today:
+- **OSCAL Assessment**: Automated validation of NIST 800-53 controls (SR-2, SI-4, SI-7) exported to **`assessment-results.yaml`**.
+- **OIS Signal Payloads**: Standardized inference behavior telemetry using **Open Inference Signals v0.1**.
+- **Supply-Chain Artifacts**: The tag-driven release workflow publishes Cosign signatures, SBOMs, and provenance artifacts. Runtime controllers only report `verified` when a cryptographic verification result has actually been recorded.
+
+See **[COMPLIANCE.md](COMPLIANCE.md)** for the full control mapping.
+
 ## Operational Guides
+...
 
 Comprehensive documentation for the lifecycle of models, tenants, and agents:
 
@@ -58,20 +99,91 @@ Comprehensive documentation for the lifecycle of models, tenants, and agents:
 
 ## Quick Start
 
+> [!IMPORTANT]
+> For a clean installation on a fresh KIND cluster, refer to `local/` scripts for infrastructure prerequisites.
+
+### 1. Setup KIND cluster
+
 ```bash
-# Install CRDs
-kubectl apply -f config/crd/
-
-# Deploy operator
-kubectl apply -f config/manager/
-
-# Create an inference service
-kubectl apply -f config/samples/llminferenceservice_basic.yaml
-
-# Verify
-kubectl get llminferenceservice
-kubectl get pods -l app.kubernetes.io/name=llminferenceservice
+make kind-setup
 ```
+
+### 2. Install infrastructure
+
+```bash
+# KServe v0.17, cert-manager, and supporting resources
+cd local && bash 02-prereqs.sh && bash 03-kserve-helm-install.sh
+```
+
+### 3. Verify your local environment with the Dagger pipeline
+
+```bash
+DOCKER_HOST=unix:///var/run/docker.sock go run ./ci/main.go --skip-tests
+```
+
+This command expects a working local Docker daemon. If Docker or the Dagger engine cannot start, treat that as an environment prerequisite failure rather than proof that the repository is release-ready.
+
+### 4. Build and deploy the operator
+
+```bash
+make generate manifests
+make docker-build
+docker tag ghcr.io/ckodex/kserve-llm-operator:latest ckodex/kserve-llm-operator:dev
+kind load docker-image ckodex/kserve-llm-operator:dev --name kserve-017
+```
+
+### 5. Install CRDs
+
+```bash
+for f in config/crd/*.yaml; do kubectl apply --server-side -f "$f"; done
+```
+
+### 6. Deploy the operator
+
+```bash
+kubectl apply -f config/rbac/
+kubectl apply -f config/manager/
+```
+
+### 7. Verify
+
+```bash
+kubectl get pods -n ckodex-system
+```
+
+## High-Assurance CI/CD (Dagger)
+
+The Dagger-powered pipeline is the repo-level validation path for lint, tests, scans, SBOM generation, and Lula/OSCAL export. Local runs are useful for preflight checks, but the tag-driven release workflow remains the authoritative path for release signing and hosted provenance:
+
+- Linting
+- Security scanning
+- SBOM generation
+- OSCAL evidence export
+
+## Releases
+
+The repo exposes two release checks:
+
+- `make release-readiness` for a local snapshot rehearsal of binary archives, checksums, and the Helm package
+- the tag-driven GitHub Actions workflow for published images, draft release assets, and hosted provenance
+
+On a successful tagged release, GitHub Actions is configured to publish:
+
+- versioned binaries,
+- cosign-signed container images,
+- draft GitHub release assets for review,
+- and provenance artifacts for downstream verification.
+
+Treat the presence of those artifacts as a release input, not as an automatic public-readiness verdict.
+
+See [docs/release-verification.md](/Users/mchorfa/Documents/projects/runbase/ckodex-skillingest/ckodex-kserve-llm/docs/release-verification.md) for the local rehearsal contract and downstream verification commands.
+
+## Gemma 4 Notes
+
+Gemma 4 tuning in this repo is environment-dependent. Use the deployment guide and performance note as operator guidance, not as CI-backed benchmark evidence:
+
+- [docs/gemma4-deployment-guide.md](/Users/mchorfa/Documents/projects/runbase/ckodex-skillingest/ckodex-kserve-llm/docs/gemma4-deployment-guide.md)
+- [docs/GEMMA_4_PERFORMANCE_REPORT.md](/Users/mchorfa/Documents/projects/runbase/ckodex-skillingest/ckodex-kserve-llm/docs/GEMMA_4_PERFORMANCE_REPORT.md)
 
 ## Features
 
@@ -111,7 +223,19 @@ kubectl get pods -l app.kubernetes.io/name=llminferenceservice
 - **Strict Admission Control**: Power-of-2 parallelism enforcement and Guaranteed QoS for GPU workloads.
 - **LocalModelCache**: Zero-copy model loading via node-local storage and hostPath mounts.
 
+### Experimental Feature Gates
+Some features are in Active Development and require explicit opt-in via Helm `features.*` or `CKODEX_FEATURE_*` environment variables.
+
+| Feature Gate | Default | Subsystems Enabled | Stability |
+| :--- | :--- | :--- | :--- |
+| `EnableExperimentalAgents` | `false` | `Agent`, `SkillRegistry` controllers | ALPHA |
+| `EnableExperimentalHardwareSelection` | `false` | Multi-arch image tag mapping | ALPHA |
+| `EnableExperimentalStatusHardening` | `false` | Atomic DeploymentReady checks | BETA |
+| `EnableSecurity` | `false` | SPIRE, eBPF, OPA, Vault | BETA |
+
 ### Production Hardening
+- **SSDLC Enforcement**: Zero-tolerance for unchecked errors, weak crypto, and variable shadowing via strict golangci-lint profile.
+- **Release Provenance**: The tag-driven release workflow generates OIDC-backed provenance artifacts and release attestations.
 - **Guaranteed QoS**: Automatic alignment of CPU/Memory requests and limits for stable scheduling.
 - **Graceful Termination**: 30-second default termination grace period for all inference workloads.
 - **Atomic Reconciliation**: High-performance status updates using SSA-style Patching with DeepEqual guards.
@@ -119,7 +243,7 @@ kubectl get pods -l app.kubernetes.io/name=llminferenceservice
 
 ### Observability
 - **Lifecycle Events**: Native Kubernetes Event emission for all major transitions (Deployment creation, LoRA loading, Cache eviction).
-- **Prometheus Metrics**: Built-in scrapers for inference success rates and P99 latency.
+- **Prometheus Metrics**: Promotion gates require a configured Prometheus backend unless an explicit insecure compatibility fallback is enabled for development.
 - **Auditability**: Track operator decisions via `kubectl get events`.
 
 ## Development
@@ -129,8 +253,19 @@ make generate      # Generate DeepCopy + CRDs
 make build         # Build binary
 make test          # Run tests (≥80% coverage)
 make lint          # golangci-lint
+make console-check # Build the console production bundle
 make docker-build  # Build container
 ```
+
+## Contributing
+
+We welcome contributions! To ensure the project remains "Hardened" and production-ready, all PRs must adhere to our **Supply-Chain & Compliance-as-Code** requirements:
+
+- **Signed Commits**: All commits must be signed (DCO).
+- **Compliance Evidence**: New security features must include a corresponding **Lula Validation**.
+- **OIS Instrumentation**: New telemetry must follow the **Open Inference Signals v0.1** spec.
+
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full developer workflow.
 
 ## Benchmarks
 

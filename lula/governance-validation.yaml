@@ -1,0 +1,33 @@
+lula-validation:
+  uuid: 66666666-6666-6666-6666-666666666667
+  attributes:
+    provider: kubernetes
+    domain: llminferenceservices
+  payload:
+    resources:
+      - name: llm-audit
+        resource: llminferenceservices
+    regos:
+      - |
+        package lula
+
+        # Validate AU-2: Audit Logging
+        validate_audit {
+          condition := input.status.conditions[_]
+          condition.type == "Compliance-AU-2"
+          condition.status == "True"
+          condition.reason == "AuditPersistent"
+        }
+
+        # Validate SI-7: Software and Information Integrity
+        validate_integrity {
+          condition := input.status.conditions[_]
+          condition.type == "Compliance-SI-7"
+          condition.status == "True"
+          condition.reason == "IntegrityVerified"
+        }
+
+        validate {
+          validate_audit
+          validate_integrity
+        }

@@ -33,7 +33,7 @@ func buildScheme(t *testing.T) *runtime.Scheme {
 
 func TestBuildCanaryHTTPRoute_TwoBackendsPerRule(t *testing.T) {
 	llmSvc := canarySvc("canary-model", "default", "stable-model", 20)
-	route := BuildCanaryHTTPRoute(llmSvc)
+	route := BuildCanaryHTTPRoute(llmSvc, nil)
 
 	require.Len(t, route.Spec.Rules, 6, "same 6 paths as standard route")
 	for i, rule := range route.Spec.Rules {
@@ -43,7 +43,7 @@ func TestBuildCanaryHTTPRoute_TwoBackendsPerRule(t *testing.T) {
 
 func TestBuildCanaryHTTPRoute_WeightDistribution(t *testing.T) {
 	llmSvc := canarySvc("canary", "default", "stable", 30)
-	route := BuildCanaryHTTPRoute(llmSvc)
+	route := BuildCanaryHTTPRoute(llmSvc, nil)
 
 	for i, rule := range route.Spec.Rules {
 		canary := rule.BackendRefs[0]
@@ -57,7 +57,7 @@ func TestBuildCanaryHTTPRoute_WeightDistribution(t *testing.T) {
 
 func TestBuildCanaryHTTPRoute_BackendNames(t *testing.T) {
 	llmSvc := canarySvc("new-model", "prod", "base-model", 10)
-	route := BuildCanaryHTTPRoute(llmSvc)
+	route := BuildCanaryHTTPRoute(llmSvc, nil)
 
 	for i, rule := range route.Spec.Rules {
 		assert.Equal(t, gwapiv1.ObjectName("new-model"), rule.BackendRefs[0].Name, "rule[%d] canary backend name", i)
@@ -67,7 +67,7 @@ func TestBuildCanaryHTTPRoute_BackendNames(t *testing.T) {
 
 func TestBuildCanaryHTTPRoute_Labels(t *testing.T) {
 	llmSvc := canarySvc("can", "ns", "base", 25)
-	route := BuildCanaryHTTPRoute(llmSvc)
+	route := BuildCanaryHTTPRoute(llmSvc, nil)
 
 	assert.Equal(t, "true", route.Labels["serving.ckodex.com/canary"])
 	assert.Equal(t, "25", route.Labels["serving.ckodex.com/canary-weight"])
@@ -76,7 +76,7 @@ func TestBuildCanaryHTTPRoute_Labels(t *testing.T) {
 
 func TestBuildCanaryHTTPRoute_Annotations(t *testing.T) {
 	llmSvc := canarySvc("can", "ns", "base", 25)
-	route := BuildCanaryHTTPRoute(llmSvc)
+	route := BuildCanaryHTTPRoute(llmSvc, nil)
 
 	assert.Equal(t, "25", route.Annotations["serving.ckodex.com/canary-weight"])
 	assert.Equal(t, "base", route.Annotations["serving.ckodex.com/base-model"])
@@ -84,7 +84,7 @@ func TestBuildCanaryHTTPRoute_Annotations(t *testing.T) {
 
 func TestBuildCanaryHTTPRoute_Name(t *testing.T) {
 	llmSvc := canarySvc("my-model", "default", "stable", 10)
-	route := BuildCanaryHTTPRoute(llmSvc)
+	route := BuildCanaryHTTPRoute(llmSvc, nil)
 	assert.Equal(t, "my-model-httproute", route.Name)
 }
 
@@ -93,14 +93,14 @@ func TestBuildCanaryHTTPRoute_Hostnames(t *testing.T) {
 	llmSvc.Spec.Router.Route.HTTPRoute = &servingv1alpha2.HTTPRouteSpec{
 		Hostnames: []string{"can.example.com"},
 	}
-	route := BuildCanaryHTTPRoute(llmSvc)
+	route := BuildCanaryHTTPRoute(llmSvc, nil)
 	require.Len(t, route.Spec.Hostnames, 1)
 	assert.Equal(t, gwapiv1.Hostname("can.example.com"), route.Spec.Hostnames[0])
 }
 
 func TestBuildCanaryHTTPRoute_NoHostnames_Empty(t *testing.T) {
 	llmSvc := canarySvc("can", "ns", "base", 10)
-	route := BuildCanaryHTTPRoute(llmSvc)
+	route := BuildCanaryHTTPRoute(llmSvc, nil)
 	assert.Empty(t, route.Spec.Hostnames)
 }
 

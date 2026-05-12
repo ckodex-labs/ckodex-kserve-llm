@@ -9,9 +9,11 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -19,6 +21,13 @@ import (
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
+
+// GVK for Tetragon TracingPolicy
+var TracingPolicyGVK = schema.GroupVersionKind{
+	Group:   "isovalent.com",
+	Version: "v1alpha1",
+	Kind:    "TracingPolicy",
+}
 
 // EbpfReconciler manages Tetragon TracingPolicies for eBPF-based security.
 type EbpfReconciler struct {
@@ -32,6 +41,16 @@ type EbpfReconciler struct {
 //   - <name>-network-policy  : traces sys_connect + sys_accept (network flow audit)
 func (r *EbpfReconciler) ReconcileEbpfPolicy(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
 	logger := log.FromContext(ctx).WithValues("component", "ebpf")
+
+	// 1. Check if Tetragon is available
+	exists, err := r.isGVKAvailable()
+	if err != nil {
+		return fmt.Errorf("check Tetragon availability: %w", err)
+	}
+	if !exists {
+		logger.Info("Tetragon isovalent.com/v1alpha1 TracingPolicy CRDs not found, skipping eBPF reconciliation")
+		return nil
+	}
 
 	name := llmSvc.Name + "-security-policy"
 	desired := &unstructured.Unstructured{
@@ -99,6 +118,29 @@ func (r *EbpfReconciler) ReconcileEbpfPolicy(ctx context.Context, llmSvc *servin
 		return err
 	}
 	return r.reconcileMemoryPolicy(ctx, llmSvc)
+}
+
+// isGVKAvailable checks if Tetragon TracingPolicy CRD is registered.
+func (r *EbpfReconciler) isGVKAvailable() (bool, error) {
+	if r.Client == nil {
+		return false, nil
+	}
+
+	if mapper := r.RESTMapper(); mapper != nil {
+		_, err := mapper.RESTMapping(TracingPolicyGVK.GroupKind(), TracingPolicyGVK.Version)
+		if err == nil {
+			return true, nil
+		}
+		if !meta.IsNoMatchError(err) {
+			return false, err
+		}
+	}
+
+	if r.Scheme != nil && r.Scheme.Recognizes(TracingPolicyGVK) {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // reconcileNetworkPolicy creates a Tetragon TracingPolicy that traces network syscalls.

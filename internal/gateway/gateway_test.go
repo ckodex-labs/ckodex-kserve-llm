@@ -15,7 +15,7 @@ import (
 
 func TestBuildHTTPRoute_RoutePaths(t *testing.T) {
 	llmSvc := baseLLMSvc("test-model")
-	route := BuildHTTPRoute(llmSvc)
+	route := BuildHTTPRoute(llmSvc, nil)
 
 	if route.Name != "test-model-httproute" {
 		t.Errorf("name = %q, want %q", route.Name, "test-model-httproute")
@@ -50,7 +50,7 @@ func TestBuildHTTPRoute_RoutePaths(t *testing.T) {
 
 func TestBuildHTTPRoute_BackendRef(t *testing.T) {
 	llmSvc := baseLLMSvc("my-svc")
-	route := BuildHTTPRoute(llmSvc)
+	route := BuildHTTPRoute(llmSvc, nil)
 
 	for i, rule := range route.Spec.Rules {
 		if len(rule.BackendRefs) != 1 {
@@ -68,7 +68,7 @@ func TestBuildHTTPRoute_BackendRef(t *testing.T) {
 
 func TestBuildHTTPRoute_ParentRef_Managed(t *testing.T) {
 	llmSvc := baseLLMSvc("test-model")
-	route := BuildHTTPRoute(llmSvc)
+	route := BuildHTTPRoute(llmSvc, nil)
 
 	if len(route.Spec.ParentRefs) != 1 {
 		t.Fatalf("got %d parentRefs, want 1", len(route.Spec.ParentRefs))
@@ -83,7 +83,7 @@ func TestBuildHTTPRoute_Hostnames(t *testing.T) {
 	llmSvc.Spec.Router.Route.HTTPRoute = &servingv1alpha2.HTTPRouteSpec{
 		Hostnames: []string{"model.example.com", "model.local"},
 	}
-	route := BuildHTTPRoute(llmSvc)
+	route := BuildHTTPRoute(llmSvc, nil)
 
 	if len(route.Spec.Hostnames) != 2 {
 		t.Fatalf("got %d hostnames, want 2", len(route.Spec.Hostnames))

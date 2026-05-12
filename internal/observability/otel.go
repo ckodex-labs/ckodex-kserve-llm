@@ -174,6 +174,12 @@ func (i *Instrumentation) RecordReconcile(ctx context.Context, model string, dur
 func (i *Instrumentation) RecordTokensConsumed(ctx context.Context, tenantID, modelName string, prompt, completion int64, costTags map[string]string) {
 	attrs := tenantModelAttrs(tenantID, modelName)
 	attrs = appendCostTagAttrs(attrs, costTags)
+
+	// OIS v0.1: Economic Semantics
+	attrs = append(attrs, attribute.Int64(AttrCostTokensInput, prompt))
+	attrs = append(attrs, attribute.Int64(AttrCostTokensOutput, completion))
+	attrs = append(attrs, attribute.Int64(AttrCostTokensTotal, prompt+completion))
+
 	i.TokensConsumed.Add(ctx, prompt+completion, metric.WithAttributes(attrs...))
 }
 
@@ -198,6 +204,13 @@ func tenantModelAttrs(tenantID, modelName string) []attribute.KeyValue {
 	return []attribute.KeyValue{
 		attribute.String("ckodex.tenant_id", tenantID),
 		attribute.String("ckodex.model", modelName),
+		// OIS mapping
+		attribute.String(AttrActorID, tenantID),
+		attribute.String(AttrActorURN, URN("actor", tenantID)),
+		attribute.String(AttrActorType, "service"),
+		attribute.String(AttrModelBaseID, modelName),
+		attribute.String(AttrModelBaseURN, URN("model", modelName)),
+		attribute.String(AttrEngineRuntime, "vllm"), // Default runtime
 	}
 }
 

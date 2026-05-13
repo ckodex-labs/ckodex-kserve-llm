@@ -43,6 +43,7 @@ func parseFlags() *core.Config {
 	flag.BoolVar(&cfg.Push, "push", false, "Push image to registry after build")
 	flag.BoolVar(&cfg.Sign, "sign", false, "Sign image with cosign keyless (requires OIDC env)")
 	flag.BoolVar(&cfg.Attest, "attest", false, "Attach dev-grade SBOM + SLSA provenance attestations (L2)")
+	flag.BoolVar(&cfg.SkipLint, "skip-lint", false, "Skip lint stage")
 	flag.BoolVar(&cfg.SkipTests, "skip-tests", false, "Skip test stage")
 	flag.BoolVar(&cfg.SkipScan, "skip-scan", false, "Skip Trivy vulnerability scan")
 	flag.StringVar(&cfg.GitCommit, "git-commit", "", "Git commit SHA for SLSA provenance (default: $GITHUB_SHA)")
@@ -69,10 +70,12 @@ func parseFlags() *core.Config {
 }
 
 func runPipeline(ctx context.Context, p *core.Pipeline) error {
-	if err := runLint(ctx, p); err != nil {
-		return err
+	if !p.Cfg.SkipLint {
+		if err := runLint(ctx, p); err != nil {
+			return err
+		}
+		log("lint passed")
 	}
-	log("lint passed")
 
 	if !p.Cfg.SkipTests {
 		if err := runTests(ctx, p); err != nil {

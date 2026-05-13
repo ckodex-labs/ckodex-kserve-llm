@@ -48,6 +48,7 @@ type Config struct {
 	Push      bool
 	Sign      bool
 	Attest    bool
+	SkipLint  bool
 	SkipTests bool
 	SkipScan  bool
 }

@@ -19,7 +19,9 @@ const (
 	cosignTypeFlag          = "--type"
 	githubOIDCTokenEnv      = "ACTIONS_ID_TOKEN_REQUEST_TOKEN"
 	githubOIDCRequestURLEnv = "ACTIONS_ID_TOKEN_REQUEST_URL"
-	sigstoreIDTokenEnv      = "SIGSTORE_ID_TOKEN"
+	githubActionsOIDCMode   = "github-actions-oidc"
+	// #nosec G101 -- This is an environment variable name, not a credential value.
+	sigstoreIDTokenEnv = "SIGSTORE_ID_TOKEN"
 )
 
 // SBOM generates a CycloneDX SBOM for the built image.
@@ -133,7 +135,7 @@ func withCosignIdentity(p *core.Pipeline, ctr *dagger.Container, secretNameSuffi
 		idToken := env[sigstoreIDTokenEnv]
 		return ctr.WithSecretVariable(sigstoreIDTokenEnv,
 			p.Client.SetSecret("sigstore-id-token-"+secretNameSuffix, idToken)), mode
-	case "github-actions-oidc":
+	case githubActionsOIDCMode:
 		requestToken := env[githubOIDCTokenEnv]
 		requestURL := env[githubOIDCRequestURLEnv]
 		ctr = ctr.
@@ -156,7 +158,7 @@ func cosignIdentityEnv() (string, map[string]string) {
 	requestToken := os.Getenv(githubOIDCTokenEnv)
 	requestURL := os.Getenv(githubOIDCRequestURLEnv)
 	if requestToken != "" && requestURL != "" {
-		return "github-actions-oidc", map[string]string{
+		return githubActionsOIDCMode, map[string]string{
 			githubOIDCTokenEnv:      requestToken,
 			githubOIDCRequestURLEnv: requestURL,
 		}

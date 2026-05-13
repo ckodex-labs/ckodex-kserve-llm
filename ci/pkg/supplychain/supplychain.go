@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"dagger.io/dagger"
@@ -13,9 +14,12 @@ import (
 )
 
 const (
-	cosignCommand  = "cosign"
-	cosignYesFlag  = "--yes"
-	cosignTypeFlag = "--type"
+	cosignCommand           = "cosign"
+	cosignYesFlag           = "--yes"
+	cosignTypeFlag          = "--type"
+	githubOIDCTokenEnv      = "ACTIONS_ID_TOKEN_REQUEST_TOKEN"
+	githubOIDCRequestURLEnv = "ACTIONS_ID_TOKEN_REQUEST_URL"
+	sigstoreIDTokenEnv      = "SIGSTORE_ID_TOKEN"
 )
 
 // SBOM generates a CycloneDX SBOM for the built image.
@@ -37,46 +41,37 @@ func SBOM(_ context.Context, p *core.Pipeline, imageRef string) (*dagger.File, e
 
 // Sign signs the image with cosign when an OIDC token is available.
 func Sign(ctx context.Context, p *core.Pipeline, imageRef string) error {
-	idToken := os.Getenv("SIGSTORE_ID_TOKEN")
-	if idToken == "" {
-		idToken = os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
-	}
-
 	ctr := p.Client.Container().
 		From(fmt.Sprintf("gcr.io/projectsigstore/cosign:%s", core.CosignVersion)).
 		WithEnvVariable("COSIGN_YES", "true")
+	ctr, mode := withCosignIdentity(p, ctr, "sign")
 
-	if idToken != "" {
-		ctr = ctr.WithSecretVariable("SIGSTORE_ID_TOKEN",
-			p.Client.SetSecret("sigstore-id-token", idToken))
-	}
-
-	_, err := ctr.
+	output, err := ctr.
 		WithExec([]string{
 			cosignCommand, "sign",
 			cosignYesFlag,
 			imageRef,
 		}).
 		Stdout(ctx)
-	return err
+	if err != nil {
+		if trimmed := strings.TrimSpace(output); trimmed != "" {
+			return fmt.Errorf("cosign sign (%s): %w\n%s", mode, err, trimmed)
+		}
+		return fmt.Errorf("cosign sign (%s): %w", mode, err)
+	}
+	return nil
 }
 
 // Attest attaches SBOM and SLSA provenance attestations to the image.
 func Attest(ctx context.Context, p *core.Pipeline, imageRef string, sbomFile *dagger.File) error {
-	idToken := os.Getenv("SIGSTORE_ID_TOKEN")
-
 	// 1. Attach SBOM attestation.
 	ctr := p.Client.Container().
 		From(fmt.Sprintf("gcr.io/projectsigstore/cosign:%s", core.CosignVersion)).
 		WithEnvVariable("COSIGN_YES", "true").
 		WithMountedFile("/sbom.cdx.json", sbomFile)
+	ctr, mode := withCosignIdentity(p, ctr, "attest-sbom")
 
-	if idToken != "" {
-		ctr = ctr.WithSecretVariable("SIGSTORE_ID_TOKEN",
-			p.Client.SetSecret("sigstore-id-token-attest", idToken))
-	}
-
-	if _, err := ctr.
+	output, err := ctr.
 		WithExec([]string{
 			cosignCommand, "attest",
 			cosignYesFlag,
@@ -84,8 +79,12 @@ func Attest(ctx context.Context, p *core.Pipeline, imageRef string, sbomFile *da
 			"--predicate", "/sbom.cdx.json",
 			imageRef,
 		}).
-		Stdout(ctx); err != nil {
-		return fmt.Errorf("attach sbom attestation: %w", err)
+		Stdout(ctx)
+	if err != nil {
+		if trimmed := strings.TrimSpace(output); trimmed != "" {
+			return fmt.Errorf("attach sbom attestation (%s): %w\n%s", mode, err, trimmed)
+		}
+		return fmt.Errorf("attach sbom attestation (%s): %w", mode, err)
 	}
 
 	// 2. Generate SLSA provenance predicate and attach it.
@@ -104,16 +103,12 @@ func Attest(ctx context.Context, p *core.Pipeline, imageRef string, sbomFile *da
 		From(fmt.Sprintf("gcr.io/projectsigstore/cosign:%s", core.CosignVersion)).
 		WithEnvVariable("COSIGN_YES", "true").
 		WithMountedFile("/provenance.json", provFile)
-
-	if idToken != "" {
-		ctr2 = ctr2.WithSecretVariable("SIGSTORE_ID_TOKEN",
-			p.Client.SetSecret("sigstore-id-token-prov", idToken))
-	}
+	ctr2, mode = withCosignIdentity(p, ctr2, "attest-provenance")
 
 	// NOTE: This generates the SLSA v1.0 predicate for 'Manual' or 'Local' attestation.
 	// In production (GHA), this is wrapped or superseded by the non-forgeable L3
 	// envelope provided by the slsa-framework/slsa-github-generator.
-	_, err = ctr2.
+	output, err = ctr2.
 		WithExec([]string{
 			cosignCommand, "attest",
 			cosignYesFlag,
@@ -122,7 +117,52 @@ func Attest(ctx context.Context, p *core.Pipeline, imageRef string, sbomFile *da
 			imageRef,
 		}).
 		Stdout(ctx)
-	return err
+	if err != nil {
+		if trimmed := strings.TrimSpace(output); trimmed != "" {
+			return fmt.Errorf("attach slsa provenance attestation (%s): %w\n%s", mode, err, trimmed)
+		}
+		return fmt.Errorf("attach slsa provenance attestation (%s): %w", mode, err)
+	}
+	return nil
+}
+
+func withCosignIdentity(p *core.Pipeline, ctr *dagger.Container, secretNameSuffix string) (*dagger.Container, string) {
+	mode, env := cosignIdentityEnv()
+	switch mode {
+	case sigstoreIDTokenEnv:
+		idToken := env[sigstoreIDTokenEnv]
+		return ctr.WithSecretVariable(sigstoreIDTokenEnv,
+			p.Client.SetSecret("sigstore-id-token-"+secretNameSuffix, idToken)), mode
+	case "github-actions-oidc":
+		requestToken := env[githubOIDCTokenEnv]
+		requestURL := env[githubOIDCRequestURLEnv]
+		ctr = ctr.
+			WithSecretVariable(githubOIDCTokenEnv,
+				p.Client.SetSecret("github-oidc-token-"+secretNameSuffix, requestToken)).
+			WithEnvVariable(githubOIDCRequestURLEnv, requestURL)
+		return ctr, mode
+	default:
+		return ctr, mode
+	}
+}
+
+func cosignIdentityEnv() (string, map[string]string) {
+	if idToken := os.Getenv(sigstoreIDTokenEnv); idToken != "" {
+		return sigstoreIDTokenEnv, map[string]string{
+			sigstoreIDTokenEnv: idToken,
+		}
+	}
+
+	requestToken := os.Getenv(githubOIDCTokenEnv)
+	requestURL := os.Getenv(githubOIDCRequestURLEnv)
+	if requestToken != "" && requestURL != "" {
+		return "github-actions-oidc", map[string]string{
+			githubOIDCTokenEnv:      requestToken,
+			githubOIDCRequestURLEnv: requestURL,
+		}
+	}
+
+	return "ambient", nil
 }
 
 // slsaProvenance generates a SLSA v1.0 predicate for local/development use.

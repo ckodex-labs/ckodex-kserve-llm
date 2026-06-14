@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/basemodel.schema.json",
+  "title": "AIPack BaseModel (A1)",
+  "description": "AIPACK-SPEC v0.1.1 §3.3 — BaseModel atomic artifact (A1). Foundation model weights distributed as safetensors layers.",
+  "type": "object",
+  "required": ["kind", "source"],
+  "properties": {
+    "kind":   { "const": "BaseModel" },
+    "family": { "const": "model" },
+    "source": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref":      { "$ref": "agent.schema.json#/$defs/DigestRef" },
+        "registry": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "baseModel": {
+      "type": "object",
+      "properties": {
+        "architecture":    { "type": "string", "description": "Model architecture (e.g. llama, mistral, gemma)." },
+        "parameterCount":  { "type": "string", "description": "Parameter count notation (e.g. 7B, 70B, 405B)." },
+        "contextLength":   { "type": "integer", "minimum": 1 },
+        "vocabSize":       { "type": "integer", "minimum": 1 },
+        "license":         { "type": "string" },
+        "trainingDataRef": { "type": "string", "description": "OCI digest ref to the Dataset artifact used for training." },
+        "quantization":    { "type": "string", "enum": ["none","int8","int4","fp8","awq","gptq"] }
+      },
+      "additionalProperties": true
+    },
+    "attestation": { "$ref": "agent.schema.json#/$defs/AIPackAttestation" }
+  },
+  "additionalProperties": true
+}

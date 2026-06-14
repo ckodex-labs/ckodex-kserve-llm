@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/agent.schema.json",
+  "title": "AIPack Agent (C1)",
+  "description": "AIPACK-SPEC v0.1.1 §3.3 — Agent composite artifact (C1). Assembles up to 11 component slots into a deployable AI agent.",
+  "type": "object",
+  "$defs": {
+    "ArtifactKind": {
+      "type": "string",
+      "enum": ["BaseModel","LoRA","FineTune","Skill","Tool","MCPServer","PromptTemplate","Guardrail","RetrievalIndex","Dataset","Harness","Eval","Workflow","PolicyBundle","Agent"],
+      "description": "Normative artifact kinds per AIPACK-SPEC §3.3."
+    },
+    "ArtifactFamily": {
+      "type": "string",
+      "enum": ["model","capability","control","knowledge","assurance","composite"],
+      "description": "Normative artifact families per AIPACK-SPEC §3.4."
+    },
+    "DigestRef": {
+      "type": "string",
+      "pattern": "^.+@sha256:[0-9a-f]{64}$",
+      "description": "OCI digest reference — tag-only refs are rejected (AIPACK-COMP-001)."
+    },
+    "PredicateEntry": {
+      "type": "object",
+      "required": ["predicateURI"],
+      "properties": {
+        "predicateURI": { "type": "string", "description": "Normative predicate identifier from AIPACK-SPEC §6." },
+        "digest":       { "type": "string", "description": "sha256 digest of the predicate payload." },
+        "uri":          { "type": "string", "description": "URI where the predicate payload can be retrieved." },
+        "status":       { "type": "string", "enum": ["present","verified","missing","failed"], "default": "present" }
+      },
+      "additionalProperties": false
+    },
+    "AIPackAttestation": {
+      "type": "object",
+      "properties": {
+        "predicates":       { "type": "array", "items": { "$ref": "#/$defs/PredicateEntry" } },
+        "cosignKeyRef":     { "type": "string" },
+        "rekorURL":         { "type": "string", "format": "uri" },
+        "verified":         { "type": "boolean" },
+        "verifiedAt":       { "type": "string", "format": "date-time" },
+        "failedPredicates": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "AIPackCompositionRef": {
+      "type": "object",
+      "required": ["ref","kind"],
+      "properties": {
+        "ref":  { "$ref": "#/$defs/DigestRef" },
+        "kind": { "$ref": "#/$defs/ArtifactKind" }
+      },
+      "additionalProperties": false
+    },
+    "AIPackComposition": {
+      "type": "object",
+      "description": "Agent (C1) slot table per AIPACK-SPEC §5.3.",
+      "properties": {
+        "baseModel":        { "$ref": "#/$defs/AIPackCompositionRef" },
+        "adapters":         { "type": "array", "items": { "$ref": "#/$defs/AIPackCompositionRef" } },
+        "skills":           { "type": "array", "items": { "$ref": "#/$defs/AIPackCompositionRef" } },
+        "tools":            { "type": "array", "items": { "$ref": "#/$defs/AIPackCompositionRef" } },
+        "mcpServers":       { "type": "array", "items": { "$ref": "#/$defs/AIPackCompositionRef" } },
+        "systemPrompt":     { "$ref": "#/$defs/AIPackCompositionRef" },
+        "guardrailsInput":  { "type": "array", "items": { "$ref": "#/$defs/AIPackCompositionRef" } },
+        "guardrailsOutput": { "type": "array", "items": { "$ref": "#/$defs/AIPackCompositionRef" } },
+        "retrieval":        { "$ref": "#/$defs/AIPackCompositionRef" },
+        "workflow":         { "$ref": "#/$defs/AIPackCompositionRef" },
+        "policy":           { "$ref": "#/$defs/AIPackCompositionRef" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["kind", "source"],
+  "properties": {
+    "kind":        { "const": "Agent", "description": "C1 composite artifact." },
+    "family":      { "const": "composite" },
+    "source": {
+      "type": "object",
+      "properties": {
+        "ref":      { "$ref": "#/$defs/DigestRef" },
+        "registry": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "composition": { "$ref": "#/$defs/AIPackComposition" },
+    "attestation": { "$ref": "#/$defs/AIPackAttestation" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/airgap-bundle.schema.json",
+  "title": "AIPACK AirGapBundle",
+  "description": "AIPACK-SPEC v0.1.1 §17 — AirGapBundle predicate payload. Self-contained artifact bundle for disconnected environments.",
+  "type": "object",
+  "required": ["artifactRefs", "bundleDigest", "validUntil", "trustRootDigest"],
+  "properties": {
+    "artifactRefs":    { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "bundleDigest":    { "type": "string", "description": "sha256 of the complete bundle tar+zstd." },
+    "validUntil":      { "type": "string", "format": "date-time", "description": "Validity window end — regulated environments must not exceed 30 days." },
+    "trustRootDigest": { "type": "string", "description": "Digest of the embedded trust root (CA cert + cosign public key)." },
+    "offlineTSA":      { "type": "string", "description": "Offline timestamp authority URI embedded in bundle." },
+    "assembledAt":     { "type": "string", "format": "date-time" },
+    "assembledBy":     { "type": "string" }
+  },
+  "additionalProperties": false
+}

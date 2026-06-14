@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/predicates/agent-composition.schema.json",
+  "title": "AIPACK agent:composition predicate payload",
+  "description": "Payload for urn:agent:composition:v1 attestation. Records the canonical slot table and composite digest for an Agent (C1) artifact.",
+  "type": "object",
+  "required": ["agentRef", "compositeDigest", "slots"],
+  "properties": {
+    "agentRef":        { "type": "string", "description": "OCI digest ref of the assembled Agent." },
+    "compositeDigest": { "type": "string", "description": "RFC 8785 canonical JSON sha256 over the slot table." },
+    "composedAt":      { "type": "string", "format": "date-time" },
+    "composedBy":      { "type": "string" },
+    "slots": {
+      "type": "object",
+      "description": "Slot name → OCI digest ref map. All refs must be digest-pinned (AIPACK-COMP-001).",
+      "additionalProperties": { "type": "string" }
+    },
+    "dagDepth": { "type": "integer", "minimum": 1, "maximum": 8, "description": "Maximum transitive composition depth (AIPACK-COMP-002)." }
+  },
+  "additionalProperties": false
+}

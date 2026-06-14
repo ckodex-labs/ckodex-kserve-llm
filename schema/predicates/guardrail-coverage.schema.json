@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/predicates/guardrail-coverage.schema.json",
+  "title": "AIPACK guardrail:coverage-test predicate payload",
+  "description": "Payload for urn:guardrail:coverage-test:v1 attestation. Records category coverage and false positive rate for a Guardrail artifact.",
+  "type": "object",
+  "required": ["guardrailRef", "categories", "coverageScore", "fpr"],
+  "properties": {
+    "guardrailRef":   { "type": "string" },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "covered"],
+        "properties": {
+          "name":    { "type": "string" },
+          "covered": { "type": "boolean" },
+          "tpr":     { "type": "number", "minimum": 0, "maximum": 1, "description": "True positive rate for this category." }
+        }
+      }
+    },
+    "coverageScore": { "type": "number", "minimum": 0, "maximum": 1 },
+    "fpr":           { "type": "number", "minimum": 0, "maximum": 1, "description": "Overall false positive rate." },
+    "testDatasetRef":{ "type": "string" },
+    "testedAt":      { "type": "string", "format": "date-time" },
+    "testedBy":      { "type": "string" }
+  },
+  "additionalProperties": false
+}

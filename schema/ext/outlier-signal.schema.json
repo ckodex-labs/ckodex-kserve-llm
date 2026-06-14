@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/outlier-signal.schema.json",
+  "title": "AIPACK OutlierSignal",
+  "description": "AIPACK-SPEC v0.1.1 §14 — OutlierSignal and OutlierDismissal predicate payloads.",
+  "oneOf": [
+    {
+      "title": "OutlierSignal",
+      "type": "object",
+      "required": ["type", "artifactRef", "category", "detectedAt"],
+      "properties": {
+        "type":        { "const": "outlier-signal" },
+        "artifactRef": { "type": "string" },
+        "category":    { "type": "string", "enum": ["drift","statistical","behavioral","registry"] },
+        "description": { "type": "string" },
+        "confidence":  { "type": "number", "minimum": 0, "maximum": 1 },
+        "detectedAt":  { "type": "string", "format": "date-time" },
+        "signalId":    { "type": "string" }
+      }
+    },
+    {
+      "title": "OutlierDismissal",
+      "type": "object",
+      "required": ["type", "signalId", "reason", "dismissedBy", "dismissedAt"],
+      "properties": {
+        "type":        { "const": "outlier-dismissal" },
+        "signalId":    { "type": "string" },
+        "reason":      { "type": "string" },
+        "dismissedBy": { "type": "string" },
+        "dismissedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  ]
+}

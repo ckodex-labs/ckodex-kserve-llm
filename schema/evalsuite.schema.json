@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/evalsuite.schema.json",
+  "title": "AIPack Harness + Eval (A11, A12)",
+  "description": "AIPACK-SPEC v0.1.1 §3.3 — Covers Harness (A11) and Eval (A12) artifact schemas.",
+  "oneOf": [
+    {
+      "title": "Harness (A11)",
+      "type": "object",
+      "required": ["kind", "source"],
+      "properties": {
+        "kind":   { "const": "Harness" },
+        "family": { "const": "assurance" },
+        "source": {
+          "type": "object",
+          "required": ["ref"],
+          "properties": {
+            "ref":      { "$ref": "agent.schema.json#/$defs/DigestRef" },
+            "registry": { "type": "string" }
+          }
+        },
+        "harness": {
+          "type": "object",
+          "properties": {
+            "runner":       { "type": "string" },
+            "tasks":        { "type": "array", "items": { "type": "string" } },
+            "metrics":      { "type": "array", "items": { "type": "string" } },
+            "reproducible": { "type": "boolean" }
+          }
+        },
+        "attestation": { "$ref": "agent.schema.json#/$defs/AIPackAttestation" }
+      }
+    },
+    {
+      "title": "Eval (A12)",
+      "type": "object",
+      "required": ["kind", "source", "eval"],
+      "properties": {
+        "kind":   { "const": "Eval" },
+        "family": { "const": "assurance" },
+        "source": {
+          "type": "object",
+          "required": ["ref"],
+          "properties": {
+            "ref":      { "$ref": "agent.schema.json#/$defs/DigestRef" },
+            "registry": { "type": "string" }
+          }
+        },
+        "eval": {
+          "type": "object",
+          "required": ["harnessRef"],
+          "properties": {
+            "harnessRef":  { "$ref": "agent.schema.json#/$defs/DigestRef" },
+            "subjectRef":  { "$ref": "agent.schema.json#/$defs/DigestRef" },
+            "scores":      { "type": "object", "additionalProperties": { "type": "number" } },
+            "passThreshold": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "attestation": { "$ref": "agent.schema.json#/$defs/AIPackAttestation" }
+      }
+    }
+  ]
+}

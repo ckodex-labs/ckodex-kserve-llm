@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"unicode"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,12 +54,26 @@ func (v *SBOMValidator) Validate(ctx context.Context, adapter *servingv1alpha2.L
 	return ConformanceResult{Valid: true}
 }
 
-// COMPValidator verifies compatibility between adapter and foundation model.
+// COMPValidator verifies that the adapter's name is a valid vLLM routing key.
+//
+// vLLM uses Spec.AdapterName as a route discriminator in inference requests.
+// Names with spaces or non-printable characters cause silent routing failures at
+// the data plane. Cross-service base-model tokenizer compatibility is enforced
+// at load time by the vLLM runtime (it rejects incompatible weights with an
+// explicit error) and is therefore not repeated here.
 type COMPValidator struct{}
 
-func (v *COMPValidator) Validate(ctx context.Context, adapter *servingv1alpha2.LLMLoraAdapter) ConformanceResult {
-	// Logic to check if adapter's base model matches the target service's base model.
-	// This is a placeholder for digest/tokenizer matching.
+func (v *COMPValidator) Validate(_ context.Context, adapter *servingv1alpha2.LLMLoraAdapter) ConformanceResult {
+	name := adapter.Spec.AdapterName
+	for _, ch := range name {
+		if unicode.IsSpace(ch) || !unicode.IsPrint(ch) {
+			return ConformanceResult{
+				Valid:   false,
+				Reason:  "InvalidAdapterName",
+				Message: fmt.Sprintf("adapter name %q contains character %q that is invalid as a vLLM routing key; use lowercase alphanumeric characters, hyphens, or underscores only", name, string(ch)),
+			}
+		}
+	}
 	return ConformanceResult{Valid: true}
 }
 

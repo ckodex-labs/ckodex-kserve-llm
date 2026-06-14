@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/lineage-envelope.schema.json",
+  "title": "AIPACK LineageEnvelope",
+  "description": "AIPACK-SPEC v0.1.1 §11 — LineageEnvelope predicate payload. Records per-component attribution for an assembled artifact.",
+  "type": "object",
+  "required": ["artifactRef", "components", "assembledAt"],
+  "properties": {
+    "artifactRef":   { "type": "string", "description": "OCI digest ref of the assembled artifact." },
+    "assembledAt":   { "type": "string", "format": "date-time" },
+    "assembledBy":   { "type": "string", "description": "Actor URN or identity that performed assembly." },
+    "contentHash":   { "type": "string", "description": "sha256 of the canonical serialization of this envelope." },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref", "kind", "role"],
+        "properties": {
+          "ref":         { "type": "string" },
+          "kind":        { "type": "string" },
+          "role":        { "type": "string", "description": "Slot name in the composition (e.g. baseModel, skills[0])." },
+          "sourceRef":   { "type": "string" },
+          "digest":      { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

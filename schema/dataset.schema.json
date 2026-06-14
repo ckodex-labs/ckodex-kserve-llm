@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/dataset.schema.json",
+  "title": "AIPack Dataset (A10)",
+  "description": "AIPACK-SPEC v0.1.1 §3.3 — Dataset artifact (A10). Training or evaluation dataset with provenance, consent, and licensing attestation.",
+  "type": "object",
+  "required": ["kind", "source"],
+  "properties": {
+    "kind":   { "const": "Dataset" },
+    "family": { "const": "knowledge" },
+    "source": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref":      { "$ref": "agent.schema.json#/$defs/DigestRef" },
+        "registry": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "dataset": {
+      "type": "object",
+      "properties": {
+        "format":       { "type": "string", "enum": ["jsonl","parquet","csv","arrow","tfrecord","other"] },
+        "sampleCount":  { "type": "integer", "minimum": 0 },
+        "language":     { "type": "string" },
+        "license":      { "type": "string" },
+        "piiScanned":   { "type": "boolean" },
+        "consentRef":   { "type": "string", "description": "URI to consent documentation." },
+        "biasReport":   { "type": "string", "description": "URI to bias analysis report." }
+      },
+      "additionalProperties": true
+    },
+    "attestation": { "$ref": "agent.schema.json#/$defs/AIPackAttestation" }
+  },
+  "additionalProperties": true
+}

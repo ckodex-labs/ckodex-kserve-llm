@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/prompt.schema.json",
+  "title": "AIPack PromptTemplate (A7)",
+  "description": "AIPACK-SPEC v0.1.1 §3.3 — PromptTemplate artifact (A7). Versioned system/user prompt template with jailbreak-resistance attestation.",
+  "type": "object",
+  "required": ["kind", "source"],
+  "properties": {
+    "kind":   { "const": "PromptTemplate" },
+    "family": { "const": "control" },
+    "source": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref":      { "$ref": "agent.schema.json#/$defs/DigestRef" },
+        "registry": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "promptTemplate": {
+      "type": "object",
+      "properties": {
+        "role":     { "type": "string", "enum": ["system","user","assistant"] },
+        "template": { "type": "string" },
+        "variables":{ "type": "array", "items": { "type": "string" } },
+        "language": { "type": "string", "default": "en" }
+      },
+      "additionalProperties": true
+    },
+    "attestation": { "$ref": "agent.schema.json#/$defs/AIPackAttestation" }
+  },
+  "additionalProperties": true
+}

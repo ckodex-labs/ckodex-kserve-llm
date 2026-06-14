@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/vad-result.schema.json",
+  "title": "AIPACK VADResult",
+  "description": "AIPACK-SPEC v0.1.1 §22 — VAD (Vulnerability/Adversarial Defense) result predicate payload.",
+  "type": "object",
+  "required": ["artifactRef", "classes", "passed", "score"],
+  "properties": {
+    "artifactRef": { "type": "string" },
+    "classes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["prompt-injection","jailbreak","data-poisoning","model-inversion","membership-inference","adversarial-input"]
+      }
+    },
+    "perturbationFamilies": { "type": "array", "items": { "type": "string" } },
+    "passed":  { "type": "boolean" },
+    "score":   { "type": "number", "minimum": 0, "maximum": 1, "description": "Aggregate VAD score: 1 = fully defended." },
+    "failedClasses": { "type": "array", "items": { "type": "string" } },
+    "evaluatedAt":   { "type": "string", "format": "date-time" },
+    "evaluatedBy":   { "type": "string" }
+  },
+  "additionalProperties": false
+}

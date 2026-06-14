@@ -19,7 +19,7 @@ import (
 
 const (
 	// defaultVLLMImage is the default vLLM container image.
-	defaultVLLMImage = "vllm/vllm-openai:v0.20.0"
+	defaultVLLMImage = "vllm/vllm-openai:v0.23.0"
 )
 
 // WebhookConfig carries runtime policy settings injected at manager startup.
@@ -37,10 +37,16 @@ type WebhookConfig struct {
 
 // SetupWebhooks registers all webhooks with the manager using the supplied config.
 func SetupWebhooks(mgr ctrl.Manager, cfg WebhookConfig) error {
-	return ctrl.NewWebhookManagedBy(mgr, &servingv1alpha2.LLMInferenceService{}).
+	if err := ctrl.NewWebhookManagedBy(mgr, &servingv1alpha2.LLMInferenceService{}).
 		WithValidator(&LLMInferenceServiceValidator{FedRAMPMode: cfg.FedRAMPMode}).
 		WithDefaulter(&LLMInferenceServiceDefaulter{HFMirrorURL: cfg.HFMirrorURL}).
-		Complete()
+		Complete(); err != nil {
+		return fmt.Errorf("setup llminferenceservice webhook: %w", err)
+	}
+	if err := SetupAIPackWebhook(mgr); err != nil {
+		return fmt.Errorf("setup aipack webhook: %w", err)
+	}
+	return nil
 }
 
 // ----- Validating Webhook -----

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/governance/evaluator"
 )
 
 // HasAssertedSupplyChainEvidence reports whether an adapter has a complete
@@ -26,5 +27,5 @@ func HasAssertedSupplyChainEvidence(adapter *servingv1alpha2.LLMLoraAdapter) boo
 func HasVerifiedSupplyChainEvidence(adapter *servingv1alpha2.LLMLoraAdapter) bool {
 	return HasAssertedSupplyChainEvidence(adapter) &&
 		adapter.Status.EvidenceBundle.LastVerifiedAt != nil &&
-		!strings.HasPrefix(adapter.Status.EvidenceBundle.AttestationURI, "ckodex://")
+		!strings.HasPrefix(adapter.Status.EvidenceBundle.AttestationURI, evaluator.InternalReceiptScheme)
 }

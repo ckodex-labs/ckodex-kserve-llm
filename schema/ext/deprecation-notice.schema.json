@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/deprecation-notice.schema.json",
+  "title": "AIPACK DeprecationNotice",
+  "description": "AIPACK-SPEC v0.1.1 §16 — DeprecationNotice and DeprecationRevocation predicate payloads.",
+  "oneOf": [
+    {
+      "title": "DeprecationNotice",
+      "type": "object",
+      "required": ["type", "artifactRef", "phase", "issuedAt"],
+      "properties": {
+        "type":          { "const": "deprecation-notice" },
+        "artifactRef":   { "type": "string" },
+        "phase":         { "type": "string", "enum": ["announced","deprecated","sunset","retired"] },
+        "reason":        { "type": "string" },
+        "successorRef":  { "type": "string", "description": "OCI digest ref of the recommended successor artifact." },
+        "sunsetDate":    { "type": "string", "format": "date-time" },
+        "issuedAt":      { "type": "string", "format": "date-time" },
+        "issuedBy":      { "type": "string" }
+      }
+    },
+    {
+      "title": "DeprecationRevocation",
+      "type": "object",
+      "required": ["type", "artifactRef", "reason", "revokedAt"],
+      "properties": {
+        "type":        { "const": "deprecation-revocation" },
+        "artifactRef": { "type": "string" },
+        "reason":      { "type": "string" },
+        "revokedAt":   { "type": "string", "format": "date-time" },
+        "revokedBy":   { "type": "string" }
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/blast-radius.schema.json",
+  "title": "AIPACK BlastRadiusDeclaration",
+  "description": "AIPACK-SPEC v0.1.1 §12 — BlastRadiusDeclaration predicate payload. Declares the transitive affected set when an artifact is quarantined.",
+  "type": "object",
+  "required": ["artifactRef", "dependents", "severity"],
+  "properties": {
+    "artifactRef":  { "type": "string" },
+    "severity":     { "type": "string", "enum": ["localized","module","service","cross-service","tenant"] },
+    "dependents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref", "kind"],
+        "properties": {
+          "ref":   { "type": "string" },
+          "kind":  { "type": "string" },
+          "depth": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "cascadeQuarantine": { "type": "boolean", "default": false },
+    "computedAt":        { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

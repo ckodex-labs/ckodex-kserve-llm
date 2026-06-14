@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/predicates/skill-safety-review.schema.json",
+  "title": "AIPACK skill:safety-review predicate payload",
+  "description": "Payload for urn:skill:safety-review:v1 attestation. Records the safety review outcome for a Skill artifact.",
+  "type": "object",
+  "required": ["skillRef", "passed", "reviewedAt", "reviewedBy"],
+  "properties": {
+    "skillRef":    { "type": "string" },
+    "passed":      { "type": "boolean" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "description"],
+        "properties": {
+          "severity":    { "type": "string", "enum": ["critical","high","medium","low","info"] },
+          "description": { "type": "string" },
+          "mitigated":   { "type": "boolean" }
+        }
+      }
+    },
+    "staticAnalysisRef": { "type": "string", "description": "OCI ref to the static analysis result artifact." },
+    "redTeamRef":        { "type": "string", "description": "OCI ref to the red-team eval result artifact." },
+    "reviewedAt":        { "type": "string", "format": "date-time" },
+    "reviewedBy":        { "type": "string" }
+  },
+  "additionalProperties": false
+}

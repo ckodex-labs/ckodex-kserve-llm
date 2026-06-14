@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/policy-bundle.schema.json",
+  "title": "AIPack PolicyBundle (A14)",
+  "description": "AIPACK-SPEC v0.1.1 §3.3, §19 — PolicyBundle artifact (A14). OPA/Rego bundle defining allowed artifact types, families, and risk thresholds.",
+  "type": "object",
+  "required": ["kind", "source"],
+  "properties": {
+    "kind":   { "const": "PolicyBundle" },
+    "family": { "const": "control" },
+    "source": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref":      { "$ref": "agent.schema.json#/$defs/DigestRef" },
+        "registry": { "type": "string" }
+      }
+    },
+    "policyBundle": {
+      "type": "object",
+      "properties": {
+        "profileRef":            { "type": "string", "description": "URN of a predefined policy profile." },
+        "allowedFamilies":       { "type": "array", "items": { "type": "string" } },
+        "forbiddenFamilies":     { "type": "array", "items": { "type": "string" } },
+        "allowedArtifactTypes":  {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Empty array = deny-all sentinel (§19.2). Absent field = allow-all."
+        },
+        "forbiddenArtifactTypes":{ "type": "array", "items": { "type": "string" } },
+        "requiredPredicates":    { "type": "array", "items": { "type": "string" } },
+        "maxRiskBand":           { "type": "string", "enum": ["GREEN","YELLOW","ORANGE","RED"] }
+      },
+      "additionalProperties": false
+    },
+    "attestation": { "$ref": "agent.schema.json#/$defs/AIPackAttestation" }
+  },
+  "additionalProperties": true
+}

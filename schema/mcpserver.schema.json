@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/mcpserver.schema.json",
+  "title": "AIPack MCPServer (A6)",
+  "description": "AIPACK-SPEC v0.1.1 §3.3 — MCPServer artifact (A6). Model Context Protocol server package.",
+  "type": "object",
+  "required": ["kind", "source"],
+  "properties": {
+    "kind":   { "const": "MCPServer" },
+    "family": { "const": "capability" },
+    "source": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref":      { "$ref": "agent.schema.json#/$defs/DigestRef" },
+        "registry": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "mcpServer": {
+      "type": "object",
+      "properties": {
+        "transport":   { "type": "string", "enum": ["stdio","sse","http"] },
+        "serverInfo": {
+          "type": "object",
+          "properties": {
+            "name":    { "type": "string" },
+            "version": { "type": "string" }
+          }
+        },
+        "tools": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "name": { "type": "string" } } }
+        },
+        "sandboxPolicy": { "type": "string", "description": "OCI ref to sandbox policy artifact." }
+      },
+      "additionalProperties": true
+    },
+    "attestation": { "$ref": "agent.schema.json#/$defs/AIPackAttestation" }
+  },
+  "additionalProperties": true
+}

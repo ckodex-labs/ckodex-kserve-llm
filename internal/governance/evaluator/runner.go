@@ -15,6 +15,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// InternalReceiptScheme is the URI scheme used for evaluation receipts generated
+// by this runner. Receipts under this scheme are asserted-only — they are not
+// backed by an external cryptographic verifier — so HasVerifiedSupplyChainEvidence
+// (in the governance package) rejects them.
+const InternalReceiptScheme = "ckodex://"
+
+// internalReceiptPrefix is the full prefix for receipts produced by this runner.
+const internalReceiptPrefix = InternalReceiptScheme + "eval-runner/reports/"
+
 // EvalReport represents the results of an automated evaluation run.
 type EvalReport struct {
 	SafetyScore      float64   `json:"safetyScore"`
@@ -46,5 +55,5 @@ func GenerateEvidence(adapter *servingv1alpha2.LLMLoraAdapter, report *EvalRepor
 	} else {
 		adapter.Status.EvidenceBundle.SignatureDigest = fmt.Sprintf("sha256:%x", report.VerificationTime.UnixNano())
 	}
-	adapter.Status.EvidenceBundle.AttestationURI = "ckodex://eval-runner/reports/" + adapter.Name
+	adapter.Status.EvidenceBundle.AttestationURI = internalReceiptPrefix + adapter.Name
 }

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/retrievalindex.schema.json",
+  "title": "AIPack RetrievalIndex (A9)",
+  "description": "AIPACK-SPEC v0.1.1 §3.3 — RetrievalIndex artifact (A9). Vector index for retrieval-augmented generation.",
+  "type": "object",
+  "required": ["kind", "source", "retrievalIndex"],
+  "properties": {
+    "kind":   { "const": "RetrievalIndex" },
+    "family": { "const": "knowledge" },
+    "source": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref":      { "$ref": "agent.schema.json#/$defs/DigestRef" },
+        "registry": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "retrievalIndex": {
+      "type": "object",
+      "required": ["embeddingModel"],
+      "properties": {
+        "embeddingModel": { "$ref": "agent.schema.json#/$defs/DigestRef", "description": "Digest ref to the embedding model (AIPACK-COMPAT-002)." },
+        "indexType":      { "type": "string", "enum": ["hnsw","flat","ivf","lsh"] },
+        "dimensions":     { "type": "integer", "minimum": 1 },
+        "documentCount":  { "type": "integer", "minimum": 0 },
+        "refreshPolicy": {
+          "type": "object",
+          "properties": {
+            "intervalHours": { "type": "integer", "minimum": 1 },
+            "maxStalenessHours": { "type": "integer", "minimum": 1 }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "attestation": { "$ref": "agent.schema.json#/$defs/AIPackAttestation" }
+  },
+  "additionalProperties": true
+}

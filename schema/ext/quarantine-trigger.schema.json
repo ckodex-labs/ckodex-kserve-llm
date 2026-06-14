@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/quarantine-trigger.schema.json",
+  "title": "AIPACK QuarantineTrigger",
+  "description": "AIPACK-SPEC v0.1.1 §21 — QuarantineTrigger declaration and TriggerFired event predicate payload.",
+  "oneOf": [
+    {
+      "title": "QuarantineTrigger declaration",
+      "type": "object",
+      "required": ["id", "name", "condition", "action", "severity"],
+      "properties": {
+        "id":        { "type": "string" },
+        "name":      { "type": "string" },
+        "condition": { "type": "string", "description": "Predicate DSL expression per §21.2." },
+        "action":    { "type": "string", "enum": ["quarantine","block","alert","log"] },
+        "severity":  { "type": "string", "enum": ["critical","high","medium","low"] }
+      },
+      "additionalProperties": false
+    },
+    {
+      "title": "TriggerFired event (predicate payload)",
+      "type": "object",
+      "required": ["triggerId", "artifactRef", "firedAt"],
+      "properties": {
+        "triggerId":   { "type": "string" },
+        "artifactRef": { "type": "string" },
+        "firedAt":     { "type": "string", "format": "date-time" },
+        "context":     { "type": "object" },
+        "action":      { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

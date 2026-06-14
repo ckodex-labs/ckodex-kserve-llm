@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/tool.schema.json",
+  "title": "AIPack Tool (A5)",
+  "description": "AIPACK-SPEC v0.1.1 §3.3 — Tool artifact (A5). A function or API wrapper callable by an Agent.",
+  "type": "object",
+  "required": ["kind", "source"],
+  "properties": {
+    "kind":   { "const": "Tool" },
+    "family": { "const": "capability" },
+    "source": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref":      { "$ref": "agent.schema.json#/$defs/DigestRef" },
+        "registry": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "tool": {
+      "type": "object",
+      "properties": {
+        "name":        { "type": "string" },
+        "description": { "type": "string" },
+        "inputSchema": { "type": "object", "description": "JSON Schema for the tool's input parameters." },
+        "outputSchema":{ "type": "object", "description": "JSON Schema for the tool's return value." },
+        "timeout":     { "type": "string", "description": "ISO 8601 duration." }
+      },
+      "additionalProperties": true
+    },
+    "attestation": { "$ref": "agent.schema.json#/$defs/AIPackAttestation" }
+  },
+  "additionalProperties": true
+}

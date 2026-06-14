@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/risk-valence.schema.json",
+  "title": "AIPACK RiskValence",
+  "description": "AIPACK-SPEC v0.1.1 §13 — Risk valence predicate payload. 13 weighted signals produce a score in [0,100] mapped to 4 bands.",
+  "type": "object",
+  "required": ["artifactRef", "score", "band", "signals", "computedAt"],
+  "properties": {
+    "artifactRef": { "type": "string" },
+    "score":       { "type": "integer", "minimum": 0, "maximum": 100 },
+    "band":        { "type": "string", "enum": ["GREEN","YELLOW","ORANGE","RED"] },
+    "signals": {
+      "type": "array",
+      "minItems": 13,
+      "maxItems": 13,
+      "items": {
+        "type": "object",
+        "required": ["name", "value", "weight"],
+        "properties": {
+          "name":   { "type": "string" },
+          "value":  { "type": "number", "minimum": 0, "maximum": 1 },
+          "weight": { "type": "integer", "minimum": 0, "maximum": 100 }
+        }
+      }
+    },
+    "computedAt": { "type": "string", "format": "date-time" },
+    "derogationRef": { "type": "string", "description": "If RED band is permitted, the derogation attestation OCI ref." }
+  },
+  "additionalProperties": false
+}

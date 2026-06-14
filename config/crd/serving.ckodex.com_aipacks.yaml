@@ -1,0 +1,1093 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: aipacks.serving.ckodex.com
+spec:
+  group: serving.ckodex.com
+  names:
+    kind: AIPack
+    listKind: AIPackList
+    plural: aipacks
+    shortNames:
+    - aip
+    singular: aipack
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.kind
+      name: Kind
+      type: string
+    - jsonPath: .status.family
+      name: Family
+      type: string
+    - jsonPath: .status.riskBand
+      name: RiskBand
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: |-
+          AIPack is the Schema for the aipacks API.
+          It represents a single versioned AI artifact (model, skill, guardrail, agent, etc.)
+          described by AIPACK-SPEC v0.1.1.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AIPackSpec defines the desired state of an AIPack artifact.
+            properties:
+              attestation:
+                description: |-
+                  Attestation holds the artifact's attestation bundle.
+                  Required for promotion to staging and above.
+                properties:
+                  cosignKeyRef:
+                    description: |-
+                      CosignKeyRef is the cosign key reference used to verify signatures.
+                      Format: "k8s://<namespace>/<secret>" or "gcr://<path>" or "env://<VAR>"
+                    type: string
+                  failedPredicates:
+                    description: |-
+                      FailedPredicates lists predicate URIs that failed verification.
+                      Set by the operator; read-only.
+                    items:
+                      type: string
+                    type: array
+                  predicates:
+                    description: |-
+                      Predicates is the list of attestation predicates carried by this artifact.
+                      Each entry should resolve to a signed in-toto statement.
+                      The RequiredPredicates() function in internal/aipack/predicates.go enumerates
+                      the must-carry predicates per kind.
+                    items:
+                      description: PredicateEntry records a single predicate in the
+                        attestation bundle.
+                      properties:
+                        digest:
+                          description: Digest is the sha256 digest of the predicate
+                            payload.
+                          type: string
+                        predicateURI:
+                          description: PredicateURI is the normative predicate identifier
+                            from §6.
+                          type: string
+                        rekorLogID:
+                          description: RekorLogID is the Rekor transparency log entry
+                            ID, if applicable.
+                          type: string
+                        required:
+                          description: Required declares whether this predicate is
+                            mandatory for the artifact's kind.
+                          type: boolean
+                        status:
+                          description: Status is the runtime verification status of
+                            this predicate.
+                          enum:
+                          - Present
+                          - Missing
+                          - Invalid
+                          - Expired
+                          - Verified
+                          type: string
+                      required:
+                      - predicateURI
+                      type: object
+                    type: array
+                  rekorURL:
+                    description: |-
+                      RekorURL is the Rekor transparency log URL.
+                      Defaults to https://rekor.sigstore.dev when not specified.
+                    type: string
+                  verified:
+                    description: |-
+                      Verified declares whether the operator has successfully verified all
+                      required predicates. Set by the operator; read-only.
+                    type: boolean
+                  verifiedAt:
+                    description: VerifiedAt is the RFC 3339 timestamp of the last
+                      successful verification.
+                    type: string
+                type: object
+              baseModel:
+                description: BaseModel contains BaseModel-specific configuration (Kind=BaseModel).
+                properties:
+                  architecture:
+                    description: |-
+                      Architecture is the model architecture identifier.
+                      Examples: "llama3", "mistral", "gemma2"
+                    type: string
+                  contextLength:
+                    description: ContextLength is the maximum context length in tokens.
+                    format: int64
+                    type: integer
+                  embeddingDimension:
+                    description: |-
+                      EmbeddingDimension is the embedding vector dimension for embedding models.
+                      Required when this model is used as the embedding backend for a RetrievalIndex.
+                    format: int32
+                    type: integer
+                  license:
+                    description: License is the model license identifier.
+                    type: string
+                  parameterCount:
+                    description: ParameterCount is the model parameter count in billions.
+                    type: number
+                  quantization:
+                    description: |-
+                      Quantization describes the quantization format, if applicable.
+                      Examples: "bf16", "fp8", "int4-awq"
+                    type: string
+                  safetyClassification:
+                    description: |-
+                      SafetyClassification is the safety classification for this model.
+                      Values: "general-purpose", "instruction-tuned", "code", "restricted"
+                    type: string
+                  trainingDataCutoff:
+                    description: TrainingDataCutoff is the ISO 8601 date of the training
+                      data cutoff.
+                    type: string
+                type: object
+              composition:
+                description: |-
+                  Composition is the slot-referenced component set. Required for Kind=Agent (C1).
+                  Must be absent for all atomic kinds (A1–A14).
+                properties:
+                  adapters:
+                    description: Adapters are additional LoRA adapters stacked on
+                      the base model.
+                    items:
+                      description: AIPackRef is a pointer to another AIPack artifact
+                        by OCI digest reference.
+                      properties:
+                        kind:
+                          description: |-
+                            Kind is the expected ArtifactKind of the referenced artifact.
+                            Used to validate slot compatibility at admission time.
+                          type: string
+                        ref:
+                          description: Ref is a fully qualified OCI digest reference
+                            (sha256 required).
+                          pattern: ^.+@sha256:[0-9a-f]{64}$
+                          type: string
+                      required:
+                      - ref
+                      type: object
+                    type: array
+                  baseModel:
+                    description: BaseModel is the primary model (BaseModel | LoRA
+                      | FineTune). At most one.
+                    properties:
+                      kind:
+                        description: |-
+                          Kind is the expected ArtifactKind of the referenced artifact.
+                          Used to validate slot compatibility at admission time.
+                        type: string
+                      ref:
+                        description: Ref is a fully qualified OCI digest reference
+                          (sha256 required).
+                        pattern: ^.+@sha256:[0-9a-f]{64}$
+                        type: string
+                    required:
+                    - ref
+                    type: object
+                  compositeDigest:
+                    description: |-
+                      CompositeDigest is the RFC 8785 canonical JSON sha256 of the assembled manifest.
+                      Set by the operator after composition validation succeeds.
+                    type: string
+                  guardrailsInput:
+                    description: GuardrailsInput are guardrails applied to the agent's
+                      input stream.
+                    items:
+                      description: AIPackRef is a pointer to another AIPack artifact
+                        by OCI digest reference.
+                      properties:
+                        kind:
+                          description: |-
+                            Kind is the expected ArtifactKind of the referenced artifact.
+                            Used to validate slot compatibility at admission time.
+                          type: string
+                        ref:
+                          description: Ref is a fully qualified OCI digest reference
+                            (sha256 required).
+                          pattern: ^.+@sha256:[0-9a-f]{64}$
+                          type: string
+                      required:
+                      - ref
+                      type: object
+                    type: array
+                  guardrailsOutput:
+                    description: GuardrailsOutput are guardrails applied to the agent's
+                      output stream.
+                    items:
+                      description: AIPackRef is a pointer to another AIPack artifact
+                        by OCI digest reference.
+                      properties:
+                        kind:
+                          description: |-
+                            Kind is the expected ArtifactKind of the referenced artifact.
+                            Used to validate slot compatibility at admission time.
+                          type: string
+                        ref:
+                          description: Ref is a fully qualified OCI digest reference
+                            (sha256 required).
+                          pattern: ^.+@sha256:[0-9a-f]{64}$
+                          type: string
+                      required:
+                      - ref
+                      type: object
+                    type: array
+                  mcpServers:
+                    description: MCPServers are MCP protocol server artifacts.
+                    items:
+                      description: AIPackRef is a pointer to another AIPack artifact
+                        by OCI digest reference.
+                      properties:
+                        kind:
+                          description: |-
+                            Kind is the expected ArtifactKind of the referenced artifact.
+                            Used to validate slot compatibility at admission time.
+                          type: string
+                        ref:
+                          description: Ref is a fully qualified OCI digest reference
+                            (sha256 required).
+                          pattern: ^.+@sha256:[0-9a-f]{64}$
+                          type: string
+                      required:
+                      - ref
+                      type: object
+                    type: array
+                  policy:
+                    description: Policy is the PolicyBundle artifact governing this
+                      agent's allowed composition.
+                    properties:
+                      kind:
+                        description: |-
+                          Kind is the expected ArtifactKind of the referenced artifact.
+                          Used to validate slot compatibility at admission time.
+                        type: string
+                      ref:
+                        description: Ref is a fully qualified OCI digest reference
+                          (sha256 required).
+                        pattern: ^.+@sha256:[0-9a-f]{64}$
+                        type: string
+                    required:
+                    - ref
+                    type: object
+                  retrieval:
+                    description: Retrieval is the RetrievalIndex artifact for RAG-style
+                      workflows.
+                    properties:
+                      kind:
+                        description: |-
+                          Kind is the expected ArtifactKind of the referenced artifact.
+                          Used to validate slot compatibility at admission time.
+                        type: string
+                      ref:
+                        description: Ref is a fully qualified OCI digest reference
+                          (sha256 required).
+                        pattern: ^.+@sha256:[0-9a-f]{64}$
+                        type: string
+                    required:
+                    - ref
+                    type: object
+                  skills:
+                    description: Skills are skill artifacts registered in the agent's
+                      capability set.
+                    items:
+                      description: AIPackRef is a pointer to another AIPack artifact
+                        by OCI digest reference.
+                      properties:
+                        kind:
+                          description: |-
+                            Kind is the expected ArtifactKind of the referenced artifact.
+                            Used to validate slot compatibility at admission time.
+                          type: string
+                        ref:
+                          description: Ref is a fully qualified OCI digest reference
+                            (sha256 required).
+                          pattern: ^.+@sha256:[0-9a-f]{64}$
+                          type: string
+                      required:
+                      - ref
+                      type: object
+                    type: array
+                  systemPrompt:
+                    description: SystemPrompt is the PromptTemplate that seeds the
+                      agent's system context.
+                    properties:
+                      kind:
+                        description: |-
+                          Kind is the expected ArtifactKind of the referenced artifact.
+                          Used to validate slot compatibility at admission time.
+                        type: string
+                      ref:
+                        description: Ref is a fully qualified OCI digest reference
+                          (sha256 required).
+                        pattern: ^.+@sha256:[0-9a-f]{64}$
+                        type: string
+                    required:
+                    - ref
+                    type: object
+                  tools:
+                    description: Tools are Tool or MCPServer artifacts the agent can
+                      invoke.
+                    items:
+                      description: AIPackRef is a pointer to another AIPack artifact
+                        by OCI digest reference.
+                      properties:
+                        kind:
+                          description: |-
+                            Kind is the expected ArtifactKind of the referenced artifact.
+                            Used to validate slot compatibility at admission time.
+                          type: string
+                        ref:
+                          description: Ref is a fully qualified OCI digest reference
+                            (sha256 required).
+                          pattern: ^.+@sha256:[0-9a-f]{64}$
+                          type: string
+                      required:
+                      - ref
+                      type: object
+                    type: array
+                  workflow:
+                    description: Workflow is the Workflow artifact orchestrating multi-step
+                      behaviour.
+                    properties:
+                      kind:
+                        description: |-
+                          Kind is the expected ArtifactKind of the referenced artifact.
+                          Used to validate slot compatibility at admission time.
+                        type: string
+                      ref:
+                        description: Ref is a fully qualified OCI digest reference
+                          (sha256 required).
+                        pattern: ^.+@sha256:[0-9a-f]{64}$
+                        type: string
+                    required:
+                    - ref
+                    type: object
+                type: object
+              dataset:
+                description: Dataset contains dataset configuration (Kind=Dataset).
+                properties:
+                  biasAnalysisRefs:
+                    description: |-
+                      BiasAnalysisRefs lists URIs pointing to bias analysis reports.
+                      Backed by attestation urn:dataset:bias-analysis:v1.
+                    items:
+                      type: string
+                    type: array
+                  byteSize:
+                    description: ByteSize is the uncompressed dataset size in bytes.
+                    format: int64
+                    type: integer
+                  consentVerified:
+                    description: |-
+                      ConsentVerified declares whether appropriate consent has been verified.
+                      Backed by attestation urn:dataset:consent:v1.
+                    type: boolean
+                  dataCutoff:
+                    description: DataCutoff is the ISO 8601 date of the most recent
+                      data in the dataset.
+                    type: string
+                  deidentified:
+                    description: |-
+                      Deidentified declares whether PII has been removed or anonymized.
+                      Backed by attestation urn:dataset:deidentification:v1.
+                    type: boolean
+                  format:
+                    description: |-
+                      Format declares the dataset format.
+                      Examples: "jsonl", "parquet", "csv", "tfrecord", "arrow"
+                    type: string
+                  language:
+                    description: Language declares the primary language(s) of the
+                      dataset content.
+                    items:
+                      type: string
+                    type: array
+                  license:
+                    description: |-
+                      License is the dataset license identifier.
+                      Examples: "Apache-2.0", "CC-BY-4.0", "CC-BY-NC-4.0", "proprietary"
+                    type: string
+                  provenanceSources:
+                    description: |-
+                      ProvenanceSources lists source descriptions for the dataset.
+                      Backed by attestation urn:dataset:provenance:v1.
+                    items:
+                      type: string
+                    type: array
+                  recordCount:
+                    description: RecordCount is the number of records in the dataset.
+                    format: int64
+                    type: integer
+                type: object
+              eval:
+                description: Eval contains eval configuration (Kind=Eval).
+                properties:
+                  harnessRef:
+                    description: HarnessRef is the OCI digest reference to the Harness
+                      artifact used.
+                    pattern: ^.+@sha256:[0-9a-f]{64}$
+                    type: string
+                  primaryScore:
+                    description: PrimaryScore is the primary aggregate score from
+                      the evaluation.
+                    type: number
+                  reproducible:
+                    description: Reproducible declares whether this eval run is reproducible.
+                    type: boolean
+                  runDate:
+                    description: RunDate is the ISO 8601 date of the evaluation run.
+                    type: string
+                  runEnvironment:
+                    description: |-
+                      RunEnvironment describes the hardware/software environment of the eval run.
+                      Examples: "H100-80GB-SXM / CUDA 12.4 / vLLM 0.23.0"
+                    type: string
+                  scoreUnit:
+                    description: |-
+                      ScoreUnit is the unit of the primary score.
+                      Examples: "accuracy", "pass@k", "mmlu-%", "rouge-l"
+                    type: string
+                  subjectRef:
+                    description: SubjectRef is the OCI digest reference to the artifact
+                      being evaluated.
+                    pattern: ^.+@sha256:[0-9a-f]{64}$
+                    type: string
+                  taskScores:
+                    additionalProperties:
+                      type: number
+                    description: TaskScores maps per-task names to their individual
+                      scores.
+                    type: object
+                required:
+                - harnessRef
+                - subjectRef
+                type: object
+              family:
+                description: |-
+                  Family is the artifact family per §3.2. Optional.
+                  When provided, it MUST match the canonical §3.5 mapping for Kind.
+                  The operator rejects mismatches at admission (AIPACK-KIND-001).
+                enum:
+                - model
+                - capability
+                - control
+                - knowledge
+                - assurance
+                - composite
+                type: string
+              fineTune:
+                description: FineTune contains fine-tuned model configuration (Kind=FineTune).
+                properties:
+                  baseRef:
+                    description: |-
+                      BaseRef is the OCI digest reference to the BaseModel that was fine-tuned.
+                      Required (AIPACK-COMPAT-001).
+                    pattern: ^.+@sha256:[0-9a-f]{64}$
+                    type: string
+                  contextLength:
+                    description: ContextLength is the maximum context length if it
+                      differs from the base model.
+                    format: int64
+                    type: integer
+                  epochCount:
+                    description: EpochCount is the number of training epochs.
+                    format: int32
+                    type: integer
+                  license:
+                    description: License is the fine-tuned model license identifier.
+                    type: string
+                  safetyRetained:
+                    description: |-
+                      SafetyRetained declares whether safety alignment was preserved.
+                      Must be backed by attestation urn:finetune:safety-retention:v1.
+                    type: boolean
+                  technique:
+                    description: |-
+                      Technique describes the fine-tuning technique used.
+                      Examples: "sft", "dpo", "rlhf", "qlora"
+                    type: string
+                  trainingDataRef:
+                    description: TrainingDataRef is the OCI digest reference to the
+                      Dataset artifact used.
+                    type: string
+                required:
+                - baseRef
+                type: object
+              guardrail:
+                description: Guardrail contains guardrail configuration (Kind=Guardrail).
+                properties:
+                  blockingMode:
+                    description: BlockingMode declares whether this guardrail blocks
+                      or only logs violations.
+                    enum:
+                    - blocking
+                    - logging
+                    type: string
+                  coverageTest:
+                    description: |-
+                      CoverageTest declares whether a coverage test has been executed.
+                      Backed by attestation urn:guardrail:coverage-test:v1.
+                    type: boolean
+                  direction:
+                    description: Direction declares whether this guardrail is applied
+                      to input, output, or both.
+                    enum:
+                    - input
+                    - output
+                    - both
+                    type: string
+                  engine:
+                    description: |-
+                      Engine declares the guardrail evaluation engine.
+                      Examples: "llm-guard", "nemo-guardrails", "presidio", "custom"
+                    type: string
+                  fprTarget:
+                    description: |-
+                      FPRTarget is the declared maximum false positive rate (0.0–1.0).
+                      Backed by attestation urn:guardrail:fpr:v1.
+                    type: number
+                  latencyBudgetMs:
+                    description: LatencyBudgetMs is the maximum allowed evaluation
+                      latency in milliseconds.
+                    format: int32
+                    type: integer
+                required:
+                - direction
+                type: object
+              harness:
+                description: Harness contains eval harness configuration (Kind=Harness).
+                properties:
+                  evalType:
+                    description: |-
+                      EvalType declares the type of evaluation this harness performs.
+                      Examples: "accuracy", "safety", "red-team", "alignment", "robustness"
+                    type: string
+                  methodologyRef:
+                    description: |-
+                      MethodologyRef is a URI pointing to the methodology document.
+                      Backed by attestation urn:eval-suite:methodology:v1.
+                    type: string
+                  referenceOutputsRef:
+                    description: |-
+                      ReferenceOutputsRef is the OCI digest reference to a Dataset artifact
+                      containing ground-truth / reference outputs.
+                      Backed by attestation urn:eval-suite:reference-outputs:v1.
+                    type: string
+                  reproducible:
+                    description: |-
+                      Reproducible declares whether the harness produces reproducible scores.
+                      Backed by attestation urn:eval-suite:reproducibility:v1.
+                    type: boolean
+                  scoringMethod:
+                    description: |-
+                      ScoringMethod declares the scoring methodology.
+                      Examples: "exact-match", "llm-judge", "human-eval", "rouge", "bleu"
+                    type: string
+                  taskCount:
+                    description: TaskCount is the number of evaluation tasks in the
+                      harness.
+                    format: int32
+                    type: integer
+                type: object
+              kind:
+                description: Kind is the artifact kind per §3.3. Mandatory.
+                enum:
+                - BaseModel
+                - LoRA
+                - FineTune
+                - Skill
+                - Tool
+                - MCPServer
+                - PromptTemplate
+                - Guardrail
+                - RetrievalIndex
+                - Dataset
+                - Harness
+                - Eval
+                - Workflow
+                - PolicyBundle
+                - Agent
+                type: string
+              lora:
+                description: LoRA contains LoRA adapter configuration (Kind=LoRA).
+                properties:
+                  alpha:
+                    description: Alpha is the LoRA alpha scaling factor.
+                    type: number
+                  baseRef:
+                    description: |-
+                      BaseRef is the OCI digest reference to the BaseModel this adapter targets.
+                      Required at composition time (AIPACK-COMPAT-001).
+                    pattern: ^.+@sha256:[0-9a-f]{64}$
+                    type: string
+                  license:
+                    description: License is the adapter license identifier.
+                    type: string
+                  rank:
+                    description: Rank is the LoRA rank (r) used during training.
+                    format: int32
+                    type: integer
+                  targetModules:
+                    description: |-
+                      TargetModules lists the module names the adapter was applied to.
+                      Examples: ["q_proj", "v_proj"]
+                    items:
+                      type: string
+                    type: array
+                  taskType:
+                    description: |-
+                      TaskType describes the fine-tuning task.
+                      Examples: "CAUSAL_LM", "SEQ_2_SEQ_LM", "CLASSIFICATION"
+                    type: string
+                required:
+                - baseRef
+                type: object
+              mcpServer:
+                description: MCPServer contains MCP server configuration (Kind=MCPServer).
+                properties:
+                  maxConcurrency:
+                    description: MaxConcurrency is the maximum number of concurrent
+                      sessions.
+                    format: int32
+                    type: integer
+                  sandboxPolicy:
+                    description: |-
+                      SandboxPolicy declares the sandbox enforcement mode for the MCP server.
+                      Values: "strict", "standard", "permissive"
+                      Backed by attestation urn:mcp:sandbox-policy:v1.
+                    enum:
+                    - strict
+                    - standard
+                    - permissive
+                    type: string
+                  toolList:
+                    description: |-
+                      ToolList is the list of tool names exposed by this MCP server.
+                      Backed by attestation urn:mcp:tool-list:v1.
+                    items:
+                      type: string
+                    type: array
+                  transport:
+                    description: |-
+                      Transport declares the MCP transport protocol.
+                      Values: "stdio", "http+sse", "websocket"
+                    enum:
+                    - stdio
+                    - http+sse
+                    - websocket
+                    type: string
+                type: object
+              policy:
+                description: Policy links to a PolicyBundle artifact governing this
+                  artifact's usage.
+                properties:
+                  ref:
+                    description: Ref is a digest-pinned reference to the PolicyBundle
+                      artifact.
+                    pattern: ^.+@sha256:[0-9a-f]{64}$
+                    type: string
+                required:
+                - ref
+                type: object
+              policyBundle:
+                description: PolicyBundleSpec contains policy bundle configuration
+                  (Kind=PolicyBundle).
+                properties:
+                  allowedArtifactTypes:
+                    description: |-
+                      AllowedArtifactTypes lists the only artifact kinds permitted.
+                      Empty array [] is a deny-all sentinel (not the same as absent).
+                    items:
+                      description: |-
+                        ArtifactKind identifies the semantic type of an AIPACK artifact per AIPACK-SPEC v0.1.1 §3.3.
+                        Each kind maps to exactly one ArtifactFamily per §3.5 (normative).
+                      type: string
+                    type: array
+                  allowedFamilies:
+                    description: |-
+                      AllowedFamilies lists the only artifact families permitted.
+                      When non-empty, acts as an allowlist. Empty (absent) means allow-all.
+                    items:
+                      description: ArtifactFamily groups artifact kinds by semantic
+                        role per AIPACK-SPEC v0.1.1 §3.2.
+                      type: string
+                    type: array
+                  engine:
+                    description: |-
+                      Engine declares the policy evaluation engine.
+                      Examples: "opa", "cedar", "cue", "rego"
+                    type: string
+                  forbiddenArtifactTypes:
+                    description: ForbiddenArtifactTypes lists specific artifact kinds
+                      that are denied.
+                    items:
+                      description: |-
+                        ArtifactKind identifies the semantic type of an AIPACK artifact per AIPACK-SPEC v0.1.1 §3.3.
+                        Each kind maps to exactly one ArtifactFamily per §3.5 (normative).
+                      type: string
+                    type: array
+                  forbiddenFamilies:
+                    description: |-
+                      ForbiddenFamilies lists artifact families that are denied by this policy.
+                      Evaluated in order: forbiddenFamilies → allowedFamilies → forbiddenArtifactTypes → allowedArtifactTypes.
+                    items:
+                      description: ArtifactFamily groups artifact kinds by semantic
+                        role per AIPACK-SPEC v0.1.1 §3.2.
+                      type: string
+                    type: array
+                  maxRiskBand:
+                    description: |-
+                      MaxRiskBand is the maximum risk valence band permitted by this policy.
+                      Artifacts with RiskBand > MaxRiskBand are denied (AIPACK-RV-002).
+                    enum:
+                    - GREEN
+                    - YELLOW
+                    - ORANGE
+                    - RED
+                    type: string
+                  profileID:
+                    description: |-
+                      ProfileID is the predefined profile URN this bundle implements.
+                      Predefined profiles from §19.4:
+                        urn:aipack:profile:fedramp-moderate-ai:v1
+                        urn:aipack:profile:cmmc-l3-defense:v1
+                        urn:aipack:profile:eu-ai-act-high-risk:v1
+                        urn:aipack:profile:hipaa-clinical:v1
+                    type: string
+                  requiredPredicates:
+                    description: RequiredPredicates lists predicate URNs that composing
+                      artifacts must carry.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              promptTemplate:
+                description: PromptTemplate contains prompt template configuration
+                  (Kind=PromptTemplate).
+                properties:
+                  contentHash:
+                    description: |-
+                      ContentHash is the sha256 of the rendered template content.
+                      Backed by attestation urn:prompt:content-hash:v1.
+                    type: string
+                  format:
+                    description: |-
+                      Format describes the template format/engine.
+                      Examples: "jinja2", "handlebars", "f-string", "mustache"
+                    type: string
+                  jailbreakResistanceTested:
+                    description: |-
+                      JailbreakResistanceTested declares whether the template was tested for
+                      jailbreak resistance. Backed by attestation urn:prompt:jailbreak-resistance:v1.
+                    type: boolean
+                  role:
+                    description: |-
+                      Role declares where in the message sequence this template is applied.
+                      Values: "system", "user", "assistant"
+                    enum:
+                    - system
+                    - user
+                    - assistant
+                    type: string
+                  tokenBudget:
+                    description: TokenBudget is the maximum number of tokens this
+                      template consumes when rendered.
+                    format: int32
+                    type: integer
+                  variables:
+                    description: Variables lists the expected variable names interpolated
+                      in the template.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - role
+                type: object
+              retrievalIndex:
+                description: RetrievalIndex contains retrieval index configuration
+                  (Kind=RetrievalIndex).
+                properties:
+                  byteSize:
+                    description: ByteSize is the total compressed index size in bytes.
+                    format: int64
+                    type: integer
+                  documentCount:
+                    description: DocumentCount is the number of documents indexed.
+                    format: int64
+                    type: integer
+                  embeddingModel:
+                    description: |-
+                      EmbeddingModel is the OCI digest reference to the BaseModel used to generate embeddings.
+                      Required for slot compatibility validation (AIPACK-COMPAT-002).
+                    pattern: ^.+@sha256:[0-9a-f]{64}$
+                    type: string
+                  indexType:
+                    description: |-
+                      IndexType declares the vector index type.
+                      Examples: "hnsw", "ivfpq", "flat", "lsh"
+                    type: string
+                  language:
+                    description: Language declares the primary language(s) of the
+                      indexed content.
+                    items:
+                      type: string
+                    type: array
+                  piiScanPassed:
+                    description: |-
+                      PIIScanPassed declares whether a PII scan has been completed.
+                      Backed by attestation urn:retrieval:pii-scan:v1.
+                    type: boolean
+                  refreshCadence:
+                    description: |-
+                      RefreshCadence describes how frequently the index is refreshed.
+                      Examples: "daily", "weekly", "on-change", "manual"
+                    type: string
+                  vectorDimension:
+                    description: |-
+                      VectorDimension is the embedding vector dimension.
+                      Must match EmbeddingModel.EmbeddingDimension when resolvable.
+                    format: int32
+                    type: integer
+                required:
+                - embeddingModel
+                type: object
+              skill:
+                description: Skill contains skill artifact configuration (Kind=Skill).
+                properties:
+                  capabilityDeclaration:
+                    description: |-
+                      CapabilityDeclaration enumerates the capabilities this skill exposes.
+                      Each entry corresponds to a CapabilitySpec URN.
+                    items:
+                      type: string
+                    type: array
+                  entryPoint:
+                    description: EntryPoint is the entry point within the skill bundle.
+                    type: string
+                  maxConcurrency:
+                    description: MaxConcurrency is the maximum concurrent invocations
+                      the skill supports.
+                    format: int32
+                    type: integer
+                  runtime:
+                    description: |-
+                      Runtime declares the execution environment.
+                      Examples: "python3.12", "node20", "wasm", "native"
+                    type: string
+                  sandboxPolicy:
+                    description: |-
+                      SandboxPolicy declares the sandbox policy mode.
+                      Values: "strict", "standard", "permissive"
+                      Backed by attestation urn:skill:safety-review:v1.
+                    enum:
+                    - strict
+                    - standard
+                    - permissive
+                    type: string
+                  timeoutSeconds:
+                    description: TimeoutSeconds is the per-invocation timeout.
+                    format: int32
+                    type: integer
+                required:
+                - runtime
+                type: object
+              source:
+                description: Source is the OCI artifact location. Mandatory.
+                properties:
+                  mediaType:
+                    description: |-
+                      MediaType is the AIPACK manifest media type from §4.1.
+                      Example: application/vnd.ai.basemodel.v1+json
+                      When absent, it is inferred from Kind at validation time.
+                    type: string
+                  ref:
+                    description: |-
+                      Ref is a fully qualified OCI reference with sha256 digest.
+                      Format: <registry>/<repository>@sha256:<64-hex-chars>
+                      Tag-only references are rejected at webhook admission time.
+                    pattern: ^.+@sha256:[0-9a-f]{64}$
+                    type: string
+                required:
+                - ref
+                type: object
+              tool:
+                description: Tool contains tool artifact configuration (Kind=Tool).
+                properties:
+                  idempotent:
+                    description: Idempotent declares whether the tool is safe to retry.
+                    type: boolean
+                  maxResponseBytes:
+                    description: MaxResponseBytes is the maximum response payload
+                      size in bytes.
+                    format: int64
+                    type: integer
+                  protocol:
+                    description: |-
+                      Protocol declares the tool invocation protocol.
+                      Values: "function-call", "http", "grpc", "mcp"
+                    enum:
+                    - function-call
+                    - http
+                    - grpc
+                    - mcp
+                    type: string
+                  schema:
+                    description: |-
+                      Schema is the JSON Schema URI or inline schema for this tool's input/output.
+                      Backed by attestation urn:tool:schema-validation:v1.
+                    type: string
+                  sideEffects:
+                    description: |-
+                      SideEffects declares whether this tool has external side effects.
+                      Values: "none", "read-only", "write"
+                    enum:
+                    - none
+                    - read-only
+                    - write
+                    type: string
+                type: object
+              workflow:
+                description: Workflow contains workflow configuration (Kind=Workflow).
+                properties:
+                  deterministic:
+                    description: Deterministic declares whether this workflow produces
+                      deterministic outputs.
+                    type: boolean
+                  engine:
+                    description: |-
+                      Engine declares the workflow orchestration engine.
+                      Examples: "dapr", "temporal", "argo", "custom"
+                    type: string
+                  entrypoint:
+                    description: Entrypoint is the workflow entrypoint name or ID.
+                    type: string
+                  maxDurationSeconds:
+                    description: MaxDurationSeconds is the maximum allowed workflow
+                      run duration.
+                    format: int64
+                    type: integer
+                  stepCount:
+                    description: StepCount is the declared step count in the workflow
+                      graph.
+                    format: int32
+                    type: integer
+                type: object
+            required:
+            - kind
+            - source
+            type: object
+          status:
+            description: AIPackStatus reflects the observed state of an AIPack artifact.
+            properties:
+              conditions:
+                description: Conditions lists standard condition types for this artifact.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              deprecationPhase:
+                description: DeprecationPhase is the current deprecation lifecycle
+                  phase per §16.
+                type: string
+              family:
+                description: |-
+                  Family is the resolved ArtifactFamily as derived from Kind per §3.5.
+                  Set by the operator; read-only.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the generation observed by the
+                  operator.
+                format: int64
+                type: integer
+              riskBand:
+                description: RiskBand is the risk valence band derived from RiskScore.
+                type: string
+              riskScore:
+                description: |-
+                  RiskScore is the computed risk valence score (0–100) from §13.
+                  Set by the operator after all 13 signals are evaluated.
+                format: int32
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

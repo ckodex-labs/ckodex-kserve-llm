@@ -148,6 +148,16 @@ rules:
 - apiGroups:
   - serving.ckodex.com
   resources:
+  - aipacks
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - serving.ckodex.com
+  resources:
   - agents/finalizers
   - asrinferenceservices/finalizers
   - embeddinginferenceservices/finalizers
@@ -161,6 +171,7 @@ rules:
   - serving.ckodex.com
   resources:
   - agents/status
+  - aipacks/status
   - asrinferenceservices/status
   - coactorgroups/status
   - embeddinginferenceservices/status

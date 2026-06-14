@@ -1,0 +1,27 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: AIPack
+metadata:
+  name: llama3-agent-example
+  namespace: default
+  labels:
+    serving.ckodex.com/workload: llminferenceservice-sample
+spec:
+  kind: Agent
+  source:
+    ref: "registry.example.com/agents/llama3-assistant@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    mediaType: "application/vnd.ai.agent.v1+json"
+  composition:
+    baseModel:
+      ref: "registry.example.com/models/llama3-8b@sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      kind: BaseModel
+  attestation:
+    predicates:
+      - predicateURI: "slsa.dev/provenance/v1"
+        digest: "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        required: true
+      - predicateURI: "cyclonedx.org/bom"
+        digest: "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        required: true
+      - predicateURI: "urn:agent:composition:v1"
+        digest: "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        required: true

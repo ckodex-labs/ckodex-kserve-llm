@@ -1,0 +1,31 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: AIPack
+metadata:
+  name: llama3-8b-basemodel
+  namespace: default
+  labels:
+    serving.ckodex.com/workload: llminferenceservice-sample
+spec:
+  kind: BaseModel
+  source:
+    ref: "registry.example.com/models/llama3-8b@sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+    mediaType: "application/vnd.ai.basemodel.v1+json"
+  baseModel:
+    architecture: "llama3"
+    parameterCount: 8.0
+    contextLength: 131072
+    quantization: "bf16"
+    license: "llama3"
+    trainingDataCutoff: "2023-12-01"
+    safetyClassification: "instruction-tuned"
+  attestation:
+    predicates:
+      - predicateURI: "slsa.dev/provenance/v1"
+        digest: "sha256:0000000000000000000000000000000000000000000000000000000000000001"
+        required: true
+      - predicateURI: "cyclonedx.org/bom"
+        digest: "sha256:0000000000000000000000000000000000000000000000000000000000000002"
+        required: true
+      - predicateURI: "urn:aibom:spec:v1.5"
+        digest: "sha256:0000000000000000000000000000000000000000000000000000000000000003"
+        required: true

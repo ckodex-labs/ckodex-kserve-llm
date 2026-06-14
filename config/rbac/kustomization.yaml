@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# RBAC manifests for the ckodex-kserve-llm-operator.
+# Apply with: kubectl apply -k config/rbac/
+# role.yaml defines the operator ClusterRole (manager-role).
+# tenant-role.yaml defines the per-tenant Role with namespace-scoped permissions.
+# Note: ClusterRoleBinding and RoleBinding are managed by the Helm chart (deploy/helm/).
+resources:
+  - role.yaml
+  - tenant-role.yaml

@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# All CustomResourceDefinitions for the ckodex-kserve-llm-operator.
+# Apply with: kubectl apply -k config/crd/
+# CRDs must be applied before the operator Deployment.
+resources:
+  - serving.ckodex.com_agents.yaml
+  - serving.ckodex.com_aipacks.yaml
+  - serving.ckodex.com_asrinferenceservices.yaml
+  - serving.ckodex.com_coactorgroups.yaml
+  - serving.ckodex.com_embeddinginferenceservices.yaml
+  - serving.ckodex.com_endpointpickerconfigs.yaml
+  - serving.ckodex.com_evalprofiles.yaml
+  - serving.ckodex.com_inferenceactors.yaml
+  - serving.ckodex.com_inferencesessions.yaml
+  - serving.ckodex.com_llminferenceserviceconfigs.yaml
+  - serving.ckodex.com_llminferenceservices.yaml
+  - serving.ckodex.com_llmloraadapters.yaml
+  - serving.ckodex.com_localmodelcaches.yaml
+  - serving.ckodex.com_modelonboardings.yaml
+  - serving.ckodex.com_multimodalinferenceservices.yaml
+  - serving.ckodex.com_skillregistries.yaml

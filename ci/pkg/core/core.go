@@ -23,6 +23,11 @@ const (
 	GolangciLintImage = "golangci/golangci-lint:" + GolangciLintVer
 
 	// Coverage thresholds.
+	// CoverageController is intentionally below the project minimum (80%).
+	// The controller reconcile loop requires an envtest Kubernetes API server to
+	// exercise its core paths; only the unit-testable sub-functions (deployment
+	// builders, cleanup, status helpers extracted to sub-packages) can be covered
+	// without envtest. Integration coverage is validated in CI via `make test-e2e`.
 	CoverageController    = 27
 	CoverageGateway       = 80
 	CoverageStorage       = 80

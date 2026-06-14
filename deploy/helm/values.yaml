@@ -70,13 +70,12 @@ leaderElection:
 # Update digests by running: crane digest <image>:<tag>
 # Verify signatures: cosign verify <image>@<digest> --certificate-oidc-issuer=https://token.actions.githubusercontent.com
 vllm:
-  # vllm/vllm-openai:v0.19.0 — dedicated Gemma 4 image also available: vllm/vllm-openai:gemma4
-  defaultImage: "vllm/vllm-openai:v0.20.0"
+  # vllm/vllm-openai:v0.23.0 — dedicated Gemma 4 image also available: vllm/vllm-openai:gemma4
+  defaultImage: "vllm/vllm-openai:v0.23.0"
   gemma4Image: "vllm/vllm-openai:gemma4"
-  cpuImage: "vllm/vllm-openai-cpu:v0.20.0"
-  rocmImage: "vllm/vllm-openai:v0.20.0-rocm"
-  # kserve/storage-initializer:v0.14.1
-  storageInitializerImage: "kserve/storage-initializer:v0.14.1"
+  cpuImage: "vllm/vllm-openai-cpu:v0.23.0"
+  rocmImage: "vllm/vllm-openai:v0.23.0-rocm"
+  storageInitializerImage: "kserve/storage-initializer:v0.19.0-rc0"
 
   # v0.19.0 features
   cpuKvOffloading:
@@ -126,10 +125,10 @@ scheduler:
 spire:
   enabled: false
   server:
-    image: "ghcr.io/spiffe/spire-server:1.14.0"
+    image: "ghcr.io/spiffe/spire-server:1.14.5"
     replicas: 1
   agent:
-    image: "ghcr.io/spiffe/spire-agent:1.14.0"
+    image: "ghcr.io/spiffe/spire-agent:1.14.5"
   trustDomain: "ckodex.com"
 
 # Gateway API

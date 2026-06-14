@@ -7,7 +7,7 @@ These images power the primary data plane for LLM and Embedding workloads.
 
 | Component | Version | Image Reference | Use Case |
 | :--- | :--- | :--- | :--- |
-| **vLLM** | `v0.19.0` | `vllm/vllm-openai:v0.19.0` | Optimized standard throughput. |
+| **vLLM** | `v0.23.0` | `vllm/vllm-openai:v0.23.0` | Optimized standard throughput. |
 | **vLLM (Gemma 4)** | `gemma4` | `vllm/vllm-openai:gemma4` | Optimized for TurboQuant & Gemma 4. |
 | **Quant-CPP** | `v0.1.0` | `ckodex/quant-cpp:v0.1.0` | Apple Silicon & low-memory GGUF. |
 
@@ -16,7 +16,7 @@ Components responsible for model distribution and observability.
 
 | Component | Version | Image/Resource | Use Case |
 | :--- | :--- | :--- | :--- |
-| **KServe Storage Init** | `v0.17.0` | `kserve/storage-initializer:v0.17.0` | Standard S3/OCI model download. |
+| **KServe Storage Init** | `v0.19.0-rc0` | `kserve/storage-initializer:v0.19.0-rc0` | Standard S3/OCI model download. |
 | **CKodex Storage Init** | `v0.1.0` | `ckodex/storage-initializer:v0.1.0` | Optimized swfs:// and hf:// downloads. |
 | **Vector Sidecar** | `0.54.0` | `timberio/vector:0.54.0-distroless-libc` | OIS Signal translation & OTel routing. |
 | **SeaweedFS Client** | `v3.x` | Go SDK (integrated) | High-speed model weight distribution. |

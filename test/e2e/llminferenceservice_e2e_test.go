@@ -85,7 +85,7 @@ func newGPT2Service(name string) *servingv1alpha2.LLMInferenceService {
 					Containers: []corev1.Container{
 						{
 							Name:  "vllm",
-							Image: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.20.0",
+							Image: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.23.0",
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    mustQuantity(cpuLimit),
@@ -235,7 +235,7 @@ func TestE2E_LLMInferenceService_StatusConditions(t *testing.T) {
 					Containers: []corev1.Container{
 						{
 							Name:  "vllm",
-							Image: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.20.0",
+							Image: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.23.0",
 						},
 					},
 				},

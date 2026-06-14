@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: vllm
-        image: public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.20.0
+        image: public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.23.0
         resources:
           requests:
             cpu: "2"

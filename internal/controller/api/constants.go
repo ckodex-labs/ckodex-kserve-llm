@@ -3,9 +3,9 @@ package api
 const (
 	FinalizerName = "serving.ckodex.com/finalizer"
 
-	VLLMImage                     = "vllm/vllm-openai:v0.20.0"
+	VLLMImage                     = "vllm/vllm-openai:v0.23.0"
 	QuantCppImage                 = "ckodex/quant-cpp:v0.1.0"
-	StorageInitializerImage       = "kserve/storage-initializer:v0.17.0"
+	StorageInitializerImage       = "kserve/storage-initializer:v0.19.0-rc0"
 	CKodexStorageInitializerImage = "ckodex/storage-initializer:v0.1.0"
 	HFMountCSIDriver              = "hf.csi.huggingface.co"
 

@@ -30,6 +30,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/evidence"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
 )
@@ -101,6 +102,9 @@ func setupReconciler(cl client.Client, s *runtime.Scheme) *LLMInferenceServiceRe
 		PDBReconciler: &reconciler.PDBReconciler{
 			Client: cl,
 			Scheme: s,
+		},
+		GovernanceReconciler: &evidence.GovernanceReconciler{
+			Client: cl,
 		},
 	}
 }
@@ -458,7 +462,7 @@ func TestContainersEqual_DifferentImages(t *testing.T) {
 
 // TestPtrToHostPath returns a valid HostPathType pointer.
 func TestPtrToHostPath(t *testing.T) {
-	hp := ptrToHostPath(corev1.HostPathDirectory)
+	hp := deployment.PtrToHostPath(corev1.HostPathDirectory)
 	require.NotNil(t, hp)
 	assert.Equal(t, corev1.HostPathDirectory, *hp)
 }

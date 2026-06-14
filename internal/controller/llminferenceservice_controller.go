@@ -8,8 +8,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
-	"sync"
 	"time"
 )
 
@@ -17,9 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,12 +35,12 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/evidence"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/gateway"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/governance"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
-	"github.com/ckodex-labs/kserve-llm-operator/internal/provenance"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/security"
 )
 
@@ -83,16 +79,13 @@ type LLMInferenceServiceReconciler struct {
 	LocalCosignKeyPath string
 
 	// Modular sub-reconcilers
-	DeploymentBuilder *deployment.Builder
-	StatusReconciler  *status.Reconciler
-	CleanupReconciler *cleanup.Reconciler
-	ServiceReconciler *reconciler.ServiceReconciler
-	PDBReconciler     *reconciler.PDBReconciler
-
-	// Hardware detection cache — avoids listing all nodes on every reconcile.
-	hardwareCacheMu   sync.RWMutex
-	cachedHardware    deployment.HardwareType
-	hardwareCacheTime time.Time
+	DeploymentBuilder   *deployment.Builder
+	StatusReconciler    *status.Reconciler
+	CleanupReconciler   *cleanup.Reconciler
+	ServiceReconciler   *reconciler.ServiceReconciler
+	PDBReconciler       *reconciler.PDBReconciler
+	GovernanceReconciler *evidence.GovernanceReconciler
+	HardwareCache       deployment.HardwareCache
 
 	// M3 Vision: Real-time Metrics Query
 	Metrics observability.MetricsQuerier
@@ -204,7 +197,7 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	// 6. Reconcile Vector ConfigMap (OIS v0.1)
-	if err := r.reconcileVectorConfig(ctx, &llmSvc); err != nil {
+	if err := observability.ReconcileVectorConfigMap(ctx, r.Client, r.Scheme, &llmSvc, r.OTEL_Endpoint); err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconcile vector: %w", err)
 	}
 
@@ -222,26 +215,38 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	// 8. Reconcile ToolSurface Isolation (Istio Sidecar, mTLS, ServiceEntries)
+	// 8. Reconcile ToolSurface Isolation (Istio Sidecar, mTLS, ServiceEntries, Egress)
 	if r.ToolSurface != nil {
 		if err := r.ToolSurface.ReconcileToolSurface(ctx, &llmSvc, activeLoras); err != nil {
-			return ctrl.Result{}, fmt.Errorf("reconcile tool surface isolation: %w", err)
+			return ctrl.Result{}, fmt.Errorf("reconcile tool surface: %w", err)
 		}
 	}
 
-	// 7c. Reconcile ToolSurface (Istio Egress isolation)
-	if r.ToolSurface != nil {
-		if err := r.ToolSurface.ReconcileToolSurface(ctx, &llmSvc, activeLoras); err != nil {
-			return ctrl.Result{}, fmt.Errorf("reconcile tool surface istio: %w", err)
+	// List AIPacks associated with this LLMInferenceService via the workload label.
+	var aipackList servingv1alpha2.AIPackList
+	activePacks := []servingv1alpha2.AIPack{}
+	if err := r.List(ctx, &aipackList, client.InNamespace(llmSvc.Namespace)); err != nil {
+		logger.Error(err, "failed to list AIPacks; governance reconcile will run with empty pack list")
+	} else {
+		for _, pack := range aipackList.Items {
+			if pack.Labels["serving.ckodex.com/workload"] == llmSvc.Name {
+				activePacks = append(activePacks, pack)
+			}
 		}
 	}
 
-	// 7d. Aggregate Composite Trust Plan
+	// Aggregate Composite Trust Plan
 	llmSvc.Status.StatePlanes = governance.AggregateStatePlanes(&llmSvc, activeLoras)
 
-	// 7e. Reconcile Governance Evidence (for OSCAL/Lula validation)
-	if err := r.reconcileGovernanceEvidence(ctx, &llmSvc, activeLoras); err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconcile governance evidence: %w", err)
+	// Reconcile Governance Evidence (for OSCAL/Lula validation)
+	if r.GovernanceReconciler != nil {
+		if err := r.GovernanceReconciler.Reconcile(ctx, &llmSvc, activeLoras); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile governance evidence: %w", err)
+		}
+		// Best-effort: AIPack governance failures are non-blocking; the next reconcile will retry.
+		if gErr := r.GovernanceReconciler.ReconcileAIPacks(ctx, &llmSvc, activePacks); gErr != nil {
+			logger.Error(gErr, "aipack governance reconcile error (non-blocking)")
+		}
 	}
 
 	// 8. Reconcile Vault Agent sidecar annotations
@@ -288,7 +293,7 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 
 	// 13. Update status
 	isOptimized := GetWellKnownConfig(llmSvc.Spec.Model.URI) != nil
-	hwType := r.getCachedHardware(ctx)
+	hwType := r.HardwareCache.Get(ctx, r.Client, r.APIReader)
 	llmSvc.Status.DetectedHardware = string(hwType)
 	// 5. Update Status (Consolidated)
 	// Fetch Adaptive Metrics if available
@@ -349,7 +354,7 @@ func (r *LLMInferenceServiceReconciler) reconcileDeployment(ctx context.Context,
 		replicas = *llmSvc.Spec.Replicas
 	}
 
-	hwType := r.getCachedHardware(ctx)
+	hwType := r.HardwareCache.Get(ctx, r.Client, r.APIReader)
 	desired := r.DeploymentBuilder.Build(ctx, llmSvc, replicas, hwType, loras)
 
 	// Set owner reference for garbage collection
@@ -377,57 +382,7 @@ func (r *LLMInferenceServiceReconciler) reconcileDeployment(ctx context.Context,
 		return fmt.Errorf("get deployment: %w", err)
 	}
 
-	// Update if spec changed
-	// Update only fields we manage
-	changed := false
-	if existing.Spec.Replicas == nil || (llmSvc.Spec.Scaling == nil && *existing.Spec.Replicas != replicas) {
-		existing.Spec.Replicas = &replicas
-		changed = true
-	}
-
-	// Sync Deployment-level labels and annotations (cost tags + SLO)
-	if !equality.Semantic.DeepEqual(existing.Labels, desired.Labels) {
-		existing.Labels = desired.Labels
-		changed = true
-	}
-	if !equality.Semantic.DeepEqual(existing.Annotations, desired.Annotations) {
-		existing.Annotations = desired.Annotations
-		changed = true
-	}
-
-	// Compare Pod Template Spec (Labels, Annotations, and PodSpec)
-	if !equality.Semantic.DeepEqual(existing.Spec.Template.Labels, desired.Spec.Template.Labels) {
-		existing.Spec.Template.Labels = desired.Spec.Template.Labels
-		changed = true
-	}
-	if !equality.Semantic.DeepEqual(existing.Spec.Template.Annotations, desired.Spec.Template.Annotations) {
-		existing.Spec.Template.Annotations = desired.Spec.Template.Annotations
-		changed = true
-	}
-
-	// Compare PodSpec (Containers, Volumes, Affinity, etc.)
-	if !reconciler.ContainersEqual(existing.Spec.Template.Spec.Containers, desired.Spec.Template.Spec.Containers) {
-		logger.Info("Deployment containers changed, updating", "name", existing.Name)
-		existing.Spec.Template.Spec.Containers = desired.Spec.Template.Spec.Containers
-		changed = true
-	}
-	if !reconciler.ContainersEqual(existing.Spec.Template.Spec.InitContainers, desired.Spec.Template.Spec.InitContainers) {
-		logger.Info("Deployment init containers changed, updating", "name", existing.Name)
-		existing.Spec.Template.Spec.InitContainers = desired.Spec.Template.Spec.InitContainers
-		changed = true
-	}
-	if !reconciler.VolumesEqual(existing.Spec.Template.Spec.Volumes, desired.Spec.Template.Spec.Volumes) {
-		logger.Info("Deployment volumes changed, updating", "name", existing.Name)
-		existing.Spec.Template.Spec.Volumes = desired.Spec.Template.Spec.Volumes
-		changed = true
-	}
-	if !equality.Semantic.DeepEqual(existing.Spec.Template.Spec.Affinity, desired.Spec.Template.Spec.Affinity) {
-		logger.Info("Deployment affinity changed, updating", "name", existing.Name)
-		existing.Spec.Template.Spec.Affinity = desired.Spec.Template.Spec.Affinity
-		changed = true
-	}
-
-	if changed {
+	if reconciler.SyncDeployment(ctx, &existing, desired, replicas, llmSvc.Spec.Scaling != nil) {
 		logger.Info("updating Deployment", "name", desired.Name)
 		if err := r.Update(ctx, &existing); err != nil {
 			return fmt.Errorf("update deployment: %w", err)
@@ -453,191 +408,14 @@ func (r *LLMInferenceServiceReconciler) cleanupResources(ctx context.Context, ll
 
 // buildDeployment is a wrapper for tests.
 func (r *LLMInferenceServiceReconciler) buildDeployment(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32) *appsv1.Deployment {
-	hwType := r.getCachedHardware(ctx)
+	hwType := r.HardwareCache.Get(ctx, r.Client, r.APIReader)
 	return r.DeploymentBuilder.Build(ctx, llmSvc, replicas, hwType, nil)
 }
 
 // buildStorageInitializer is a wrapper for tests.
 func (r *LLMInferenceServiceReconciler) buildStorageInitializer(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, lmc *servingv1alpha2.LocalModelCache) *corev1.Container {
-	hwType := r.getCachedHardware(ctx)
+	hwType := r.HardwareCache.Get(ctx, r.Client, r.APIReader)
 	return r.DeploymentBuilder.BuildStorageInitializer(ctx, llmSvc, hwType, lmc)
-}
-
-func (r *LLMInferenceServiceReconciler) reconcileGovernanceEvidence(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, activeLoras []servingv1alpha2.LLMLoraAdapter) error {
-	logger := log.FromContext(ctx)
-
-	// AC-4: Information Flow Enforcement
-	ac4 := metav1.Condition{
-		Type:               "Compliance-AC-4",
-		Status:             metav1.ConditionTrue,
-		Reason:             "NetworkPolicyEnforced",
-		Message:            "Information flow enforced via ToolSurface NetworkPolicies",
-		LastTransitionTime: metav1.Now(),
-	}
-
-	// AU-2: Audit Events (Persistence check)
-	au2 := metav1.Condition{
-		Type:               "Compliance-AU-2",
-		Status:             metav1.ConditionTrue,
-		Reason:             "AuditPersistent",
-		Message:            "Audit logs are written to persistent storage at /var/log/ckodex/audit.jsonl",
-		LastTransitionTime: metav1.Now(),
-	}
-
-	// SI-7: Software and Information Integrity (Composite State machine)
-	state := governance.AggregateStatePlanes(llmSvc, activeLoras)
-	si7 := metav1.Condition{
-		Type:               "Compliance-SI-7",
-		Status:             metav1.ConditionFalse,
-		Reason:             "IntegrityUnverified",
-		Message:            fmt.Sprintf("Lifecycle: %s, Trust: %s, Risk: %s", state.Lifecycle, state.Trust, state.Risk),
-		LastTransitionTime: metav1.Now(),
-	}
-
-	if state.Trust == "verified" || state.Trust == "trusted" {
-		si7.Status = metav1.ConditionTrue
-		si7.Reason = "IntegrityVerified"
-	} else if state.Lifecycle == "quarantined" || state.Trust == "denied" {
-		si7.Status = metav1.ConditionFalse
-		si7.Reason = "SecurityBreach"
-	}
-
-	// SI-4: Information System Monitoring (OIS v0.1)
-	si4 := metav1.Condition{
-		Type:               "Compliance-SI-4",
-		Status:             metav1.ConditionTrue,
-		Reason:             "OISSignalsActive",
-		Message:            "Inference telemetry using Open Inference Signals v0.1",
-		LastTransitionTime: metav1.Now(),
-	}
-
-	sr2 := metav1.Condition{
-		Type:               "Compliance-SR-2",
-		Status:             metav1.ConditionFalse,
-		Reason:             "VerificationPending",
-		Message:            "No cryptographic provenance verification result has been recorded for this workload",
-		LastTransitionTime: metav1.Now(),
-	}
-
-	// If any LoRA has complex ToolSurface, we might need manual review or advanced telemetry.
-	for _, lora := range activeLoras {
-		if lora.Spec.ToolSurface != nil && len(lora.Spec.ToolSurface.AllowedAPIs) > 0 {
-			// If Istio is enabled, we move from Pending to Verified
-			ac4.Status = metav1.ConditionTrue
-			ac4.Reason = "DPIVerified"
-			ac4.Message = "FQDN-based ToolSurface verified via Istio ServiceEntry/VirtualService DPI"
-			break
-		}
-	}
-
-	totalArtifacts := 0
-	verifiedArtifacts := 0
-	if runtimeVerifiableModelURI(llmSvc.Spec.Model.URI) {
-		totalArtifacts++
-		verified, err := r.baseModelVerificationRecorded(ctx, llmSvc)
-		if err != nil {
-			return fmt.Errorf("inspect base model verification: %w", err)
-		}
-		if verified {
-			verifiedArtifacts++
-		}
-	}
-	for _, lora := range activeLoras {
-		totalArtifacts++
-		if governance.HasVerifiedSupplyChainEvidence(&lora) {
-			verifiedArtifacts++
-		}
-	}
-
-	if totalArtifacts > 0 && verifiedArtifacts == totalArtifacts {
-		sr2.Status = metav1.ConditionTrue
-		sr2.Reason = "ProvenanceVerified"
-		if r.AirGappedMode {
-			sr2.Message = "All active artifacts recorded offline provenance verification with a configured local key path"
-		} else {
-			sr2.Message = "All active artifacts recorded cryptographic provenance verification metadata"
-		}
-	} else if r.AirGappedMode && r.LocalCosignKeyPath == "" {
-		sr2.Reason = "OfflineKeyMissing"
-		sr2.Message = "Air-gapped mode is enabled, but CKODEX_LOCAL_COSIGN_KEY_PATH is not configured"
-	} else if r.AirGappedMode {
-		sr2.Reason = "OfflineVerificationPending"
-		sr2.Message = fmt.Sprintf("Offline key path %q is configured, but the controller has not recorded cryptographic verification for all active artifacts", r.LocalCosignKeyPath)
-	} else if totalArtifacts == 0 {
-		sr2.Reason = "NoVerifiableArtifacts"
-		sr2.Message = "No active artifact evidence bundles are present to prove runtime supply-chain verification"
-	}
-
-	meta.SetStatusCondition(&llmSvc.Status.Conditions, ac4)
-	meta.SetStatusCondition(&llmSvc.Status.Conditions, au2)
-	meta.SetStatusCondition(&llmSvc.Status.Conditions, si7)
-	meta.SetStatusCondition(&llmSvc.Status.Conditions, si4)
-	meta.SetStatusCondition(&llmSvc.Status.Conditions, sr2)
-
-	logger.Info("Updated governance evidence for Lula validation", "controls", "AC-4, AU-2, SI-7, SI-4, SR-2")
-	return nil
-}
-
-func runtimeVerifiableModelURI(uri string) bool {
-	return strings.HasPrefix(uri, "oci://") || strings.HasPrefix(uri, "ocis://")
-}
-
-func (r *LLMInferenceServiceReconciler) baseModelVerificationRecorded(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) (bool, error) {
-	var pods corev1.PodList
-	if err := r.List(ctx, &pods,
-		client.InNamespace(llmSvc.Namespace),
-		client.MatchingLabels{
-			"app.kubernetes.io/name":     "llminferenceservice",
-			"app.kubernetes.io/instance": llmSvc.Name,
-		},
-	); err != nil {
-		return false, err
-	}
-
-	readyPods := 0
-	for _, pod := range pods.Items {
-		if !isReadyPod(&pod) {
-			continue
-		}
-		readyPods++
-		record, err := readInitContainerVerificationRecord(&pod, "storage-initializer")
-		if err != nil {
-			return false, err
-		}
-		if record == nil || !record.Verified() {
-			return false, nil
-		}
-	}
-
-	return readyPods > 0, nil
-}
-
-func readInitContainerVerificationRecord(pod *corev1.Pod, containerName string) (*provenance.RuntimeVerificationRecord, error) {
-	for _, status := range pod.Status.InitContainerStatuses {
-		if status.Name != containerName || status.State.Terminated == nil {
-			continue
-		}
-		message := strings.TrimSpace(status.State.Terminated.Message)
-		if message == "" {
-			return nil, nil
-		}
-		record, err := provenance.ParseRuntimeVerificationRecord(message)
-		if err != nil {
-			return nil, fmt.Errorf("parse init-container verification record from pod %s: %w", pod.Name, err)
-		}
-		return record, nil
-	}
-
-	return nil, nil
-}
-
-func isReadyPod(pod *corev1.Pod) bool {
-	for _, condition := range pod.Status.Conditions {
-		if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
-			return true
-		}
-	}
-	return false
 }
 
 func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -667,6 +445,11 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	r.PDBReconciler = &reconciler.PDBReconciler{
 		Client: mgr.GetClient(),
 		Scheme: r.Scheme,
+	}
+	r.GovernanceReconciler = &evidence.GovernanceReconciler{
+		Client:             mgr.GetClient(),
+		AirGappedMode:      r.AirGappedMode,
+		LocalCosignKeyPath: r.LocalCosignKeyPath,
 	}
 	r.Recorder = mgr.GetEventRecorderFor("ckodex-llm-operator")
 
@@ -733,93 +516,3 @@ func (r *LLMInferenceServiceReconciler) mapLocalModelCacheToInferenceServices(ct
 	return results
 }
 
-const hardwareCacheTTL = 5 * time.Minute
-
-// getCachedHardware returns the detected hardware type, refreshing the cache
-// if it's older than hardwareCacheTTL. This avoids listing all nodes on every
-// reconcile — at scale the node List is an unbounded API call.
-func (r *LLMInferenceServiceReconciler) getCachedHardware(ctx context.Context) deployment.HardwareType {
-	r.hardwareCacheMu.RLock()
-	if time.Since(r.hardwareCacheTime) < hardwareCacheTTL {
-		hw := r.cachedHardware
-		r.hardwareCacheMu.RUnlock()
-		return hw
-	}
-	r.hardwareCacheMu.RUnlock()
-
-	r.hardwareCacheMu.Lock()
-	defer r.hardwareCacheMu.Unlock()
-
-	// Double-check after acquiring write lock (another goroutine may have refreshed).
-	if time.Since(r.hardwareCacheTime) < hardwareCacheTTL {
-		return r.cachedHardware
-	}
-
-	var nodeList corev1.NodeList
-	reader := r.APIReader
-	if reader == nil {
-		reader = r.Client
-	}
-	if err := reader.List(ctx, &nodeList); err != nil {
-		log.FromContext(ctx).Error(err, "unable to list nodes for hardware detection, using cached value")
-		return r.cachedHardware
-	}
-
-	r.cachedHardware = deployment.DetectHardware(nodeList.Items)
-	r.hardwareCacheTime = time.Now()
-	return r.cachedHardware
-}
-
-func ptrToHostPath(hp corev1.HostPathType) *corev1.HostPathType {
-	return &hp
-}
-
-func (r *LLMInferenceServiceReconciler) reconcileVectorConfig(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
-	// 1. Determine if Vector is needed (Contract: User Spec > Operator Config)
-	sinkType := "stdout"
-	endpoint := r.OTEL_Endpoint
-
-	if r.OTEL_Endpoint != "" {
-		sinkType = "otlp"
-	}
-
-	if llmSvc.Spec.Observability != nil && llmSvc.Spec.Observability.Sink != nil {
-		sinkType = llmSvc.Spec.Observability.Sink.Type
-		if llmSvc.Spec.Observability.Sink.Endpoint != "" {
-			endpoint = llmSvc.Spec.Observability.Sink.Endpoint
-		}
-	}
-
-	// If sink is stdout and no OTel endpoint, we don't need a ConfigMap (console sink is default)
-	if sinkType == "stdout" && endpoint == "" {
-		return nil
-	}
-
-	// 2. Build ConfigMap
-	cfg := observability.VectorConfig{
-		Enabled:      true,
-		SinkType:     sinkType,
-		SinkEndpoint: endpoint,
-	}
-	cm := observability.BuildVectorConfigMap(llmSvc.Name, llmSvc.Namespace, llmSvc.Spec.Model.Name, cfg)
-	if err := controllerutil.SetControllerReference(llmSvc, cm, r.Scheme); err != nil {
-		return err
-	}
-
-	// 3. Create or Update
-	var existing corev1.ConfigMap
-	err := r.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, &existing)
-	if apierrors.IsNotFound(err) {
-		return r.Create(ctx, cm)
-	}
-	if err != nil {
-		return err
-	}
-
-	if !equality.Semantic.DeepEqual(existing.Data, cm.Data) {
-		existing.Data = cm.Data
-		return r.Update(ctx, &existing)
-	}
-
-	return nil
-}

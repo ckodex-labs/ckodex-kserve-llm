@@ -383,6 +383,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Set up AIPack controller — resolves artifact family and manages the Ready condition.
+	if err := (&controller.AIPackReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "AIPack")
+		os.Exit(1)
+	}
+
 	// Set up MultimodalInferenceService controller — vision-language and image-generation models.
 	if err := (&controller.MultimodalInferenceServiceReconciler{
 		Client: mgr.GetClient(),

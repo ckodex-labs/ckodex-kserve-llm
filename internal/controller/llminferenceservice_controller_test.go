@@ -30,6 +30,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/evidence"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/provenance"
@@ -422,13 +423,13 @@ func TestBuildDeployment_HFMountWithSecret(t *testing.T) {
 }
 
 func TestReconcileGovernanceEvidence_SR2FailsClosedWithoutVerifiedArtifacts(t *testing.T) {
-	r := &LLMInferenceServiceReconciler{
+	gr := &evidence.GovernanceReconciler{
 		AirGappedMode:      true,
 		LocalCosignKeyPath: "/etc/cosign/cosign.pub",
 	}
 	llmSvc := baseLLMInferenceService()
 
-	err := r.reconcileGovernanceEvidence(context.Background(), llmSvc, nil)
+	err := gr.Reconcile(context.Background(), llmSvc, nil)
 	require.NoError(t, err)
 
 	sr2 := meta.FindStatusCondition(llmSvc.Status.Conditions, "Compliance-SR-2")
@@ -490,11 +491,11 @@ func TestReconcileGovernanceEvidence_SR2PassesWithVerifiedBaseModel(t *testing.T
 	scheme := runtime.NewScheme()
 	require.NoError(t, servingv1alpha2.AddToScheme(scheme))
 	require.NoError(t, corev1.AddToScheme(scheme))
-	r := &LLMInferenceServiceReconciler{
+	gr := &evidence.GovernanceReconciler{
 		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build(),
 	}
 
-	err = r.reconcileGovernanceEvidence(context.Background(), svc, nil)
+	err = gr.Reconcile(context.Background(), svc, nil)
 	require.NoError(t, err)
 
 	sr2 := meta.FindStatusCondition(svc.Status.Conditions, "Compliance-SR-2")
@@ -504,7 +505,7 @@ func TestReconcileGovernanceEvidence_SR2PassesWithVerifiedBaseModel(t *testing.T
 }
 
 func TestReconcileGovernanceEvidence_SR2PassesWithVerifiedArtifacts(t *testing.T) {
-	r := &LLMInferenceServiceReconciler{}
+	gr := &evidence.GovernanceReconciler{}
 	llmSvc := baseLLMInferenceService()
 	now := metav1.Now()
 	activeLoras := []servingv1alpha2.LLMLoraAdapter{
@@ -525,7 +526,7 @@ func TestReconcileGovernanceEvidence_SR2PassesWithVerifiedArtifacts(t *testing.T
 		},
 	}
 
-	err := r.reconcileGovernanceEvidence(context.Background(), llmSvc, activeLoras)
+	err := gr.Reconcile(context.Background(), llmSvc, activeLoras)
 	require.NoError(t, err)
 
 	sr2 := meta.FindStatusCondition(llmSvc.Status.Conditions, "Compliance-SR-2")

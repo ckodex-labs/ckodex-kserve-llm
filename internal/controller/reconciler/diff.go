@@ -1,9 +1,67 @@
 package reconciler
 
 import (
+	"context"
+
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// SyncDeployment reconciles managed fields from desired into existing, returning true
+// if any field changed. scalingManaged should be true when an HPA or KEDA resource
+// owns replica count (in which case the controller skips the replica comparison).
+func SyncDeployment(ctx context.Context, existing, desired *appsv1.Deployment, replicas int32, scalingManaged bool) bool {
+	logger := log.FromContext(ctx)
+	changed := false
+
+	if !scalingManaged {
+		if existing.Spec.Replicas == nil || *existing.Spec.Replicas != replicas {
+			existing.Spec.Replicas = &replicas
+			changed = true
+		}
+	}
+
+	if !equality.Semantic.DeepEqual(existing.Labels, desired.Labels) {
+		existing.Labels = desired.Labels
+		changed = true
+	}
+	if !equality.Semantic.DeepEqual(existing.Annotations, desired.Annotations) {
+		existing.Annotations = desired.Annotations
+		changed = true
+	}
+	if !equality.Semantic.DeepEqual(existing.Spec.Template.Labels, desired.Spec.Template.Labels) {
+		existing.Spec.Template.Labels = desired.Spec.Template.Labels
+		changed = true
+	}
+	if !equality.Semantic.DeepEqual(existing.Spec.Template.Annotations, desired.Spec.Template.Annotations) {
+		existing.Spec.Template.Annotations = desired.Spec.Template.Annotations
+		changed = true
+	}
+	if !ContainersEqual(existing.Spec.Template.Spec.Containers, desired.Spec.Template.Spec.Containers) {
+		logger.Info("Deployment containers changed, updating", "name", existing.Name)
+		existing.Spec.Template.Spec.Containers = desired.Spec.Template.Spec.Containers
+		changed = true
+	}
+	if !ContainersEqual(existing.Spec.Template.Spec.InitContainers, desired.Spec.Template.Spec.InitContainers) {
+		logger.Info("Deployment init containers changed, updating", "name", existing.Name)
+		existing.Spec.Template.Spec.InitContainers = desired.Spec.Template.Spec.InitContainers
+		changed = true
+	}
+	if !VolumesEqual(existing.Spec.Template.Spec.Volumes, desired.Spec.Template.Spec.Volumes) {
+		logger.Info("Deployment volumes changed, updating", "name", existing.Name)
+		existing.Spec.Template.Spec.Volumes = desired.Spec.Template.Spec.Volumes
+		changed = true
+	}
+	if !equality.Semantic.DeepEqual(existing.Spec.Template.Spec.Affinity, desired.Spec.Template.Spec.Affinity) {
+		logger.Info("Deployment affinity changed, updating", "name", existing.Name)
+		existing.Spec.Template.Spec.Affinity = desired.Spec.Template.Spec.Affinity
+		changed = true
+	}
+
+	return changed
+}
 
 // ContainersEqual compares two slices of containers looking only at managed fields.
 // It performs order-insensitive environment variable comparison.

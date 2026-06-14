@@ -32,16 +32,15 @@ Checkout
 → Detect console (skipped: gitlink without .gitmodules)
 → Setup Helm
 → Install GoReleaser v2.15.4
-→ Run Dagger Pipeline (go run ./ci/main.go)
+→ Install Dagger CLI v0.21.4
+→ Generate Dagger SDK (dagger develop)
+→ Run CI Pipeline (dagger call all --source=.)
    ├── lint (go vet + golangci-lint v2.4.0)
    ├── test (go test -race, coverage gate)
-   ├── build (linux/amd64 + linux/arm64 → bin/ckodex-kserve-llm.tar)
-   ├── scan (Trivy 0.69.3 — CRITICAL/HIGH, exit-code 1)
-   ├── lula (OSCAL assessment → bin/oscal-assessment-results.yaml)
-   └── supply chain (SBOM, sign, attest — gate-gated)
+   └── scan (Trivy 0.69.3 — CRITICAL/HIGH, exit-code 1)
+→ Export coverage report (dagger call coverage --source=. export --path=coverage.out)
 → Rehearse release (make release-readiness → bin/release-readiness.json)
 → Upload coverage.out (artifact, 30d)
-→ Upload sbom/ (artifact, 90d, success-only)
 → Upload dist/ + bin/release-readiness.json (artifact, 30d)
 ```
 
@@ -50,8 +49,15 @@ Checkout
 ```
 Tag push (v*)
 → verify (lint + go test ./... + make release-readiness)
-→ image-release (go run ./ci/main.go --skip-lint --skip-tests --image ... --push --sign)
-   └── Publishes to ghcr.io/<repo>:<tag>, writes bin/image-digest.txt
+→ image-release
+   ├── Install Dagger CLI v0.21.4
+   ├── Install Cosign v3.0.4
+   ├── Log in to GHCR
+   ├── Generate Dagger SDK (dagger develop)
+   ├── Build, scan, and publish image (dagger call publish → digest)
+   ├── Sign image with cosign OIDC (cosign sign --yes <ref>@<digest>)
+   ├── Generate SBOM (dagger call sbom → sbom/sbom.cdx.json)
+   └── Upload SBOM artifact (90d retention)
 → binary-release (GoReleaser v2.15.4 → GitHub Release draft)
 → image-provenance (slsa-framework/slsa-github-generator container@v2.0.0)
 → binary-provenance (slsa-framework/slsa-github-generator generic@v2.0.0)
@@ -120,13 +126,11 @@ CI (linux/amd64) has always been clean.
 
 ## Open Loops
 
-See `docs/open-loops.md` for tracked deferrals. Key CI items:
+See `docs/open-loops.md` for tracked deferrals. All CI/supply-chain loops are closed.
 
-- **L-SC-001** (P1): Commit `dagger/internal/` generated code — run `dagger develop` outside sandbox
-- **L-SC-002** (P1): Wire `dagger call sbom` into release workflow
-- **L-CI-001** (P2): Migrate GHA from `go run ./ci/main.go` to `dagger call all`
+Next: **L-CI-002** (P3) — retire `ci/main.go` after one stable release cycle.
 
-Done: L-CI-003 (lula), L-CI-004 (coverage gate), L-OP-001 (kustomization), L-OP-002 (Helm ClusterRole), L-OP-003 (governance integration tests)
+Done (2026-06-13/14): L-CI-001, L-CI-003, L-CI-004, L-SC-001, L-SC-002, L-OP-001..004
 
 ---
 

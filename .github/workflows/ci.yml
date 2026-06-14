@@ -55,6 +55,13 @@ jobs:
           sudo mv goreleaser /usr/local/bin/goreleaser
           goreleaser --version
 
+      - name: Install Dagger CLI
+        shell: bash
+        run: |
+          curl -fsSL https://dl.dagger.io/dagger/install.sh \
+            | BIN_DIR=/usr/local/bin DAGGER_VERSION=v0.21.4 sh
+          dagger version
+
       - name: Build console
         if: steps.console.outputs.available == 'true'
         working-directory: console
@@ -62,12 +69,22 @@ jobs:
           npm ci
           npm run build
 
-      - name: Run Dagger Pipeline
+      - name: Generate Dagger SDK
+        shell: bash
+        run: dagger develop
+
+      - name: Run CI Pipeline (lint + test + scan)
         shell: bash
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
-          GOCACHE: ${{ runner.temp }}/go-build
-        run: go run ./ci/main.go
+        run: dagger call all --source=.
+
+      - name: Export coverage report
+        shell: bash
+        if: always()
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+        run: dagger call coverage --source=. export --path=coverage.out
 
       - name: Rehearse release artifacts
         run: make release-readiness
@@ -79,14 +96,6 @@ jobs:
           name: coverage-report
           path: coverage.out
           retention-days: 30
-
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: sbom
-          path: sbom/
-          retention-days: 90
 
       - name: Upload release snapshot artifacts
         uses: actions/upload-artifact@v4

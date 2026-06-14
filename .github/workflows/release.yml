@@ -71,6 +71,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install Dagger CLI
+        shell: bash
+        run: |
+          curl -fsSL https://dl.dagger.io/dagger/install.sh \
+            | BIN_DIR=/usr/local/bin DAGGER_VERSION=v0.21.4 sh
+          dagger version
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@v4.0.0
         with:
@@ -83,24 +90,54 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run Dagger Release Pipeline
+      - name: Generate Dagger SDK
+        shell: bash
+        run: dagger develop
+
+      - name: Build, scan, and publish image
         id: build
-        run: |
-          go run ./ci/main.go \
-            --skip-lint \
-            --skip-tests \
-            --image ghcr.io/${{ github.repository }}:${{ github.ref_name }} \
-            --push \
-            --sign
-          echo "digest=$(cat bin/image-digest.txt)" >> "$GITHUB_OUTPUT"
-          echo "name=ghcr.io/${{ github.repository }}" >> "$GITHUB_OUTPUT"
+        shell: bash
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
-          VERSION: ${{ github.ref_name }}
-          GIT_COMMIT: ${{ github.sha }}
-          GIT_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          IMAGE_REF: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          IMAGE_VERSION: ${{ github.ref_name }}
           REGISTRY_USERNAME: ${{ github.actor }}
-          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          digest=$(dagger call publish \
+            --source=. \
+            --image-ref="$IMAGE_REF" \
+            --version="$IMAGE_VERSION" \
+            --registry-username="$REGISTRY_USERNAME" \
+            --registry-token=env:GITHUB_TOKEN)
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${{ github.repository }}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign image with cosign (OIDC)
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_REF: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+        run: cosign sign --yes "${IMAGE_REF}@${IMAGE_DIGEST}"
+
+      - name: Generate SBOM (CycloneDX via Trivy)
+        shell: bash
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          IMAGE_REF: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+        run: |
+          mkdir -p sbom
+          dagger call sbom \
+            --source=. \
+            --image-ref="$IMAGE_REF" \
+            export --path=sbom/sbom.cdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/
+          retention-days: 90
 
   # 2. Binary Release (GoReleaser)
   # Generates the multi-arch binaries and creates a GitHub Release (Draft).

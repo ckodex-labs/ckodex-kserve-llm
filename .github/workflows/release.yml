@@ -104,20 +104,23 @@ jobs:
           REGISTRY_USERNAME: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          digest=$(dagger call publish \
+          full_ref=$(dagger call publish \
             --source=. \
             --image-ref="$IMAGE_REF" \
             --version="$IMAGE_VERSION" \
             --registry-username="$REGISTRY_USERNAME" \
             --registry-token=env:GITHUB_TOKEN)
+          # full_ref is name:tag@sha256:HASH — extract sha256:HASH for SLSA
+          digest=$(echo "$full_ref" | grep -oE 'sha256:[a-f0-9]+')
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
           echo "name=ghcr.io/${{ github.repository }}" >> "$GITHUB_OUTPUT"
 
       - name: Sign image with cosign (OIDC)
         shell: bash
         env:
-          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
-        run: cosign sign --yes "${IMAGE_DIGEST}"
+          # cosign needs name@sha256:HASH — compose from the two step outputs
+          COSIGN_REF: ${{ steps.build.outputs.name }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${COSIGN_REF}"
 
       - name: Generate SBOM (CycloneDX via Trivy)
         shell: bash

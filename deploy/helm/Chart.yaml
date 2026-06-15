@@ -14,9 +14,9 @@ keywords:
   - vllm
   - ai
   - ml
-home: https://github.com/ckodex-labs/kserve-llm-operator
+home: https://github.com/ckodex-labs/ckodex-kserve-llm
 sources:
-  - https://github.com/ckodex-labs/kserve-llm-operator
+  - https://github.com/ckodex-labs/ckodex-kserve-llm
 maintainers:
   - name: CKodex
     email: maintainers@ckodex.com

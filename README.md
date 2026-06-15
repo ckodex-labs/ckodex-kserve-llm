@@ -12,7 +12,12 @@ An opinionated Kubernetes operator for managing LLM inference workloads. Built o
 ## Architecture
 
 ```mermaid
-%%{init: {'theme': 'neo', 'layout': 'elk', 'look': 'neo'}}%%
+---
+ config:
+    theme: neo
+    layout: elk
+    look: neo
+---
 graph TD
     subgraph CP["Control Plane (Hardened)"]
         direction TB
@@ -60,25 +65,33 @@ graph TD
 ## Production Hardening Features
 
 ### Governed State Planes (L|T|R)
+
 The operator implements a **Governed Composite State Machine** that aggregates safety and compliance metadata across the model system:
+
 - **Lifecycle (L)**: `pending` → `active` → `quarantined`. Tracks the operational readiness of the model.
 - **Trust (T)**: `unknown` → `asserted` → `verified`. Most runtime paths are currently **asserted** by default; `verified` should only be treated as true when the controller records cryptographic evidence rather than placeholder or inferred status.
 - **Risk (R)**: `normal` → `evaluating` → `high`. Real-time risk assessment based on behavioral declared intent and tool usage.
 
 ### Deep Packet Inspection (DPI)
+
 Models requiring external tool access (`ToolSurface.AllowedAPIs`) are isolated via **Istio Egress Filtering**:
+
 - Automatic `ServiceEntry` and `VirtualService` generation for FQDN targets.
 - Sidecar-level egress isolation prevents unauthorized data exfiltration.
 - Contributes network-isolation evidence, but does not by itself prove software provenance.
 
 ### Real-time Monitoring Console
+
 A built-in Next.js dashboard provides a unified view of the governed fleet:
+
 - **Lattice Visualization**: Real-time status of `L|T|R` state planes for every model.
 - **Live Audit Feed**: Event-driven streaming of operator and inference decisions.
 - **Shared Audit Plane**: Uses a high-performance persistent volume for real-time log ingestion.
 
 ### Evidence Hooks
+
 The repository ships machine-readable evidence hooks, but not every runtime path is cryptographically verified today:
+
 - **OSCAL Assessment**: Automated validation of NIST 800-53 controls (SR-2, SI-4, SI-7) exported to **`assessment-results.yaml`**.
 - **OIS Signal Payloads**: Standardized inference behavior telemetry using **Open Inference Signals v0.1**.
 - **Supply-Chain Artifacts**: The tag-driven release workflow publishes Cosign signatures, SBOMs, and provenance artifacts. Runtime controllers only report `verified` when a cryptographic verification result has actually been recorded.
@@ -86,6 +99,7 @@ The repository ships machine-readable evidence hooks, but not every runtime path
 See **[COMPLIANCE.md](COMPLIANCE.md)** for the full control mapping.
 
 ## Operational Guides
+
 ...
 
 Comprehensive documentation for the lifecycle of models, tenants, and agents:
@@ -197,32 +211,38 @@ Gemma 4 tuning in this repo is environment-dependent. Use the deployment guide a
 ## Features
 
 ### V2 Open Inference Protocol
+
 - Full HTTP REST + gRPC compliance
 - Binary Tensor Data Extension (zero-copy)
 - OpenAI-compatible `/v1/chat/completions` + `/v1/embeddings`
 
 ### Gateway API
+
 - HTTPRoute: V2 paths, OpenAI, embeddings
 - GRPCRoute: All 6 GRPCInferenceService RPCs
 - Envoy AI Gateway token rate limiting
 
 ### Distributed Inference
+
 - LeaderWorkerSet for multi-node GPU topology
 - Tensor/Data/Expert parallelism
 - Disaggregated prefill-decode
 
 ### Autoscaling
+
 - HPA (CPU/custom metrics)
 - KEDA ScaledObject (scale-to-zero)
 - WVA (Workload Variant Autoscaler)
 
 ### Security
+
 - Native SPIFFE/SPIRE (Server + Agent)
 - Vault integration
 - OPA/Gatekeeper policies
 - Default-deny NetworkPolicies
 
 ### Model Management
+
 - OCI model distribution (`oci://` via ORAS)
 - Model onboarding pipeline with promotion gates
 - Agent & skill registry
@@ -233,6 +253,7 @@ Gemma 4 tuning in this repo is environment-dependent. Use the deployment guide a
 - **LocalModelCache**: Zero-copy model loading via node-local storage and hostPath mounts.
 
 ### Experimental Feature Gates
+
 Some features are in Active Development and require explicit opt-in via Helm `features.*` or `CKODEX_FEATURE_*` environment variables.
 
 | Feature Gate | Default | Subsystems Enabled | Stability |
@@ -243,6 +264,7 @@ Some features are in Active Development and require explicit opt-in via Helm `fe
 | `EnableSecurity` | `false` | SPIRE, eBPF, OPA, Vault | BETA |
 
 ### Production Hardening
+
 - **SSDLC Enforcement**: Zero-tolerance for unchecked errors, weak crypto, and variable shadowing via strict golangci-lint profile.
 - **Release Provenance**: The tag-driven release workflow generates OIDC-backed provenance artifacts and release attestations.
 - **Guaranteed QoS**: Automatic alignment of CPU/Memory requests and limits for stable scheduling.
@@ -251,6 +273,7 @@ Some features are in Active Development and require explicit opt-in via Helm `fe
 - **Deterministic Lifecycles**: Strict finalizer-first ordering to prevent resource leaks.
 
 ### Observability
+
 - **Lifecycle Events**: Native Kubernetes Event emission for all major transitions (Deployment creation, LoRA loading, Cache eviction).
 - **Prometheus Metrics**: Promotion gates require a configured Prometheus backend unless an explicit insecure compatibility fallback is enabled for development.
 - **Auditability**: Track operator decisions via `kubectl get events`.

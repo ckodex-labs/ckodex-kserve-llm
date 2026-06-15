@@ -61,7 +61,7 @@ release:
   github:
     owner: ckodex-labs
     name: ckodex-kserve-llm
-  draft: true # Start as draft for manual review
+  draft: false
   prerelease: auto
 
 # Container images are built, pushed, and signed by the Dagger release path in

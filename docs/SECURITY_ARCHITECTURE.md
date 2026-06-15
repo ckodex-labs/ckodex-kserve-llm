@@ -10,11 +10,13 @@ The architecture is built on three pillars of security: **Identity**, **Isolatio
 Every inference service is issued a unique **SPIFFE ID** based on its Kubernetes ServiceAccount and Model name.
 - **Identity Issuance**: The `SPIREReconciler` manages a node-local SPIRE Agent.
 - **mTLS Enforcement**: Workloads obtain SVIDs via the SPIFFE Workload API (CSI driver), enabling cryptographically verified mTLS for all backend communication.
+- **NIST Mapping**: **IA-9** (Service Identification and Authentication) — applies to non-person entities (workload SVIDs), not IA-2 which governs organizational user accounts.
 
 ### B. Traffic Isolation (Istio DPI)
 The operator automatically generates Istio `ServiceEntry` and `VirtualService` resources for workloads that declare behavioral intent via the `ToolSurface`.
 - **Egress Filtering**: Deep Packet Inspection (DPI) ensures that model tools can only reach authorized FQDN targets.
 - **Default Deny**: All model pods are isolated by default via Kubernetes `NetworkPolicies` until their traffic profile is explicitly reconciled.
+- **NIST Mapping**: **AC-4** (Information Flow Enforcement) — egress filtering and default-deny NetworkPolicies enforce information flow policy at the pod level.
 
 ### C. Resource Integrity (OPA Gatekeeper)
 Policies are enforced at admission time using **OPA Gatekeeper**.
@@ -27,9 +29,9 @@ Compliance is tracked via a composite state machine represented as three "State 
 
 | Plane | State | Trigger | NIST 800-53 Mapping |
 | :--- | :--- | :--- | :--- |
-| **Lifecycle (L)** | `active` | Successful deployment and health check. | **CP-2** (Contingency Planning) |
-| **Trust (T)** | `asserted` → `verified` | `verified` is reserved for workloads whose runtime verification record shows successful signature, provenance, and SBOM attestation checks. | **AC-4**, **IA-2** |
-| **Risk (R)** | `normal` | Real-time analysis of OIS signals (Inference behavioral monitoring). | **SI-4** (Monitoring) |
+| **Lifecycle (L)** | `active` | Successful deployment and continuous health checks pass. | **CA-7** (Continuous Monitoring) |
+| **Trust (T)** | `asserted` → `verified` | `verified` requires a runtime record of successful signature, provenance, and SBOM attestation checks. | **SI-7** (Software & Information Integrity), **SR-4** (Provenance) |
+| **Risk (R)** | `normal` | Real-time analysis of OIS behavioral signals. | **SI-4** (System Monitoring) |
 
 ## 3. Evidence-as-Code (OSCAL)
 

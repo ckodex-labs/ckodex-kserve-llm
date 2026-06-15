@@ -66,10 +66,10 @@ observations:
         links:
           - href: "kubernetes://namespaces/default/llminferenceservices/gemma-4-e2b"
             rel: reference
-    relevant-evidence:
-      - description: "status.conditions[Compliance-SI-7].status == True"
-        href: "kubernetes://namespaces/default/llminferenceservices/gemma-4-e2b"
-        remarks: "condition.reason must equal ProvenanceVerified"
+        relevant-evidence:
+          - description: "status.conditions[Compliance-SI-7].status == True"
+            href: "kubernetes://namespaces/default/llminferenceservices/gemma-4-e2b"
+            remarks: "condition.reason must equal ProvenanceVerified"
 ```
 
 ## 4. Open Inference Signals (OIS) v0.1

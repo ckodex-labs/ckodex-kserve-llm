@@ -12,16 +12,16 @@ An opinionated Kubernetes operator for managing LLM inference workloads. Built o
 ## Architecture
 
 ```mermaid
+%%{init: {'theme': 'neo', 'layout': 'elk', 'look': 'neo'}}%%
 graph TD
     subgraph CP["Control Plane (Hardened)"]
         direction TB
         CM["Controller Manager"]
-        WH["Webhooks (V+M)"]
+        WH["Webhooks (Validate+Mutate)"]
         RT["ToolSurface Reconciler<br/>(Istio DPI)"]
         GR["Gateway Reconciler<br/>(HTTPRoute+GRPCRoute)"]
-        
         AS["Autoscaler<br/>(HPA/KEDA)"]
-        SS["SPIRE Server"]
+        SS["SPIRE Server<br/>(SVID Issuer)"]
     end
 
     subgraph OP["Observability Plane"]
@@ -37,12 +37,21 @@ graph TD
         LWS["LeaderWorkerSet<br/>(Multi-GPU)"]
     end
 
+    WH --> CM
     CM --> RT
-    RT --> DP
     CM --> AS
     CM --> AUD
+    CM --> PROM
+    RT --> V1
+    RT --> V2
+    GR --> V1
+    GR --> V2
+    SS -.->|SVIDs| V1
+    SS -.->|SVIDs| V2
+    LWS --- V1
+    LWS --- V2
     CON --> AUD
-    GR --> DP
+    CON --> PROM
 ```
 
 > [!NOTE]

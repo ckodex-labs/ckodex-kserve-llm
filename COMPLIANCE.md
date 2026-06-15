@@ -11,9 +11,9 @@ This document outlines the security controls implemented by the **ckodex-kserve-
 | **CA-7** | Continuous Monitoring | Lifecycle (L) plane tracks active/healthy state via Deployment readiness | Lifecycle state = `active` |
 | **IA-9** | Service Identification and Authentication | SPIFFE/SPIRE issues X.509 SVIDs for all inference workloads (non-person entity auth) | SVID issuance via `SPIREReconciler`; no Lula validator yet — tracked L-DOC-003 |
 | **SI-4** | System Monitoring | Open Inference Signals (OIS) v0.1 behavioral telemetry | `Compliance-SI-4` condition · `lula/ois-validation.yaml` |
-| **SI-7** | Software & Information Integrity | Cosign signatures + SLSA provenance + SBOM attestation | `Compliance-SI-7` condition · `lula/supply-chain-validation.yaml` |
-| **SR-2** | Supply Chain Risk Management | Supply-Chain Contract v1.0 (the risk-management plan wrapper) | `Compliance-SR-2` condition · `lula/supply-chain-validation.yaml` |
-| **SR-4** | Provenance of Software Supply Chain | Release workflow generates SLSA provenance + cosign attestation per artifact | Release OIDC-backed provenance artifacts; tag-driven GHA path |
+| **SI-7** | Software, Firmware, and Information Integrity | Cosign signatures + SLSA provenance + SBOM attestation | `Compliance-SI-7` condition · `lula/supply-chain-validation.yaml` |
+| **SR-2** | Supply-Chain Risk Management Plan | Supply-Chain Contract v1.0 (the risk-management plan wrapper) | `Compliance-SR-2` condition · `lula/supply-chain-validation.yaml` |
+| **SR-4** | Provenance | Release workflow generates SLSA provenance + cosign attestation per artifact | Release OIDC-backed provenance artifacts; tag-driven GHA path |
 
 ## 2. Governed States (L|T|R)
 The operator's internal state machine supports these controls, but not every signal should be interpreted as cryptographic proof:

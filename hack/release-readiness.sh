@@ -47,7 +47,7 @@ trap 'rm -f "${before_diff}" "${after_diff}"' EXIT
 (cd "${ROOT_DIR}" && git diff --name-only > "${before_diff}")
 
 echo "==> validating release workflow contract"
-grep -q "Run Dagger Release Pipeline" "${ROOT_DIR}/.github/workflows/release.yml"
+grep -q "Build, scan, and publish image" "${ROOT_DIR}/.github/workflows/release.yml"
 grep -q "generator_container_slsa3.yml" "${ROOT_DIR}/.github/workflows/release.yml"
 grep -q "generator_generic_slsa3.yml" "${ROOT_DIR}/.github/workflows/release.yml"
 grep -q "helm push" "${ROOT_DIR}/.github/workflows/release.yml"

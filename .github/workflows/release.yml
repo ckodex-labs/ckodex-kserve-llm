@@ -124,11 +124,15 @@ jobs:
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           IMAGE_REF: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p sbom
           dagger call sbom \
             --source=. \
             --image-ref="$IMAGE_REF" \
+            --registry-username="$REGISTRY_USERNAME" \
+            --registry-token=env:GITHUB_TOKEN \
             export --path=sbom/sbom.cdx.json
 
       - name: Upload SBOM

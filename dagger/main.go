@@ -160,23 +160,34 @@ func (m *CkodexOperator) Scan(
 
 // Sbom generates a CycloneDX SBOM for a given image reference.
 //
-// Usage: dagger call sbom --source=. --image-ref=ghcr.io/org/app:v1.0.0 export --path=sbom.cdx.json
+// Usage: dagger call sbom --source=. --image-ref=ghcr.io/org/app:v1.0.0 \
+//
+//	--registry-username=user --registry-token=env:GITHUB_TOKEN export --path=sbom.cdx.json
 func (m *CkodexOperator) Sbom(
 	// +defaultPath="/"
 	source *dagger.Directory,
 	imageRef string,
+	// +optional
+	registryUsername string,
+	// +optional
+	registryToken *dagger.Secret,
 ) *dagger.File {
-	return dag.Container().
+	ctr := dag.Container().
 		From(fmt.Sprintf("aquasec/trivy:%s", trivyVersion)).
 		WithMountedDirectory("/src", source).
-		WithWorkdir("/src").
-		WithExec([]string{
-			"trivy", "image",
-			"--format", "cyclonedx",
-			"--output", "sbom.cdx.json",
-			imageRef,
-		}).
-		File("sbom.cdx.json")
+		WithWorkdir("/src")
+	if registryUsername != "" {
+		ctr = ctr.WithEnvVariable("TRIVY_USERNAME", registryUsername)
+	}
+	if registryToken != nil {
+		ctr = ctr.WithSecretVariable("TRIVY_PASSWORD", registryToken)
+	}
+	return ctr.WithExec([]string{
+		"trivy", "image",
+		"--format", "cyclonedx",
+		"--output", "sbom.cdx.json",
+		imageRef,
+	}).File("sbom.cdx.json")
 }
 
 // Publish builds a multi-arch image and pushes to a registry.

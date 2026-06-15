@@ -198,6 +198,7 @@ jobs:
       image: ${{ needs.image-release.outputs.image-name }}
       digest: ${{ needs.image-release.outputs.image-digest }}
       registry-username: ${{ github.actor }}
+      private-repository: true
     secrets:
       registry-password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -213,6 +214,7 @@ jobs:
     with:
       base64-subjects: "${{ needs.binary-release.outputs.hashes }}"
       upload-assets: true
+      private-repository: true
 
   # 5. Helm Chart Release
   # Packages the Helm chart and pushes it to GHCR as an OCI artifact.

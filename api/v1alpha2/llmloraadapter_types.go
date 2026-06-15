@@ -119,9 +119,11 @@ type LLMLoraAdapterStatus struct {
 
 // StatePlanes represents orthogonal views of the system's state.
 type StatePlanes struct {
-	Lifecycle   string `json:"lifecycle,omitempty"`
-	Trust       string `json:"trust,omitempty"`
-	Binding     string `json:"binding,omitempty"`
+	Lifecycle string `json:"lifecycle,omitempty"`
+	Trust     string `json:"trust,omitempty"`
+	// Deprecated: Binding is not reconciled by any controller. Tracked for removal in v0.3.0.
+	Binding string `json:"binding,omitempty"`
+	// Deprecated: Composition is not reconciled by any controller. Tracked for removal in v0.3.0.
 	Composition string `json:"composition,omitempty"`
 	Risk        string `json:"risk,omitempty"`
 }

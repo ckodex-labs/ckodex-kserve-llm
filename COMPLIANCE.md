@@ -16,6 +16,7 @@ This document outlines the security controls implemented by the **ckodex-kserve-
 | **SR-4** | Provenance | Release workflow generates SLSA provenance + cosign attestation per artifact | Release OIDC-backed provenance artifacts; tag-driven GHA path |
 
 ## 2. Governed States (L|T|R)
+
 The operator's internal state machine supports these controls, but not every signal should be interpreted as cryptographic proof:
 
 - **Lifecycle (L)**: Maps to **CA-7** (continuous monitoring) — the `active` lifecycle state reflects that health checks are passing continuously, not that a contingency plan (CP-2) exists.
@@ -23,6 +24,7 @@ The operator's internal state machine supports these controls, but not every sig
 - **Risk (R)**: Maps to **SI-4**. If OIS signals detect anomalous tool usage or out-of-bounds metrics, the risk level escalates and can trigger quarantine.
 
 ## 3. Automated Assessment
+
 Compliance evidence is generated continuously, but the evidence surface is still environment-dependent:
 
 - **Build Time**: The Dagger CI pipeline runs `lula validate` against the **OSCAL Component Definition** in `lula/lula-component.yaml`.
@@ -35,6 +37,7 @@ Compliance evidence is generated continuously, but the evidence surface is still
 
 > [!TIP]
 > To run the compliance validation locally, use the following command:
+>
 > ```bash
 > lula validate -f lula/lula-component.yaml
 > ```

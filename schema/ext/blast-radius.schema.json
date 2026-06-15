@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/blast-radius.schema.json",
+  "$id": "https://ckodex.org/schemas/aipack/v0.1.1/ext/blast-radius.schema.json",
   "title": "AIPACK BlastRadiusDeclaration",
   "description": "AIPACK-SPEC v0.1.1 §12 — BlastRadiusDeclaration predicate payload. Declares the transitive affected set when an artifact is quarantined.",
   "type": "object",

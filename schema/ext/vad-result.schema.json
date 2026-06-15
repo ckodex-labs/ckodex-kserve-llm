@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/vad-result.schema.json",
+  "$id": "https://ckodex.org/schemas/aipack/v0.1.1/ext/vad-result.schema.json",
   "title": "AIPACK VADResult",
   "description": "AIPACK-SPEC v0.1.1 §22 — VAD (Vulnerability/Adversarial Defense) result predicate payload.",
   "type": "object",

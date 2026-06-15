@@ -3,6 +3,7 @@
 This document tracks the exact versions of all sub-components orchestrated by the **ckodex-kserve-llm** operator. These versions are verified against the OIS v0.1 supply-chain contract.
 
 ## 1. Inference Engines
+
 These images power the primary data plane for LLM and Embedding workloads.
 
 | Component | Version | Image Reference | Use Case |
@@ -12,6 +13,7 @@ These images power the primary data plane for LLM and Embedding workloads.
 | **Quant-CPP** | `v0.1.0` | `ckodex/quant-cpp:v0.1.0` | Apple Silicon & low-memory GGUF. |
 
 ## 2. Infrastructure & Data Plane
+
 Components responsible for model distribution and observability.
 
 | Component | Version | Image/Resource | Use Case |
@@ -22,6 +24,7 @@ Components responsible for model distribution and observability.
 | **SeaweedFS Client** | `v3.x` | Go SDK (integrated) | High-speed model weight distribution. |
 
 ## 3. Security & Governance
+
 Zero-trust infrastructure injected into every governed workload.
 
 | Component | Version | Image Reference | Purpose |

@@ -74,6 +74,7 @@ kubectl describe llmregistrycheck -A | grep -A10 "Violations:"
 
 1. If the violation is legitimate (attacker trying to use an unregistered image): log and monitor.
 2. If the violation is a false positive (new registry not in allowlist):
+
    ```bash
    # Add registry to operator config
    kubectl patch configmap ckodex-operator-config -n ckodex-system \

@@ -3,6 +3,7 @@
 This guide describes the recommended procedure for decommissioned models and their associated resources to ensure high availability and resource efficiency.
 
 ## Overview
+
 Offboarding involves more than simply deleting a workload. It requires graceful session draining, Gateway route cleanups, and node-local storage deprovisioning.
 
 ## Step 1: Graceful Shutdown & Session Draining
@@ -20,7 +21,8 @@ Deleting the `LLMInferenceService` (or ASR/Multimodal variant) triggers a series
 kubectl delete llminferenceservice llama-3-8b
 ```
 
-### Automated Cleanup Actions:
+### Automated Cleanup Actions
+
 1. **Gateway Routes**: The operator removes the `HTTPRoute` or `GRPCRoute` associated with the service to stop traffic.
 2. **InferencePool**: The internal `InferencePool` mapping is deleted.
 3. **LeaderWorkerSet (LWS)**: The underlying distributed GPU pods are terminated according to their grace periods.
@@ -31,9 +33,11 @@ kubectl delete llminferenceservice llama-3-8b
 Cached model weights occupy significant node-local storage (often 20Gi–100Gi+). These must be explicitly evicted when a model is no longer required in a specific node group.
 
 ### Option A: Partial Eviction (Safe Mode)
+
 Remove specific node names from the `warmNodes` list in the `LocalModelCache` CR. The operator will delete the PVCs on those nodes.
 
 ### Option B: Full Decommissioning
+
 Delete the `LocalModelCache` resource itself:
 
 ```bash
@@ -50,5 +54,6 @@ If the service used **SPIRE** for identity, its SVID entries will automatically 
 ---
 
 ## Best Practices
+
 - **Verify Traffic**: Check Prometheus metrics for `llm_inference_request_count` to ensure zero active traffic before beginning a manual offboarding.
 - **Audit Logs**: Review the `Controller Manager` logs to confirm that all finalizers completed without errors.

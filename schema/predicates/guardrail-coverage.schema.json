@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/predicates/guardrail-coverage.schema.json",
+  "$id": "https://ckodex.org/schemas/aipack/v0.1.1/predicates/guardrail-coverage.schema.json",
   "title": "AIPACK guardrail:coverage-test predicate payload",
   "description": "Payload for urn:guardrail:coverage-test:v1 attestation. Records category coverage and false positive rate for a Guardrail artifact.",
   "type": "object",

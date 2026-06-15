@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/predicates/agent-composition.schema.json",
+  "$id": "https://ckodex.org/schemas/aipack/v0.1.1/predicates/agent-composition.schema.json",
   "title": "AIPACK agent:composition predicate payload",
   "description": "Payload for urn:agent:composition:v1 attestation. Records the canonical slot table and composite digest for an Agent (C1) artifact.",
   "type": "object",

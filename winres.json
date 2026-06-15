@@ -1,0 +1,23 @@
+{
+  "product-version": "1.0.0.0",
+  "file-version": "1.0.0.0",
+  "lang": "en-US",
+  "filename": "kserve-llm-operator.exe",
+  "strings": {
+    "ProductName": "CKodex KServe LLM Operator",
+    "FileDescription": "Opinionated Kubernetes operator for managing LLM inference workloads on KServe v0.17 using the V2 Open Inference Protocol, Gateway API, and platform security features",
+    "CompanyName": "CKodex",
+    "OriginalFilename": "kserve-llm-operator.exe",
+    "InternalName": "kserve-llm-operator",
+    "FileVersion": "1.0.0.0",
+    "ProductVersion": "1.0.0.0",
+    "LegalCopyright": "Licensed under Apache-2.0",
+    "Comments": "Manages LLM inference services on KServe with V2 Open Inference Protocol, Gateway API, and comprehensive platform security"
+  },
+  "manifest": {
+    "enabled": true,
+    "execution-level": "asInvoker",
+    "ui-access": false,
+    "long-path-aware": true
+  }
+}

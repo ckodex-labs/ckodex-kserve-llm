@@ -7,11 +7,13 @@ This guide describes the standard procedure for setting up a new multi-tenant en
 CKodex implements multi-tenancy through a combination of Kubernetes native features and custom CRDs.
 
 ### 1. Namespace-Based Isolation
+
 Every tenant must occupy one or more dedicated Kubernetes namespaces.
 
 - **`ckodex.com/tenant-id`**: All tenant namespaces must be labeled with this ID. This label is used by the **LLMModelAccess** OPA Gatekeeper constraint to audit and enforce model-to-tenant permission bindings.
 
 ### 2. Multi-Tenant Identity (SPIRE)
+
 The operator automatically manages **SPIFFE** identities for all inference workloads.
 
 - **Workload ID**: `spiffe://ckodex.com/ns/{ns}/sa/{sa}/model/{model}`
@@ -21,12 +23,14 @@ The operator automatically manages **SPIFFE** identities for all inference workl
 
 Use `LLMInferenceServiceConfig` to apply pre-validated security profiles (Compliance Profiles) for each tenant.
 
-### Standard Compliance Profiles:
+### Standard Compliance Profiles
+
 - **`hipaa`**: Enforces JWT-based auth and disables local model caching (PCI-DSS mode).
 - **`soc2`**: Enforces eBPF-based security monitoring and durable audit sinks.
 - **`fedramp`**: Restricts model downloads to FedRAMP-authorized OCI registries only.
 
-### Example Tenant Config:
+### Example Tenant Config
+
 ```yaml
 apiVersion: serving.ckodex.com/v1alpha2
 kind: LLMInferenceServiceConfig
@@ -46,7 +50,8 @@ spec:
 
 To prevent a single tenant from exhausting cluster-wide GPU resources, apply standard `ResourceQuota` and `LimitRange` objects in the tenant namespace.
 
-### Recommended Quota Pattern:
+### Recommended Quota Pattern
+
 ```yaml
 apiVersion: v1
 kind: ResourceQuota

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/risk-valence.schema.json",
+  "$id": "https://ckodex.org/schemas/aipack/v0.1.1/ext/risk-valence.schema.json",
   "title": "AIPACK RiskValence",
   "description": "AIPACK-SPEC v0.1.1 §13 — Risk valence predicate payload. 13 weighted signals produce a score in [0,100] mapped to 4 bands.",
   "type": "object",

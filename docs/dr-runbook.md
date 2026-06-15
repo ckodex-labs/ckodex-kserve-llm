@@ -5,6 +5,7 @@ after a catastrophic cluster failure (etcd loss, accidental CRD deletion, operat
 wipe). It does not cover individual pod or deployment recovery — Kubernetes self-heals those.
 
 **Prerequisites**:
+
 - `velero` CLI installed and pointed at the cluster
 - `kubectl` with cluster-admin access
 - Object storage credentials (S3/GCS/Azure Blob) configured in Velero
@@ -230,6 +231,7 @@ kubectl apply -f gitops/tenants/
 ```
 
 **RTO/RPO estimates (with daily Velero backups)**:
+
 - RTO (Recovery Time Objective): ~45 minutes (CRD restore + operator install + model PVC re-mount)
 - RPO (Recovery Point Objective): ~24 hours (last successful daily backup)
 

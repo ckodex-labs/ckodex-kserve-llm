@@ -48,6 +48,7 @@ The operator also rewrites all the infrastructure images it manages to ensure th
 In air-gapped mode, external Sigstore (TUF) and OIDC lookups are disabled. `CKODEX_LOCAL_COSIGN_KEY_PATH` is the primary offline verification contract. `CKODEX_LOCAL_COSIGN_PUBLIC_KEY` is supported as an inline fallback for warm-up Jobs or other environments where mounting a file is awkward.
 
 Current behavior:
+
 1. For `oci://` and `ocis://` artifacts, the storage initializer runs `cosign verify`, `cosign verify-attestation --type slsaprovenance1`, and `cosign verify-attestation --type cyclonedx`.
 2. The init container writes a machine-readable runtime verification record to its termination log and to the model cache, and the controllers only report `Compliance-SR-2=True` when that record shows signature, provenance, and SBOM attestation verification succeeded.
 3. If the destination cache is already populated but has no matching verified cache record, the initializer refuses to reuse it.

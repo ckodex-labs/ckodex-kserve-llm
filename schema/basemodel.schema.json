@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/basemodel.schema.json",
+  "$id": "https://ckodex.org/schemas/aipack/v0.1.1/basemodel.schema.json",
   "title": "AIPack BaseModel (A1)",
   "description": "AIPACK-SPEC v0.1.1 §3.3 — BaseModel atomic artifact (A1). Foundation model weights distributed as safetensors layers.",
   "type": "object",

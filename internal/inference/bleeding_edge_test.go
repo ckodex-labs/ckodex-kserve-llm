@@ -89,7 +89,7 @@ func TestEBPFConfig_ApplyBypass_Enabled_SetsAnnotations(t *testing.T) {
 	annotations := map[string]string{}
 	cfg.ApplyBypass(annotations)
 	assert.Equal(t, "xdp-bypass-net", annotations["k8s.v1.cni.cncf.io/networks"])
-	assert.Equal(t, "enabled", annotations["ebpf.ckodex.io/xdp-acceleration"])
+	assert.Equal(t, "enabled", annotations["ebpf.ckodex.org/xdp-acceleration"])
 }
 
 // ---- LoRAPinManager ----------------------------------------------------------

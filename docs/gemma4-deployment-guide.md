@@ -13,9 +13,9 @@ This guide documents the operator defaults currently associated with the Gemma 4
 
 ## Prerequisites
 
-1.  **GPU Nodes**: Ensure your cluster has nodes with `nvidia.com/gpu` available.
-2.  **Operator Config**: Set `vllm.gemma4Image: "vllm/vllm-openai:gemma4"` in your Helm values.
-3.  **HuggingFace Secret**: For models like 31B, you may need an account and token to access the official Google repositories.
+1. **GPU Nodes**: Ensure your cluster has nodes with `nvidia.com/gpu` available.
+2. **Operator Config**: Set `vllm.gemma4Image: "vllm/vllm-openai:gemma4"` in your Helm values.
+3. **HuggingFace Secret**: For models like 31B, you may need an account and token to access the official Google repositories.
 
 ## Deployment Steps
 
@@ -36,6 +36,7 @@ spec:
 ```
 
 The operator applies its current Gemma 4 Well-Known settings:
+
 - Enforce TurboQuant args (`--enable-turboquant`).
 - Guaranteed QoS (Requests == Limits).
 - Optimized vLLM image.
@@ -69,6 +70,7 @@ kubectl get events | grep InsufficientGPUCapacity
 ```
 
 **Status Condition**: Check the `GPUCapacity` condition on your `LLMInferenceService`:
+
 ```bash
 kubectl get llmisvc gemma-4-31b -o jsonpath='{.status.conditions[?(@.type=="GPUCapacity")]}'
 ```
@@ -77,10 +79,10 @@ kubectl get llmisvc gemma-4-31b -o jsonpath='{.status.conditions[?(@.type=="GPUC
 
 - **TurboQuant**: All Gemma 4 models are pre-configured with `--enable-turboquant`. This significantly reduces VRAM footprint and improves throughput.
 - **CPU KV Offloading**: For the 31B model, if you have limited GPU VRAM but plenty of system RAM, you can manually enable CPU offloading:
+
   ```yaml
   spec:
     vllmArgs: ["--cpu-offload-gb", "16"]
   ```
-
 
 If you're using custom mirrors, ensure your registry has the `vllm/vllm-openai:gemma4` image expected by your operator configuration.

@@ -1,6 +1,7 @@
 # ADR 008: Dagger Module for Typed CI/CD Functions
 
 ## Status
+
 Accepted
 
 ## Context
@@ -19,6 +20,7 @@ The standalone pattern works but has two gaps:
    tooling.
 
 CI/CD policy (CLAUDE.md §3, Dagger CI/CD requirements) requires:
+
 - `dagger call <function>` as the verification interface for each pipeline stage
 - `dagger.json` present at the repo root
 - Baseline typed functions: `lint`, `test`, `coverage`, `build`, `scan`, `sbom`,
@@ -58,6 +60,7 @@ project's `go.mod`.
 ## Consequences
 
 **Positive:**
+
 - `dagger call lint`, `dagger call test`, `dagger call build`, `dagger call scan`,
   `dagger call sbom`, `dagger call publish`, `dagger call all` all work once
   `dagger develop` is run to generate `dagger/internal/dagger/`.
@@ -66,6 +69,7 @@ project's `go.mod`.
 - CI/CD policy verification gates now have stable named functions.
 
 **Negative / mitigations:**
+
 - Logic duplication between `ci/pkg/` and `dagger/main.go`. Mitigation: pin
   the same tool versions via constants in both; comment the mirror. Long-term,
   migrate `ci/main.go` callers to `dagger call` and retire `ci/`.

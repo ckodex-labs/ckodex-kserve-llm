@@ -208,9 +208,9 @@ func (e *Engine) runNetworkLatency(ctx context.Context, exp Experiment, result *
 		if pod.Annotations == nil {
 			pod.Annotations = make(map[string]string)
 		}
-		pod.Annotations["chaos.ckodex.io/network-latency-ms"] = fmt.Sprintf("%d", exp.Parameters.LatencyMs)
-		pod.Annotations["chaos.ckodex.io/network-jitter-ms"] = fmt.Sprintf("%d", exp.Parameters.JitterMs)
-		pod.Annotations["chaos.ckodex.io/experiment"] = exp.Name
+		pod.Annotations["chaos.ckodex.org/network-latency-ms"] = fmt.Sprintf("%d", exp.Parameters.LatencyMs)
+		pod.Annotations["chaos.ckodex.org/network-jitter-ms"] = fmt.Sprintf("%d", exp.Parameters.JitterMs)
+		pod.Annotations["chaos.ckodex.org/experiment"] = exp.Name
 		if err := e.Patch(ctx, &pod, patch); err != nil {
 			logger.Info("failed to annotate pod for latency", "pod", pod.Name, "error", err)
 		} else {
@@ -233,8 +233,8 @@ func (e *Engine) runNetworkPartition(ctx context.Context, exp Experiment, result
 			Name:      fmt.Sprintf("chaos-%s-partition", exp.Name),
 			Namespace: exp.Namespace,
 			Labels: map[string]string{
-				"chaos.ckodex.io/experiment": exp.Name,
-				"chaos.ckodex.io/type":       "network-partition",
+				"chaos.ckodex.org/experiment": exp.Name,
+				"chaos.ckodex.org/type":       "network-partition",
 			},
 		},
 		Spec: networkingv1.NetworkPolicySpec{

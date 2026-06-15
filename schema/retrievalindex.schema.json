@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/retrievalindex.schema.json",
+  "$id": "https://ckodex.org/schemas/aipack/v0.1.1/retrievalindex.schema.json",
   "title": "AIPack RetrievalIndex (A9)",
   "description": "AIPACK-SPEC v0.1.1 §3.3 — RetrievalIndex artifact (A9). Vector index for retrieval-augmented generation.",
   "type": "object",

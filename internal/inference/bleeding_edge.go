@@ -134,7 +134,7 @@ func (e *EBPFConfig) ApplyBypass(annotations map[string]string) {
 	// eBPF user-space networking annotation via special CNI
 	annotations["k8s.v1.cni.cncf.io/networks"] = "xdp-bypass-net"
 	// Label for the BPF operator to target this pod
-	annotations["ebpf.ckodex.io/xdp-acceleration"] = "enabled"
+	annotations["ebpf.ckodex.org/xdp-acceleration"] = "enabled"
 }
 
 // --- Dynamic LoRA Pinning ---

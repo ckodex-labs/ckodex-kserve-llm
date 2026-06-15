@@ -11,6 +11,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 ## CI/CD
 
 ### L-CI-001 — Migrate GHA workflows to `dagger call`
+
 - **Status:** done
 - **Priority:** P2
 - **Context:** Both workflows migrated (2026-06-14):
@@ -20,6 +21,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Reference:** ADR-008, `.github/workflows/ci.yml`, `.github/workflows/release.yml`
 
 ### L-CI-002 — Retire `ci/main.go` standalone path
+
 - **Status:** deferred
 - **Priority:** P3
 - **Context:** After L-CI-001 lands, the `ci/main.go` standalone path becomes
@@ -28,6 +30,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Blockers:** Depends on L-CI-001 being done and stable.
 
 ### L-CI-003 — Add `dagger call lula` for OSCAL validation
+
 - **Status:** done
 - **Priority:** P2
 - **Context:** `dagger/main.go:Lula` added (2026-06-13). Downloads binary,
@@ -36,6 +39,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Reference:** `dagger/main.go:223`, `ci/pkg/security/security.go:33`
 
 ### L-CI-004 — Coverage gate in module `Test` function
+
 - **Status:** done
 - **Priority:** P1
 - **Context:** `coverageGateScript()` added to `dagger/main.go` (2026-06-13).
@@ -48,6 +52,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 ## Operator
 
 ### L-OP-001 — Add `kustomization.yaml` to `config/crd/` and `config/rbac/`
+
 - **Status:** done
 - **Priority:** P2
 - **Context:** `config/crd/kustomization.yaml` added (2026-06-13): lists all 16 CRDs.
@@ -57,6 +62,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Reference:** `config/crd/kustomization.yaml`, `config/rbac/kustomization.yaml`
 
 ### L-OP-002 — Inline ClusterRole in Helm chart
+
 - **Status:** done
 - **Priority:** P2
 - **Context:** ClusterRole `ckodex-operator-cluster-role` added to
@@ -67,6 +73,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Reference:** `deploy/helm/templates/rbac.yaml:6`
 
 ### L-OP-003 — AIPack → LLMInferenceService governance integration test
+
 - **Status:** done
 - **Priority:** P1
 - **Context:** 7 fake-client integration tests added (2026-06-13) in
@@ -79,6 +86,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
   `internal/controller/evidence/aipack_reconciler.go:28`
 
 ### L-OP-004 — Fix IPv6 listener in `TestRegisterWithTargetService_Success`
+
 - **Status:** done
 - **Priority:** P2
 - **Context:** All 5 tests (`TestRegisterWithTargetService_Success`, `TestVaultHealthCheck_Active_200`,
@@ -94,6 +102,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 ## Supply Chain
 
 ### L-SC-001 — Generate `dagger develop` output in CI and commit `dagger/internal/`
+
 - **Status:** done
 - **Priority:** P1
 - **Context:** `dagger develop` run successfully (2026-06-14) outside sandbox.
@@ -103,6 +112,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Reference:** `dagger/go.mod`, `dagger/.gitignore`, `docs/adr/008-dagger-module.md`
 
 ### L-SC-002 — Wire `dagger call sbom` into release workflow
+
 - **Status:** done
 - **Priority:** P1
 - **Context:** `dagger call sbom` wired into `release.yml` `image-release` job (2026-06-14).
@@ -115,30 +125,35 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 ## Documentation
 
 ### L-DOC-001 — Fix L|T|R NIST control table (SECURITY_ARCHITECTURE.md)
+
 - **Status:** done
 - **Priority:** P1
 - **Context:** Replaced CP-2→CA-7, IA-2→IA-9, Trust(T)→SI-7+SR-4. AC-4 anchored to Isolation pillar. (2026-06-15)
 - **Reference:** `docs/SECURITY_ARCHITECTURE.md`
 
 ### L-DOC-002 — Expand COMPLIANCE.md with IA-9, SR-4, CA-7 rows
+
 - **Status:** done
 - **Priority:** P1
 - **Context:** Added 3 rows; fixed NIST 800-53r5 canonical control names (SI-7 firmware, SR-2 Plan, SR-4 Provenance); added implementation-status annotation for beta. (2026-06-15)
 - **Reference:** `COMPLIANCE.md`
 
 ### L-DOC-003 — Add Lula validator for IA-9 (SPIFFE/SPIRE SVID issuance)
+
 - **Status:** open
 - **Priority:** P2
 - **Context:** SPIFFE/SPIRE identity issuance is implemented in SPIREReconciler but has no Lula validation YAML yet. Deferred post-beta.
 - **Reference:** `lula/` directory, `internal/security/spire_reconciler.go`
 
 ### L-DOC-004 — Rewire Mermaid architecture diagram
+
 - **Status:** done
 - **Priority:** P1
 - **Context:** Added WH→CM, SS-.->V1/V2, CM→PROM, GR→V1/V2, LWS---V1/V2, CON→PROM. Removed subgraph-targeting RT→DP and GR→DP edges. Added neo/elk theme. (2026-06-15)
 - **Reference:** `README.md`
 
 ### L-DOC-005 — Flesh out OSCAL SI-7 observation with subjects
+
 - **Status:** done
 - **Priority:** P1
 - **Context:** Added statements, by-components, set-parameters to SI-7 requirement in lula-component.yaml. Fixed relevant-evidence nesting inside subjects entry per OSCAL schema. (2026-06-15)

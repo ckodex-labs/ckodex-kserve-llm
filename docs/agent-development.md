@@ -3,6 +3,7 @@
 This guide describes how to build and deploy AI agents that leverage the LLM inference backends and specialized function-calling tools within the CKodex cluster.
 
 ## Overview
+
 Agents are higher-level abstractions that bind a specific **LLMInferenceService** (the "brain") to a set of **SkillRegistries** (the "tools").
 
 ## Step 1: Connecting an Agent to a Model
@@ -70,7 +71,8 @@ Clients interact with agents via the standard OpenAI-compatible `/v1/chat/comple
 - **System Prompt**: The operator automatically injects the agent's identity and tool descriptions into the system prompt of the inference request.
 - **Function Calling**: When the model emits a tool call (e.g., `get_ticket_status`), the agent-sidecar (EPP) intercepts the call, executes the tool against the registered `endpoint`, and returns the result to the model for final answer generation.
 
-### Example Request (via Python SDK):
+### Example Request (via Python SDK)
+
 ```python
 import openai
 
@@ -85,6 +87,7 @@ print(response.choices[0].message.content)
 ```
 
 ## Best Practices
+
 - **Security**: Always use **SPIRE** sidecars for agent workloads to ensure mutual TLS when communicating with SkillRegistry endpoints.
 - **Versioning**: Pin your agent's skills to specific versions (e.g., `version: "1.2.0"`) to avoid breaking changes during automated registry updates.
 - **Monitoring**: Monitor the `agent_tool_invocation_latency` and `agent_token_usage` metrics via Prometheus to track operational costs and performance.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/airgap-bundle.schema.json",
+  "$id": "https://ckodex.org/schemas/aipack/v0.1.1/ext/airgap-bundle.schema.json",
   "title": "AIPACK AirGapBundle",
   "description": "AIPACK-SPEC v0.1.1 §17 — AirGapBundle predicate payload. Self-contained artifact bundle for disconnected environments.",
   "type": "object",

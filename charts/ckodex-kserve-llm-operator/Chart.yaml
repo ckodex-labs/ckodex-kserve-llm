@@ -16,7 +16,7 @@ sources:
   - https://github.com/ckodex-labs/ckodex-kserve-llm
 maintainers:
   - name: CKodex Labs
-    email: maintainers@ckodex.io
+    email: maintainers@ckodex.org
 annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/links: |

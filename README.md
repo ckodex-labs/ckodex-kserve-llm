@@ -5,7 +5,7 @@
 [![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](docs/getting-started.md)
 [![Security Scorecard](https://img.shields.io/ossf-scorecard/github.com/ckodex-labs/ckodex-kserve-llm?label=scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/ckodex-labs/ckodex-kserve-llm)
 
-An opinionated Kubernetes operator for managing LLM inference workloads. Built on KServe v0.17 architecture with the V2 Open Inference Protocol, Gateway API (HTTPRoute + GRPCRoute), and comprehensive platform features.
+An opinionated Kubernetes operator for managing LLM inference workloads. Built on KServe v0.17+ architecture with the V2 Open Inference Protocol, Gateway API (HTTPRoute + GRPCRoute), and comprehensive platform features.
 
 - **[Component Version Inventory](COMPONENTS.md)**: Track exact versions of vLLM, SPIRE, Gatekeeper, and other orchestrated components.
 
@@ -141,7 +141,7 @@ cd local && bash 02-prereqs.sh && bash 03-kserve-helm-install.sh
 ### 3. Verify your local environment with the Dagger pipeline
 
 ```bash
-DOCKER_HOST=unix:///var/run/docker.sock go run ./ci/main.go --skip-tests
+dagger call test --source=.
 ```
 
 This command expects a working local Docker daemon. If Docker or the Dagger engine cannot start, treat that as an environment prerequisite failure rather than proof that the repository is release-ready.
@@ -199,14 +199,14 @@ On a successful tagged release, GitHub Actions is configured to publish:
 
 Treat the presence of those artifacts as a release input, not as an automatic public-readiness verdict.
 
-See [docs/release-verification.md](/Users/mchorfa/Documents/projects/runbase/ckodex-skillingest/ckodex-kserve-llm/docs/release-verification.md) for the local rehearsal contract and downstream verification commands.
+See [docs/release-verification.md](docs/release-verification.md) for the local rehearsal contract and downstream verification commands.
 
 ## Gemma 4 Notes
 
 Gemma 4 tuning in this repo is environment-dependent. Use the deployment guide and performance note as operator guidance, not as CI-backed benchmark evidence:
 
-- [docs/gemma4-deployment-guide.md](/Users/mchorfa/Documents/projects/runbase/ckodex-skillingest/ckodex-kserve-llm/docs/gemma4-deployment-guide.md)
-- [docs/GEMMA_4_PERFORMANCE_REPORT.md](/Users/mchorfa/Documents/projects/runbase/ckodex-skillingest/ckodex-kserve-llm/docs/GEMMA_4_PERFORMANCE_REPORT.md)
+- [docs/gemma4-deployment-guide.md](docs/gemma4-deployment-guide.md)
+- [docs/GEMMA_4_PERFORMANCE_REPORT.md](docs/GEMMA_4_PERFORMANCE_REPORT.md)
 
 ## Features
 

@@ -14,7 +14,7 @@ We only support the latest version of the CKodex KServe LLM Operator. Production
 
 We take the security of our project seriously. If you believe you have found a security vulnerability, please do NOT open a public issue. Instead, please follow these steps:
 
-1. **Email us**: Send a detailed report to security@ckodex.io.
+1. **Email us**: Send a detailed report to <security@ckodex.org>.
 2. **Details to include**:
    - Description of the vulnerability.
    - Steps to reproduce.

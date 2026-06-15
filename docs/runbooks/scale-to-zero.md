@@ -79,6 +79,7 @@ cold start will breach the SLO. Use `minReplicas: 1` for latency-sensitive workl
 ## Service Stuck at Zero Replicas (Incident)
 
 ### Symptoms
+
 - `LLMServiceNoReplicas` alert fires
 - Gateway returns 503 to all clients
 - KEDA ScaledObject shows `ScaledObject is paused` or trigger polling fails

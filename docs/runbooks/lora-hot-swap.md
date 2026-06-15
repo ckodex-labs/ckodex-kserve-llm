@@ -122,6 +122,7 @@ each reconcile. Filter in Grafana Tempo:
 ```
 
 The audit log also records `AuditLoraSwap` events:
+
 ```bash
 kubectl logs -n ckodex-system deploy/ckodex-kserve-llm-operator | \
   grep '"action":"LoraSwap"'

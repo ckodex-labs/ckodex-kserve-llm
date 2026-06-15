@@ -30,11 +30,13 @@ helm install kserve-llm-operator ckodex/ckodex-kserve-llm-operator \
 For testing locally on your laptop, we provide a streamlined setup using `kind`.
 
 ### 1. Create a local cluster
+
 ```bash
 make kind-setup
 ```
 
 ### 2. Build and load the operator
+
 ```bash
 make docker-build
 make kind-load
@@ -42,6 +44,7 @@ make deploy
 ```
 
 Verify the manager is running:
+
 ```bash
 kubectl get pods -n ckodex-system
 ```
@@ -53,6 +56,7 @@ kubectl get pods -n ckodex-system
 The operator includes a **WellKnown** model registry. This means it already knows how to optimize popular models like Gemma 4 for production performance (enabling `TurboQuant`, setting Guaranteed QoS, etc.).
 
 ### 1. Create the Inference Service
+
 Apply the following manifest. Even with minimal configuration, the operator will apply best-practice defaults.
 
 ```yaml
@@ -67,11 +71,13 @@ spec:
 ```
 
 ### 2. Monitor Readiness
+
 ```bash
 kubectl get llminferenceservice gemma-4-e2b -w
 ```
 
 ### 3. Send a Request
+
 Once ready, the operator automatically creates a Kubernetes Service (and optionally an `HTTPRoute`). You can port-forward to test it:
 
 ```bash

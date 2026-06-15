@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/lineage-envelope.schema.json",
+  "$id": "https://ckodex.org/schemas/aipack/v0.1.1/ext/lineage-envelope.schema.json",
   "title": "AIPACK LineageEnvelope",
   "description": "AIPACK-SPEC v0.1.1 §11 — LineageEnvelope predicate payload. Records per-component attribution for an assembled artifact.",
   "type": "object",

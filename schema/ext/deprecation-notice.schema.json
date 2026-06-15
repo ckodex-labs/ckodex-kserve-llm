@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ckodex.io/schemas/aipack/v0.1.1/ext/deprecation-notice.schema.json",
+  "$id": "https://ckodex.org/schemas/aipack/v0.1.1/ext/deprecation-notice.schema.json",
   "title": "AIPACK DeprecationNotice",
   "description": "AIPACK-SPEC v0.1.1 §16 — DeprecationNotice and DeprecationRevocation predicate payloads.",
   "oneOf": [

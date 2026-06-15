@@ -83,7 +83,8 @@ spec:
       type: "promotion"
 ```
 
-### Pipeline Stages:
+### Pipeline Stages
+
 1. **Validation**: Checks model integrity and configuration compatibility.
 2. **Canary**: Routes a small percentage of traffic (configured via `CanarySpec` in the service) and monitors metrics.
 3. **Gate**: Blocking stage that requires success metrics to be met (e.g., MinSuccessRate).
@@ -92,5 +93,6 @@ spec:
 ---
 
 ## Troubleshooting
+
 - **Phase 2 Fails**: Check `LocalModelCache` node statuses and Job logs for storage credential issues.
 - **Phase 4 Fails**: If `rollbackOnFailure` is true (default), the operator will automatically revert the Gateway route to the previous stable version.

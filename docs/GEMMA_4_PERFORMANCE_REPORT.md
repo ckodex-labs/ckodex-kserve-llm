@@ -54,9 +54,10 @@ The table below is operational guidance for sizing discussions. These values are
 | **Gemma-4-31B** | Enterprise (48GB) | 450ms | **210ms** | ~30% | Optimized |
 
 ### Notes
-1.  **TurboQuant Wiring**: The operator can inject TurboQuant-related settings through the Well-Known registry.
-2.  **Environment Dependence**: Real latency and VRAM behavior depend on the runtime image, hardware tier, model variant, and cluster tuning.
-3.  **Status Hardening**: With `CKODEX_FEATURE_ENABLE_EXPERIMENTAL_STATUS_HARDENING` active, the operator provides the `DeploymentReady` condition for stronger rollout signaling.
+
+1. **TurboQuant Wiring**: The operator can inject TurboQuant-related settings through the Well-Known registry.
+2. **Environment Dependence**: Real latency and VRAM behavior depend on the runtime image, hardware tier, model variant, and cluster tuning.
+3. **Status Hardening**: With `CKODEX_FEATURE_ENABLE_EXPERIMENTAL_STATUS_HARDENING` active, the operator provides the `DeploymentReady` condition for stronger rollout signaling.
 
 ## Hardening Details
 

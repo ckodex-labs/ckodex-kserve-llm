@@ -50,14 +50,26 @@ graph LR
 The following snippet is an actual assessment result for **SI-7 (Software Integrity)**:
 
 ```yaml
-# oscal-assessment-results.yaml (Snippet)
+# oscal-assessment-results.yaml (Snippet — SI-7 observation)
 observations:
-  - title: "Software Supply Chain Integrity"
-    description: "Passes only when the controller has observed a runtime verification record for signature, provenance, and SBOM attestations"
-    status: "pass"
+  - uuid: 66666666-6666-4666-8666-666666666661
+    title: "Software Supply Chain Integrity"
+    description: >-
+      Passes only when the controller has recorded a runtime verification result
+      for signature, provenance, and SBOM attestation on the assessed workload.
+    methods:
+      - EXAMINE
+    subjects:
+      - subject-uuid: 77777777-7777-4777-8777-777777777771
+        type: component
+        title: "LLMInferenceService/gemma-4-e2b"
+        links:
+          - href: "kubernetes://namespaces/default/llminferenceservices/gemma-4-e2b"
+            rel: reference
     relevant-evidence:
-      - description: "InferenceService status.conditions[Compliance-SR-2] is True"
-        href: "kubernetes://llminferenceservices/gemma-4-e2b"
+      - description: "status.conditions[Compliance-SI-7].status == True"
+        href: "kubernetes://namespaces/default/llminferenceservices/gemma-4-e2b"
+        remarks: "condition.reason must equal ProvenanceVerified"
 ```
 
 ## 4. Open Inference Signals (OIS) v0.1

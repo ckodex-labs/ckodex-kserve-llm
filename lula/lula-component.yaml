@@ -38,10 +38,34 @@ component-definition:
                   href: file:./governance-validation.yaml
             - uuid: 44444444-4444-4444-8444-444444444447
               control-id: si-7
-              description: Ensure software and information integrity via signing and attestation
+              description: >-
+                Ensure software and information integrity via cosign signature
+                verification, SLSA provenance attestation, and CycloneDX SBOM
+                presence on all LLMInferenceService workloads.
               links:
                 - rel: lula
                   href: file:./supply-chain-validation.yaml
+              set-parameters:
+                - param-id: si-7_prm_1
+                  values:
+                    - "cosign signature + SLSA provenance + CycloneDX SBOM"
+              statements:
+                - statement-id: si-7_smt
+                  uuid: 55555555-5555-4555-8555-555555555551
+                  description: >-
+                    The operator records cryptographic verification results as
+                    Kubernetes status conditions (Compliance-SI-7). Lula validates
+                    that this condition is True and has reason ProvenanceVerified
+                    on all LLMInferenceService resources cluster-wide.
+                  by-components:
+                    - component-uuid: 22222222-2222-4222-8222-222222222222
+                      uuid: 55555555-5555-4555-8555-555555555552
+                      description: >-
+                        kserve-llm-operator reconciles Compliance-SI-7 condition
+                        when the supply-chain verification record is present.
+                      implementation-status:
+                        state: implemented
+                      satisfied: true
             - uuid: 44444444-4444-4444-8444-444444444448
               control-id: si-4
               description: Information system monitoring via Open Inference Signals (OIS)

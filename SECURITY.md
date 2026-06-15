@@ -6,7 +6,8 @@ We only support the latest version of the CKodex KServe LLM Operator. Production
 
 | Version | Supported          |
 | ------- | ------------------ |
-| v0.1.x  | :white_check_mark: |
+| v0.2.x  | :white_check_mark: |
+| v0.1.x  | :white_check_mark: (LTS until v0.3.0) |
 | < v0.1  | :x:                |
 
 ## Reporting a Vulnerability

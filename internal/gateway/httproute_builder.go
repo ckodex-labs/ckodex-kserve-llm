@@ -136,14 +136,37 @@ func BuildHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters []serv
 						BackendRefs: []gwapiv1.HTTPBackendRef{backendRef},
 						Timeouts:    timeouts,
 					},
+					// vLLM v0.23.0 Rust frontend: metadata endpoints
+					{
+						Matches: []gwapiv1.HTTPRouteMatch{
+							{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/version")}},
+						},
+						BackendRefs: []gwapiv1.HTTPBackendRef{backendRef},
+						Timeouts:    timeouts,
+					},
+					{
+						Matches: []gwapiv1.HTTPRouteMatch{
+							{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/server_info")}},
+						},
+						BackendRefs: []gwapiv1.HTTPBackendRef{backendRef},
+						Timeouts:    timeouts,
+					},
+					// vLLM v0.23.0 Responses API (Anthropic Messages-compatible endpoint)
+					{
+						Matches: []gwapiv1.HTTPRouteMatch{
+							{Path: &gwapiv1.HTTPPathMatch{Type: &pathPrefix, Value: strPtr("/v1/responses")}},
+						},
+						BackendRefs: []gwapiv1.HTTPBackendRef{backendRef},
+						Timeouts:    timeouts,
+					},
 				}
 
 				// Apply Retries via Filter (Implementation specific or Standard if supported)
-				// For Envoy Gateway (standard in many stacks), we use an extension or 
-				// just ensure the base rules are correct. Standard Gateway API v1.1+ 
+				// For Envoy Gateway (standard in many stacks), we use an extension or
+				// just ensure the base rules are correct. Standard Gateway API v1.1+
 				// doesn't have a cross-platform 'Retry' filter yet, so we'll stick to Timeouts
 				// which are standard in v1.1.
-				
+
 				rules = append(rules, standardRules...)
 				return rules
 			}(),

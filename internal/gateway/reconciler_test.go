@@ -208,7 +208,7 @@ func TestReconciler_Reconcile_UpdatesExistingHTTPRoute(t *testing.T) {
 	var updated gwapiv1.HTTPRoute
 	require.NoError(t, fakeClient.Get(context.Background(),
 		k8stypes.NamespacedName{Name: "svc-httproute", Namespace: "default"}, &updated))
-	assert.Len(t, updated.Spec.Rules, 6, "updated route must carry 6 path rules")
+	assert.Len(t, updated.Spec.Rules, 9, "updated route must carry 9 path rules (6 original + /version, /server_info, /v1/responses)")
 }
 
 // ---- Reconciler — existing mode (no managed gateway) ----------------------

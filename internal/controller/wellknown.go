@@ -26,6 +26,14 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 		return strings.Contains(normalizedMatch, "gemma-4") &&
 			strings.Contains(normalizedMatch, strings.ToLower(variant))
 	}
+	isDeepSeek := func(variant string) bool {
+		norm := strings.ToLower(modelURI)
+		return strings.Contains(norm, "deepseek") && strings.Contains(norm, strings.ToLower(variant))
+	}
+	isQwen3 := func(size string) bool {
+		norm := strings.ToLower(modelURI)
+		return strings.Contains(norm, "qwen3") && strings.Contains(norm, strings.ToLower(size))
+	}
 
 	switch {
 	case isGemma4("E2B"):
@@ -148,6 +156,7 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Args: []string{
 					"--max-model-len", "32768",
 					"--trust-remote-code",
+					"--enable-v2-runner", // MRv2: default for Llama dense in vLLM v0.23.0
 				},
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -168,6 +177,7 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Args: []string{
 					"--max-model-len", "16384",
 					"--trust-remote-code",
+					"--enable-v2-runner",
 				},
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -184,6 +194,81 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Args: []string{
 					"--max-model-len", "32768",
 					"--tokenizer-mode", "mistral",
+					"--enable-v2-runner",
+				},
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+						"nvidia.com/gpu":      resource.MustParse("1"),
+					},
+				},
+			},
+		}
+	case isDeepSeek("V4") || isDeepSeek("V3.2"):
+		// DeepSeek-V4: 671B sparse MoE, 37B active. EPLB mandatory for balanced expert load.
+		// FP8 KV cache halves VRAM vs BF16; 8×H100 required.
+		tp := int32(8)
+		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
+			Parallelism: &servingv1alpha2.ParallelismSpec{
+				Tensor:      &tp,
+				Expert:      true,
+				EPLBEnabled: true,
+			},
+			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
+				Args: []string{
+					"--max-model-len", "8192",
+					"--trust-remote-code",
+					"--enable-chunked-prefill",
+					"--kv-cache-dtype", "fp8",
+					"--gpu-memory-utilization", "0.90",
+				},
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("64"),
+						corev1.ResourceMemory: resource.MustParse("512Gi"),
+						"nvidia.com/gpu":      resource.MustParse("8"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("64"),
+						corev1.ResourceMemory: resource.MustParse("512Gi"),
+						"nvidia.com/gpu":      resource.MustParse("8"),
+					},
+				},
+			},
+		}
+
+	case isQwen3("72B"):
+		// Qwen3-72B dense; MRv2 default in v0.23.0. 4×A100/H100 with TP=4.
+		tp := int32(4)
+		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
+			Parallelism: &servingv1alpha2.ParallelismSpec{Tensor: &tp},
+			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
+				Args: []string{
+					"--max-model-len", "32768",
+					"--trust-remote-code",
+					"--enable-v2-runner",
+					"--gpu-memory-utilization", "0.90",
+				},
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("32"),
+						corev1.ResourceMemory: resource.MustParse("256Gi"),
+						"nvidia.com/gpu":      resource.MustParse("4"),
+					},
+				},
+			},
+		}
+
+	case isQwen3("8B") || isQwen3("7B"):
+		// Qwen3-8B/7B dense; single GPU (16 GB VRAM), MRv2 default in v0.23.0.
+		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
+			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
+				Args: []string{
+					"--max-model-len", "32768",
+					"--trust-remote-code",
+					"--enable-v2-runner",
+					"--gpu-memory-utilization", "0.90",
 				},
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -277,6 +362,19 @@ func (r *LLMInferenceServiceReconciler) ApplyConfigToSpec(spec *servingv1alpha2.
 				}
 				if !found {
 					c.Env = append(c.Env, corev1.EnvVar{Name: "VLLM_TURBOQUANT", Value: "true"})
+				}
+			}
+			// Phase 5: Inject --enable-request-id-headers for distributed tracing (vLLM v0.23.0 Rust frontend)
+			{
+				found := false
+				for _, a := range c.Args {
+					if a == "--enable-request-id-headers" {
+						found = true
+						break
+					}
+				}
+				if !found {
+					c.Args = append(c.Args, "--enable-request-id-headers")
 				}
 			}
 		}

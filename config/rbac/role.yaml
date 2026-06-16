@@ -42,19 +42,6 @@ rules:
   - patch
   - update
   - watch
-# Cluster-scoped: hf-csi-driver static provisioning requires PV management
-- apiGroups:
-  - ""
-  resources:
-  - persistentvolumes
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - ""
   resources:
@@ -149,20 +136,11 @@ rules:
   - localmodelcaches
   - modelonboardings
   - multimodalinferenceservices
+  - rerankerinferenceservices
   - skillregistries
   verbs:
   - create
   - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - serving.ckodex.com
-  resources:
-  - aipacks
-  verbs:
   - get
   - list
   - patch
@@ -177,6 +155,7 @@ rules:
   - llminferenceservices/finalizers
   - modelonboardings/finalizers
   - multimodalinferenceservices/finalizers
+  - rerankerinferenceservices/finalizers
   - skillregistries/finalizers
   verbs:
   - update
@@ -195,8 +174,19 @@ rules:
   - localmodelcaches/status
   - modelonboardings/status
   - multimodalinferenceservices/status
+  - rerankerinferenceservices/status
   - skillregistries/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - serving.ckodex.com
+  resources:
+  - aipacks
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch

@@ -474,6 +474,7 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	}
 	r.GovernanceReconciler = &evidence.GovernanceReconciler{
 		Client:             mgr.GetClient(),
+		Scheme:             r.Scheme,
 		AirGappedMode:      r.AirGappedMode,
 		LocalCosignKeyPath: r.LocalCosignKeyPath,
 	}

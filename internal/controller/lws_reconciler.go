@@ -217,6 +217,14 @@ func (r *Reconciler) buildVLLMArgs(llmSvc *servingv1alpha2.LLMInferenceService) 
 		}
 	}
 
+	// Weight quantization (vLLM v0.23.0) — GGUF uses quant-cpp engine, not vLLM args.
+	if q := llmSvc.Spec.Quantization; q != nil && q.Method != "gguf" {
+		args = append(args, "--quantization", q.Method)
+		if q.Method == "gptq" && q.CheckpointPath != "" {
+			args = append(args, "--gptq-ckpt-path", q.CheckpointPath)
+		}
+	}
+
 	return args
 }
 

@@ -123,6 +123,12 @@ type LLMInferenceServiceSpec struct {
 	// +optional
 	KVCache *KVCacheSpec `json:"kvCache,omitempty"`
 
+	// Quantization configures weight quantization for reduced memory footprint.
+	// AWQ and GPTQ require pre-quantized model weights. GGUF routes to the
+	// quant-cpp engine automatically. bitsandbytes and fp8 quantize at load time.
+	// +optional
+	Quantization *QuantizationSpec `json:"quantization,omitempty"`
+
 	// Engine specifies the inference engine to use.
 	// Defaults to 'vllm'. Supported: 'vllm', 'quant-cpp'.
 	// +kubebuilder:default="vllm"
@@ -367,6 +373,21 @@ type KVCacheSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	SwapSpaceGB *int32 `json:"swapSpaceGB,omitempty"`
+}
+
+// QuantizationSpec configures weight quantization for reduced memory footprint.
+type QuantizationSpec struct {
+	// Method selects the quantization algorithm.
+	// "awq" and "gptq" require pre-quantized model weights.
+	// "gguf" routes to the quant-cpp engine automatically.
+	// "bitsandbytes" and "fp8" quantize at load time.
+	// +kubebuilder:validation:Enum=awq;gptq;gguf;bitsandbytes;fp8
+	Method string `json:"method"`
+
+	// CheckpointPath is the path to GPTQ quantization checkpoint files.
+	// Only valid when Method is "gptq".
+	// +optional
+	CheckpointPath string `json:"checkpointPath,omitempty"`
 }
 
 // ScalingSpec configures autoscaling for the inference service.

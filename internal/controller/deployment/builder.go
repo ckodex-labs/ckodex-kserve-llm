@@ -707,6 +707,16 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 	}
 	c := &podSpec.Containers[0]
 
+	// GGUF format: auto-route to quant-cpp engine (no need to set engine: quant-cpp explicitly).
+	if llmSvc.Spec.Quantization != nil && llmSvc.Spec.Quantization.Method == "gguf" {
+		c.Image = api.QuantCppImage
+		if b.AirGappedMode && b.LocalRegistry != "" {
+			c.Image = b.rewriteImage(c.Image)
+		}
+		b.ensureQuantCppArgs(llmSvc, c, hwType)
+		return
+	}
+
 	engine := llmSvc.Spec.Engine
 	if engine == "" {
 		engine = "vllm"
@@ -734,6 +744,13 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 				"--model", api.ModelMountPath,
 				"--host", "0.0.0.0",
 				"--port", "8000",
+			}
+		}
+		// Weight quantization (vLLM v0.23.0) — appended after any existing args.
+		if q := llmSvc.Spec.Quantization; q != nil {
+			c.Args = append(c.Args, "--quantization", q.Method)
+			if q.Method == "gptq" && q.CheckpointPath != "" {
+				c.Args = append(c.Args, "--gptq-ckpt-path", q.CheckpointPath)
 			}
 		}
 	}

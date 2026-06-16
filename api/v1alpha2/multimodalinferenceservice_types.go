@@ -128,6 +128,22 @@ type MultimodalInferenceServiceSpec struct {
 	// +optional
 	MaxImagesPerPrompt *int32 `json:"maxImagesPerPrompt,omitempty"`
 
+	// ImageInputType selects the pixel encoding passed to the vision encoder.
+	// Corresponds to vLLM --image-input-type (e.g., "pixel_values", "image_features").
+	// Leave empty to let the model determine the encoding from its config.
+	// +optional
+	ImageInputType string `json:"imageInputType,omitempty"`
+
+	// ImageProcessorModel overrides the image processor used for pixel encoding.
+	// Defaults to the processor bundled with the model weights.
+	// Useful when the vision encoder is separate from the language model.
+	// +optional
+	ImageProcessorModel string `json:"imageProcessorModel,omitempty"`
+
+	// Quantization configures weight quantization for VLMs with large vision encoders.
+	// +optional
+	Quantization *QuantizationSpec `json:"quantization,omitempty"`
+
 	// Replicas is the desired number of serving pods.
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Minimum=0

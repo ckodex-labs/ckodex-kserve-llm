@@ -2814,6 +2814,11 @@ func (in *MultimodalInferenceServiceSpec) DeepCopyInto(out *MultimodalInferenceS
 		*out = new(int32)
 		**out = **in
 	}
+	if in.Quantization != nil {
+		in, out := &in.Quantization, &out.Quantization
+		*out = new(QuantizationSpec)
+		**out = **in
+	}
 	if in.Replicas != nil {
 		in, out := &in.Replicas, &out.Replicas
 		*out = new(int32)

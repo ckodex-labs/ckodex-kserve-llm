@@ -464,3 +464,24 @@ func mergeResources(base, defaultResources *corev1.ResourceRequirements) {
 		}
 	}
 }
+
+// GetRerankerWellKnownConfig returns resource defaults for known cross-encoder reranker models.
+// Returns nil for unknown models — the controller falls back to api.DefaultVLLM* constants.
+func GetRerankerWellKnownConfig(modelURI string) *servingv1alpha2.RerankerInferenceServiceSpec {
+	norm := strings.ToLower(modelURI)
+	switch {
+	case strings.Contains(norm, "bge-reranker-v2-m3"):
+		// BAAI/bge-reranker-v2-m3: 568M params, multilingual cross-encoder. 1 GPU, ~8 GiB VRAM.
+		return &servingv1alpha2.RerankerInferenceServiceSpec{
+			MaxCandidates: 100,
+			Resources: &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("4"),
+					corev1.ResourceMemory: resource.MustParse("8Gi"),
+					"nvidia.com/gpu":      resource.MustParse("1"),
+				},
+			},
+		}
+	}
+	return nil
+}

@@ -1,0 +1,363 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: rerankerinferenceservices.serving.ckodex.com
+spec:
+  group: serving.ckodex.com
+  names:
+    kind: RerankerInferenceService
+    listKind: RerankerInferenceServiceList
+    plural: rerankerinferenceservices
+    shortNames:
+    - reranker
+    singular: rerankerinferenceservice
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.model.name
+      name: Model
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: |-
+          RerankerInferenceService manages cross-encoder reranking models.
+          It exposes /rerank and /v1/rerank endpoints compatible with the Cohere Rerank API.
+          Backed by vLLM with --task score.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: RerankerInferenceServiceSpec defines the desired state of
+              a RerankerInferenceService.
+            properties:
+              maxCandidates:
+                default: 100
+                description: MaxCandidates caps the number of documents accepted per
+                  rerank request.
+                format: int32
+                maximum: 1000
+                minimum: 1
+                type: integer
+              model:
+                description: Model specifies the cross-encoder model weights (e.g.
+                  hf://BAAI/bge-reranker-v2-m3).
+                properties:
+                  hardwareAware:
+                    description: |-
+                      HardwareAware enables automatic hardware-specific artifact selection.
+                      When true, the operator appends hardware suffixes to OCI tags (e.g., -nvidia).
+                      Requires ENABLE_EXPERIMENTAL_HARDWARE_SELECTION feature gate.
+                    type: boolean
+                  name:
+                    description: |-
+                      Name is the model identifier used in inference requests.
+                      This is the value clients use in the "model" field of chat/completion requests.
+                    type: string
+                  storage:
+                    description: |-
+                      Storage configures credentials for model download.
+                      Mirrors LocalModelCache credential support.
+                    properties:
+                      externalSecret:
+                        description: |-
+                          ExternalSecret configures native integration with external-secrets.io.
+                          When set, the operator creates an ExternalSecret resource to sync
+                          credentials from an external provider (Vault, AWS SM, etc.).
+                        properties:
+                          data:
+                            description: Data defines the mapping of remote keys to
+                              local secret keys.
+                            items:
+                              description: ExternalSecretData defines a single mapping
+                                of a remote secret to a local key.
+                              properties:
+                                remoteRef:
+                                  description: RemoteRef defines where to fetch the
+                                    secret from the provider.
+                                  properties:
+                                    key:
+                                      description: Key is the name/path of the secret
+                                        in the external provider.
+                                      type: string
+                                    property:
+                                      description: Property is the specific field
+                                        to extract from the remote secret.
+                                      type: string
+                                  required:
+                                  - key
+                                  type: object
+                                secretKey:
+                                  description: SecretKey is the key in the resulting
+                                    Kubernetes Secret.
+                                  type: string
+                              required:
+                              - remoteRef
+                              - secretKey
+                              type: object
+                            type: array
+                          refreshInterval:
+                            default: 1h
+                            description: RefreshInterval is how often to re-sync the
+                              secret from the provider.
+                            type: string
+                          secretStoreRef:
+                            description: SecretStoreRef references the SecretStore/ClusterSecretStore
+                              to use.
+                            properties:
+                              kind:
+                                default: SecretStore
+                                description: Kind of the SecretStore (SecretStore
+                                  or ClusterSecretStore).
+                                type: string
+                              name:
+                                description: Name of the SecretStore.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - secretStoreRef
+                        type: object
+                      secretRef:
+                        description: SecretRef is a reference to a Secret containing
+                          storage credentials.
+                        properties:
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      serviceAccountName:
+                        description: ServiceAccountName is the name of a ServiceAccount
+                          with storage access.
+                        type: string
+                      storageContainerRef:
+                        description: StorageContainerRef references a ClusterStorageContainer
+                          for download config.
+                        type: string
+                      vaultAddr:
+                        description: VaultAddr is the address of the HashiCorp Vault
+                          server.
+                        type: string
+                      vaultRef:
+                        description: VaultRef is a reference to a Vault path containing
+                          storage credentials.
+                        type: string
+                    type: object
+                  uri:
+                    description: |-
+                      URI is the model artifact location.
+                      Supported schemes: hf:// (HuggingFace Hub), hf-mount:// (HuggingFace CSI lazy mount),
+                      s3://, swfs://, gs://, pvc://, oci://, ocis://, modelpack://.
+                      hf-mount:// uses the hf-csi-driver to mount repos as a FUSE/NFS filesystem —
+                      only accessed bytes are fetched, eliminating full model downloads.
+                      `ocis://` is an explicit secure-OCI alias and follows the same runtime
+                      verification path as `oci://`, while making the intent visible at the spec boundary.
+                    pattern: ^(hf|hf-mount|s3|swfs|gs|pvc|oci|ocis|modelpack|https?)://.*$
+                    type: string
+                required:
+                - name
+                - uri
+                type: object
+              quantization:
+                description: Quantization configures weight quantization for memory
+                  efficiency.
+                properties:
+                  checkpointPath:
+                    description: |-
+                      CheckpointPath is the path to GPTQ quantization checkpoint files.
+                      Only valid when Method is "gptq".
+                    type: string
+                  method:
+                    description: |-
+                      Method selects the quantization algorithm.
+                      "awq" and "gptq" require pre-quantized model weights.
+                      "gguf" routes to the quant-cpp engine automatically.
+                      "bitsandbytes" and "fp8" quantize at load time.
+                    enum:
+                    - awq
+                    - gptq
+                    - gguf
+                    - bitsandbytes
+                    - fp8
+                    type: string
+                required:
+                - method
+                type: object
+              replicas:
+                default: 1
+                description: Replicas sets the number of serving pods.
+                format: int32
+                minimum: 0
+                type: integer
+              resources:
+                description: Resources overrides default CPU/memory/GPU allocation.
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This field depends on the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
+            required:
+            - model
+            type: object
+          status:
+            description: RerankerInferenceServiceStatus defines the observed state
+              of a RerankerInferenceService.
+            properties:
+              conditions:
+                description: Conditions represent the latest observations.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              endpoint:
+                description: Endpoint is the /rerank URL once ready.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed.
+                format: int64
+                type: integer
+              replicas:
+                description: Replicas is the number of currently ready pods.
+                format: int32
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

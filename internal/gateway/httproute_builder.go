@@ -276,4 +276,38 @@ func BuildCanaryHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters 
 	}
 }
 
+// BuildRerankerHTTPRoute generates an HTTPRoute for a RerankerInferenceService.
+// Exposes /rerank (Cohere-compatible) and /v1/rerank (OpenAI-compat alias).
+func BuildRerankerHTTPRoute(svc *servingv1alpha2.RerankerInferenceService) *gwapiv1.HTTPRoute {
+	pathExact := gwapiv1.PathMatchExact
+	svcPort := gwapiv1.PortNumber(80)
+	backend := gwapiv1.HTTPBackendRef{
+		BackendRef: gwapiv1.BackendRef{
+			BackendObjectReference: gwapiv1.BackendObjectReference{
+				Name: gwapiv1.ObjectName(svc.Name),
+				Port: &svcPort,
+			},
+		},
+	}
+	return &gwapiv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      svc.Name + "-httproute",
+			Namespace: svc.Namespace,
+			Labels:    map[string]string{"serving.ckodex.com/reranker": svc.Name},
+		},
+		Spec: gwapiv1.HTTPRouteSpec{
+			Rules: []gwapiv1.HTTPRouteRule{
+				{
+					Matches:     []gwapiv1.HTTPRouteMatch{{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/rerank")}}},
+					BackendRefs: []gwapiv1.HTTPBackendRef{backend},
+				},
+				{
+					Matches:     []gwapiv1.HTTPRouteMatch{{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/v1/rerank")}}},
+					BackendRefs: []gwapiv1.HTTPBackendRef{backend},
+				},
+			},
+		},
+	}
+}
+
 func strPtr(s string) *string { return &s }

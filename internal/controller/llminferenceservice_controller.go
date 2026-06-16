@@ -171,6 +171,21 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
+	// Fetch AIPacks early so BaseModel quantization can be injected before the
+	// deployment builder runs. Governance re-uses the same list below (lines ~238).
+	var earlyAIPackList servingv1alpha2.AIPackList
+	if err := r.List(ctx, &earlyAIPackList, client.InNamespace(llmSvc.Namespace)); err != nil {
+		logger.Error(err, "failed to list AIPacks for pre-deployment injection (non-blocking)")
+	} else {
+		var earlyPacks []servingv1alpha2.AIPack
+		for _, pack := range earlyAIPackList.Items {
+			if pack.Labels["serving.ckodex.com/workload"] == llmSvc.Name {
+				earlyPacks = append(earlyPacks, pack)
+			}
+		}
+		applyAIPackConfig(&llmSvc, earlyPacks)
+	}
+
 	// 3b. Reconcile Deployment
 	// Fetch associated LoRA adapters to inject volumes/args
 	var loraList servingv1alpha2.LLMLoraAdapterList
@@ -530,5 +545,49 @@ func (r *LLMInferenceServiceReconciler) mapLocalModelCacheToInferenceServices(ct
 		}
 	}
 	return results
+}
+
+// applyAIPackConfig injects BaseModel quantization metadata from governance-bound AIPacks
+// into the in-memory LLMInferenceService spec. The CR is never patched — injection is
+// ephemeral per reconcile loop, so user-set values always win (nil-guard below).
+//
+// BaseModelSpec.Quantization uses free-form strings like "int4-awq", "fp8", "bf16".
+// We map to our QuantizationSpec.Method enum: awq, gptq, gguf, bitsandbytes, fp8.
+// Unrecognised or training-precision values (bf16, fp32) are skipped.
+func applyAIPackConfig(llmSvc *servingv1alpha2.LLMInferenceService, packs []servingv1alpha2.AIPack) {
+	if llmSvc.Spec.Quantization != nil {
+		return // user-set value wins; nothing to inject
+	}
+	for i := range packs {
+		pack := &packs[i]
+		if pack.Spec.Kind != servingv1alpha2.KindBaseModel || pack.Spec.BaseModel == nil {
+			continue
+		}
+		method := normalizeQuantization(pack.Spec.BaseModel.Quantization)
+		if method == "" {
+			continue
+		}
+		llmSvc.Spec.Quantization = &servingv1alpha2.QuantizationSpec{Method: method}
+		return // first matching BaseModel pack wins
+	}
+}
+
+// normalizeQuantization maps AIPack free-form quantization strings to QuantizationSpec.Method.
+// Returns "" for unrecognised or training-precision values (bf16, fp32, bfloat16).
+func normalizeQuantization(q string) string {
+	switch q {
+	case "awq", "int4-awq":
+		return "awq"
+	case "gptq", "int4-gptq":
+		return "gptq"
+	case "gguf":
+		return "gguf"
+	case "bitsandbytes", "bnb", "int8":
+		return "bitsandbytes"
+	case "fp8":
+		return "fp8"
+	default:
+		return "" // bf16, fp32, bfloat16 are training precision, not inference quant methods
+	}
 }
 

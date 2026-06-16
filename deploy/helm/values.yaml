@@ -75,13 +75,20 @@ vllm:
   gemma4Image: "vllm/vllm-openai:gemma4"
   cpuImage: "vllm/vllm-openai-cpu:v0.23.0"
   rocmImage: "vllm/vllm-openai:v0.23.0-rocm"
-  storageInitializerImage: "kserve/storage-initializer:v0.19.0-rc0"
+  storageInitializerImage: "kserve/storage-initializer:v0.19.0"
 
   # v0.19.0 features
   cpuKvOffloading:
     enabled: false     # general CPU KV cache offloading
   dbo:
     enabled: false     # Dual-Batch Overlap for throughput
+
+# HuggingFace CSI Driver integration
+# Install prerequisite: helm install hf-csi oci://ghcr.io/huggingface/charts/hf-csi-driver -n kube-system
+# The operator manages static PV+PVC provisioning for hf-mount:// URIs using this driver.
+hfCsiDriver:
+  enabled: true
+  driverName: "hf.csi.huggingface.co"
 
 # Gemma 4 Model Profiles
 # Pre-configured resource profiles for each model variant.

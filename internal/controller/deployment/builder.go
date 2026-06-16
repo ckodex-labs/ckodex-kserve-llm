@@ -434,31 +434,18 @@ func (b *Builder) ensureModelVolume(llmSvc *servingv1alpha2.LLMInferenceService,
 			},
 		})
 	case strings.HasPrefix(uri, "hf-mount://"):
-		repoPath := strings.TrimPrefix(uri, "hf-mount://")
-		repo := repoPath
-		revision := ""
-		if idx := strings.Index(repoPath, "@"); idx != -1 {
-			repo = repoPath[:idx]
-			revision = repoPath[idx+1:]
+		// PV+PVC are provisioned by HFCSIReconciler before the pod is built.
+		// The PVC name is the same deterministic formula used in hfcsi_reconciler.go.
+		pvcName := fmt.Sprintf("hf-model-%s-%s", llmSvc.Namespace, llmSvc.Name)
+		if len(pvcName) > 253 {
+			pvcName = pvcName[:253]
 		}
-
-		attrs := map[string]string{
-			"repo": repo,
-		}
-		if revision != "" {
-			attrs["revision"] = revision
-		}
-		if llmSvc.Spec.Model.Storage != nil && llmSvc.Spec.Model.Storage.SecretRef != nil {
-			attrs["tokenSecret"] = llmSvc.Spec.Model.Storage.SecretRef.Name
-		}
-
 		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
 			Name: api.ModelVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				CSI: &corev1.CSIVolumeSource{
-					Driver:           api.HFMountCSIDriver,
-					VolumeAttributes: attrs,
-					ReadOnly:         ptr.To(true),
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+					ReadOnly:  true,
 				},
 			},
 		})

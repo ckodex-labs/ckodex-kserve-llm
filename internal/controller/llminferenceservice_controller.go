@@ -79,13 +79,16 @@ type LLMInferenceServiceReconciler struct {
 	LocalCosignKeyPath string
 
 	// Modular sub-reconcilers
-	DeploymentBuilder   *deployment.Builder
-	StatusReconciler    *status.Reconciler
-	CleanupReconciler   *cleanup.Reconciler
-	ServiceReconciler   *reconciler.ServiceReconciler
-	PDBReconciler       *reconciler.PDBReconciler
+	DeploymentBuilder    *deployment.Builder
+	StatusReconciler     *status.Reconciler
+	CleanupReconciler    *cleanup.Reconciler
+	ServiceReconciler    *reconciler.ServiceReconciler
+	PDBReconciler        *reconciler.PDBReconciler
 	GovernanceReconciler *evidence.GovernanceReconciler
-	HardwareCache       deployment.HardwareCache
+	HardwareCache        deployment.HardwareCache
+	// HFCSIReconciler provisions PV+PVC for hf-mount:// URIs using the official hf-csi-driver.
+	// Must run before reconcileDeployment so the PVC exists when the pod is scheduled.
+	HFCSI *HFCSIReconciler
 
 	// M3 Vision: Real-time Metrics Query
 	Metrics observability.MetricsQuerier
@@ -160,7 +163,15 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	// 3. Reconcile Deployment
+	// 3. Provision hf-csi-driver PV+PVC for hf-mount:// URIs before the pod is built.
+	// No-op for all other URI schemes.
+	if r.HFCSI != nil {
+		if err := r.HFCSI.Reconcile(ctx, &llmSvc); err != nil {
+			return ctrl.Result{}, fmt.Errorf("hf-csi provisioning: %w", err)
+		}
+	}
+
+	// 3b. Reconcile Deployment
 	// Fetch associated LoRA adapters to inject volumes/args
 	var loraList servingv1alpha2.LLMLoraAdapterList
 	activeLoras := []servingv1alpha2.LLMLoraAdapter{}
@@ -451,6 +462,10 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		AirGappedMode:      r.AirGappedMode,
 		LocalCosignKeyPath: r.LocalCosignKeyPath,
 	}
+	r.HFCSI = &HFCSIReconciler{
+		Client: mgr.GetClient(),
+		Scheme: r.Scheme,
+	}
 	r.Recorder = mgr.GetEventRecorderFor("ckodex-llm-operator")
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -459,6 +474,7 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&gwapiv1.HTTPRoute{}).
 		Owns(&gwapiv1.GRPCRoute{}).
 		Owns(&gwapiv1.Gateway{}).

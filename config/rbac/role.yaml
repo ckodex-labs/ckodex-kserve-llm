@@ -42,6 +42,19 @@ rules:
   - patch
   - update
   - watch
+# Cluster-scoped: hf-csi-driver static provisioning requires PV management
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - ""
   resources:

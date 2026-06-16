@@ -39,6 +39,10 @@ const (
 type RerankerInferenceServiceReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	// AirGappedMode, when true, rewrites the vLLM image to LocalRegistry so pods
+	// don't attempt to pull from the public internet.
+	AirGappedMode bool
+	LocalRegistry string
 }
 
 // Reconcile implements the main reconcile loop.
@@ -287,9 +291,13 @@ func (r *RerankerInferenceServiceReconciler) buildContainer(
 		},
 	}
 
+	image := api.VLLMImage
+	if r.AirGappedMode && r.LocalRegistry != "" {
+		image = rewriteImageRegistry(r.LocalRegistry, image)
+	}
 	return corev1.Container{
 		Name:      rerankerContainerName,
-		Image:     api.VLLMImage,
+		Image:     image,
 		Args:      args,
 		Resources: res,
 		Ports:     []corev1.ContainerPort{{Name: "http", ContainerPort: port, Protocol: corev1.ProtocolTCP}},
@@ -353,6 +361,13 @@ func rerankerLabels(name string) map[string]string {
 		"app.kubernetes.io/component": "reranker",
 		"app.kubernetes.io/part-of":   "ckodex-llm-operator",
 	}
+}
+
+// rewriteImageRegistry prepends localRegistry to image, replacing the original registry.
+// Mirrors the logic in deployment/builder.go Builder.rewriteImage.
+func rewriteImageRegistry(localRegistry, image string) string {
+	parts := strings.Split(image, "/")
+	return fmt.Sprintf("%s/%s", localRegistry, strings.Join(parts, "/"))
 }
 
 // rerankerModelID strips the hf:// URI scheme prefix to get the raw HuggingFace model ID.

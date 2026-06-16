@@ -394,7 +394,11 @@ func (r *LLMLoraAdapterReconciler) registerWithTargetService(ctx context.Context
 					lastErr = postErr
 				}
 				if attempt < 2 {
-					time.Sleep(500 * time.Millisecond)
+					select {
+					case <-time.After(500 * time.Millisecond):
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					}
 				}
 			}
 			return nil, lastErr

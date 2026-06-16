@@ -403,8 +403,10 @@ func main() {
 
 	// Set up RerankerInferenceService controller — cross-encoder reranking with vLLM --task score.
 	if err := (&controller.RerankerInferenceServiceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		AirGappedMode: cfg.AirGappedMode,
+		LocalRegistry: cfg.LocalRegistry,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RerankerInferenceService")
 		os.Exit(1)

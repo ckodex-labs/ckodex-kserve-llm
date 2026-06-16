@@ -577,7 +577,7 @@ func applyAIPackConfig(llmSvc *servingv1alpha2.LLMInferenceService, packs []serv
 // Returns "" for unrecognised or training-precision values (bf16, fp32, bfloat16).
 func normalizeQuantization(q string) string {
 	switch q {
-	case "awq", "int4-awq":
+	case "awq", "int4-awq", "w4a16", "int4":
 		return "awq"
 	case "gptq", "int4-gptq":
 		return "gptq"
@@ -585,7 +585,7 @@ func normalizeQuantization(q string) string {
 		return "gguf"
 	case "bitsandbytes", "bnb", "int8":
 		return "bitsandbytes"
-	case "fp8":
+	case "fp8", "w8a8", "sq", "smoothquant":
 		return "fp8"
 	default:
 		return "" // bf16, fp32, bfloat16 are training precision, not inference quant methods

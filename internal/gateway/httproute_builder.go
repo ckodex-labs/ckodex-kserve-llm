@@ -278,7 +278,12 @@ func BuildCanaryHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters 
 
 // BuildRerankerHTTPRoute generates an HTTPRoute for a RerankerInferenceService.
 // Exposes /rerank (Cohere-compatible) and /v1/rerank (OpenAI-compat alias).
-func BuildRerankerHTTPRoute(svc *servingv1alpha2.RerankerInferenceService) *gwapiv1.HTTPRoute {
+// parentGatewayName selects the Gateway that should accept this route; when empty
+// it defaults to "<svc.Name>-gateway" following the LLM controller convention.
+func BuildRerankerHTTPRoute(svc *servingv1alpha2.RerankerInferenceService, parentGatewayName string) *gwapiv1.HTTPRoute {
+	if parentGatewayName == "" {
+		parentGatewayName = svc.Name + "-gateway"
+	}
 	pathExact := gwapiv1.PathMatchExact
 	svcPort := gwapiv1.PortNumber(80)
 	backend := gwapiv1.HTTPBackendRef{
@@ -296,6 +301,11 @@ func BuildRerankerHTTPRoute(svc *servingv1alpha2.RerankerInferenceService) *gwap
 			Labels:    map[string]string{"serving.ckodex.com/reranker": svc.Name},
 		},
 		Spec: gwapiv1.HTTPRouteSpec{
+			CommonRouteSpec: gwapiv1.CommonRouteSpec{
+				ParentRefs: []gwapiv1.ParentReference{
+					{Name: gwapiv1.ObjectName(parentGatewayName)},
+				},
+			},
 			Rules: []gwapiv1.HTTPRouteRule{
 				{
 					Matches:     []gwapiv1.HTTPRouteMatch{{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/rerank")}}},

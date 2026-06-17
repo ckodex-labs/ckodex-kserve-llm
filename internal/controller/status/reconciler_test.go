@@ -89,7 +89,7 @@ func TestReconciler_Update_Gating(t *testing.T) {
 			Client:          fakeClient,
 			EnableHardening: true,
 		}
-		
+
 		metrics := &servingv1alpha2.AdaptiveMetrics{
 			P50Latency: "25ms",
 			P99Latency: "150ms",
@@ -98,7 +98,7 @@ func TestReconciler_Update_Gating(t *testing.T) {
 
 		testLLM := llm.DeepCopy()
 		testLLM.Status = servingv1alpha2.LLMInferenceServiceStatus{}
-		
+
 		err := r.Update(context.Background(), testLLM, llm, true, metrics)
 		assert.NoError(t, err)
 

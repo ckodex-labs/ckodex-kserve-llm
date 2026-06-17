@@ -6,6 +6,7 @@ Licensed under the Apache License, Version 2.0.
 package observability
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -343,7 +344,8 @@ func (l *VectorLogger) Log(level, message string, fields map[string]any) error {
 
 	if l.conn == nil {
 		var err error
-		l.conn, err = net.DialTimeout("tcp", l.addr, 2*time.Second)
+		dialer := net.Dialer{Timeout: 2 * time.Second}
+		l.conn, err = dialer.DialContext(context.Background(), "tcp", l.addr)
 		if err != nil {
 			return fmt.Errorf("connect to vector: %w", err)
 		}

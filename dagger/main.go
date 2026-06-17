@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"dagger/ckodex-operator/internal/dagger"
+
+	"dagger.io/dagger/dag"
 )
 
 const (
@@ -52,7 +54,7 @@ func (m *CkodexOperator) Lint(
 		WithMountedCache("/go/pkg/mod", dag.CacheVolume("go-mod")).
 		WithMountedCache("/root/.cache/go-build", dag.CacheVolume("go-build")).
 		WithMountedCache("/root/.cache/golangci-lint", dag.CacheVolume("golangci-lint")).
-		WithExec([]string{"golangci-lint", "run", "-v", "--timeout", "10m", "./ci/..."}).
+		WithExec([]string{"golangci-lint", "run", "-v", "--timeout", "10m", "./..."}).
 		Stdout(ctx)
 	if err != nil {
 		return out, fmt.Errorf("golangci-lint: %w", err)

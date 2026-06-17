@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"fmt"
+
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
 

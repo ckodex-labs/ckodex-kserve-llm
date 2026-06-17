@@ -1,6 +1,6 @@
 # CKodex KServe LLM Operator — Makefile
-IMG ?= ghcr.io/ckodex/kserve-llm-operator:latest
-STORAGE_INITIALIZER_IMG ?= ckodex/storage-initializer:latest
+IMG ?= ghcr.io/ckodex-labs/ckodex-kserve-llm:dev
+STORAGE_INITIALIZER_IMG ?= ghcr.io/ckodex-labs/ckodex-kserve-llm-storage-initializer:dev
 CONTROLLER_GEN ?= $(shell which controller-gen 2>/dev/null || echo $(GOBIN)/controller-gen)
 ENVTEST ?= $(shell which setup-envtest 2>/dev/null || echo $(GOBIN)/setup-envtest)
 GOLANGCI_LINT ?= $(shell which golangci-lint 2>/dev/null || echo $(GOBIN)/golangci-lint)

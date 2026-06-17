@@ -82,6 +82,8 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if session.Status.BoundEndpoint == "" && session.Status.Phase != servingv1alpha2.SessionPhaseEvicted {
 		endpoint, err := r.selectEndpoint(ctx, &session)
 		if err != nil {
+			// Session binding depends on eventually-ready endpoints; requeue without surfacing a terminal reconcile error.
+			//nolint:nilerr
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		session.Status.BoundEndpoint = endpoint
@@ -172,6 +174,7 @@ func (r *SessionReconciler) selectEndpoint(ctx context.Context, session *serving
 		"kubernetes.io/service-name": session.Spec.ModelRef,
 	}); err != nil || len(slices.Items) == 0 {
 		// Fallback to service DNS
+		//nolint:nilerr
 		return fmt.Sprintf("%s.%s.svc.cluster.local:8000",
 			llmSvc.Name, llmSvc.Namespace), nil
 	}
@@ -249,7 +252,6 @@ func (r *ActorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		actor.Status.ActiveSessions == 0 &&
 		actor.Spec.IdleTimeout != nil &&
 		actor.Status.LastActivationTime != nil {
-
 		if time.Since(actor.Status.LastActivationTime.Time) > actor.Spec.IdleTimeout.Duration {
 			logger.Info("deactivating idle actor")
 			actor.Status.State = servingv1alpha2.ActorStateDeactivating

@@ -4,10 +4,10 @@ package aipack
 type OutlierCategory string
 
 const (
-	OutlierCategoryPerformance   OutlierCategory = "performance"
-	OutlierCategoryBehavioral    OutlierCategory = "behavioral"
-	OutlierCategoryDistribution  OutlierCategory = "distribution"
-	OutlierCategoryProvenance    OutlierCategory = "provenance"
+	OutlierCategoryPerformance  OutlierCategory = "performance"
+	OutlierCategoryBehavioral   OutlierCategory = "behavioral"
+	OutlierCategoryDistribution OutlierCategory = "distribution"
+	OutlierCategoryProvenance   OutlierCategory = "provenance"
 )
 
 // OutlierSignal is the §14 outlier detection result.

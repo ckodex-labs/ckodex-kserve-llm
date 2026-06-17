@@ -37,7 +37,7 @@ func (m *MockMetricsQuerier) GetAdaptiveMetrics(ctx context.Context, namespace, 
 	p95 := 80 + rand.Intn(100)
 	p99 := 150 + rand.Intn(200)
 	queueDepth := int64(rand.Intn(10))
-	
+
 	level := "None"
 	if queueDepth > 5 {
 		level = "Light"

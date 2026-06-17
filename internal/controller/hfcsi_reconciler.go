@@ -127,7 +127,7 @@ func (r *HFCSIReconciler) buildPV(llmSvc *servingv1alpha2.LLMInferenceService, p
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "ckodex-operator",
 				"serving.ckodex.com/svc":       llmSvc.Name,
-				"serving.ckodex.com/namespace":  llmSvc.Namespace,
+				"serving.ckodex.com/namespace": llmSvc.Namespace,
 			},
 		},
 		Spec: corev1.PersistentVolumeSpec{

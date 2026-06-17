@@ -10,8 +10,6 @@ import (
 	"strings"
 
 	"dagger/ckodex-operator/internal/dagger"
-
-	"dagger.io/dagger/dag"
 )
 
 const (

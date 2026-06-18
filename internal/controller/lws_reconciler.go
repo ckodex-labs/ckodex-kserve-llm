@@ -182,10 +182,46 @@ func (r *Reconciler) buildVLLMArgs(llmSvc *servingv1alpha2.LLMInferenceService) 
 		if p.Data != nil && *p.Data > 1 {
 			args = append(args, "--data-parallel-size", fmt.Sprintf("%d", *p.Data))
 		}
+		// Pipeline parallelism — splits layers sequentially across nodes (vLLM v0.23.0)
+		if p.Pipeline != nil && *p.Pipeline > 1 {
+			args = append(args, "--pipeline-parallel-size", fmt.Sprintf("%d", *p.Pipeline))
+		}
+		// EPLB — dynamic expert routing rebalance for MoE models (vLLM v0.23.0)
+		if p.EPLBEnabled {
+			args = append(args, "--enable-eplb")
+		}
 
 		// Disaggregated prefill-decode mode (indicated by Prefill spec presence)
 		if llmSvc.Spec.Prefill != nil {
 			args = append(args, "--enable-disaggregated-prefill")
+		}
+	}
+
+	// Speculative decoding / MTP (vLLM v0.23.0)
+	if sd := llmSvc.Spec.SpeculativeDecoding; sd != nil {
+		if sd.NumTokens != nil {
+			args = append(args, "--num-speculative-tokens", fmt.Sprintf("%d", *sd.NumTokens))
+		}
+		if sd.DraftModel != "" {
+			args = append(args, "--speculative-model", sd.DraftModel)
+		}
+	}
+
+	// KV cache dtype and CPU swap (vLLM v0.23.0 multi-tier offload)
+	if kv := llmSvc.Spec.KVCache; kv != nil {
+		if kv.Dtype != "" && kv.Dtype != "auto" {
+			args = append(args, "--kv-cache-dtype", kv.Dtype)
+		}
+		if kv.SwapSpaceGB != nil {
+			args = append(args, "--swap-space", fmt.Sprintf("%d", *kv.SwapSpaceGB))
+		}
+	}
+
+	// Weight quantization (vLLM v0.23.0) — GGUF uses quant-cpp engine, not vLLM args.
+	if q := llmSvc.Spec.Quantization; q != nil && q.Method != "gguf" {
+		args = append(args, "--quantization", q.Method)
+		if q.Method == "gptq" && q.CheckpointPath != "" {
+			args = append(args, "--gptq-ckpt-path", q.CheckpointPath)
 		}
 	}
 

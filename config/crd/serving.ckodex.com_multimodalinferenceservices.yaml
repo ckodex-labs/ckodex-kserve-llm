@@ -69,6 +69,18 @@ spec:
             description: MultimodalInferenceServiceSpec defines the desired state
               of a MultimodalInferenceService.
             properties:
+              imageInputType:
+                description: |-
+                  ImageInputType selects the pixel encoding passed to the vision encoder.
+                  Corresponds to vLLM --image-input-type (e.g., "pixel_values", "image_features").
+                  Leave empty to let the model determine the encoding from its config.
+                type: string
+              imageProcessorModel:
+                description: |-
+                  ImageProcessorModel overrides the image processor used for pixel encoding.
+                  Defaults to the processor bundled with the model weights.
+                  Useful when the vision encoder is separate from the language model.
+                type: string
               maxImagesPerPrompt:
                 default: 1
                 description: |-
@@ -199,14 +211,41 @@ spec:
                     description: |-
                       URI is the model artifact location.
                       Supported schemes: hf:// (HuggingFace Hub), hf-mount:// (HuggingFace CSI lazy mount),
-                      s3://, swfs://, gs://, pvc://, oci://, modelpack://.
+                      s3://, swfs://, gs://, pvc://, oci://, ocis://, modelpack://.
                       hf-mount:// uses the hf-csi-driver to mount repos as a FUSE/NFS filesystem —
                       only accessed bytes are fetched, eliminating full model downloads.
-                    pattern: ^(hf|hf-mount|s3|swfs|gs|pvc|oci|modelpack|https?)://.*$
+                      `ocis://` is an explicit secure-OCI alias and follows the same runtime
+                      verification path as `oci://`, while making the intent visible at the spec boundary.
+                    pattern: ^(hf|hf-mount|s3|swfs|gs|pvc|oci|ocis|modelpack|https?)://.*$
                     type: string
                 required:
                 - name
                 - uri
+                type: object
+              quantization:
+                description: Quantization configures weight quantization for VLMs
+                  with large vision encoders.
+                properties:
+                  checkpointPath:
+                    description: |-
+                      CheckpointPath is the path to GPTQ quantization checkpoint files.
+                      Only valid when Method is "gptq".
+                    type: string
+                  method:
+                    description: |-
+                      Method selects the quantization algorithm.
+                      "awq" and "gptq" require pre-quantized model weights.
+                      "gguf" routes to the quant-cpp engine automatically.
+                      "bitsandbytes" and "fp8" quantize at load time.
+                    enum:
+                    - awq
+                    - gptq
+                    - gguf
+                    - bitsandbytes
+                    - fp8
+                    type: string
+                required:
+                - method
                 type: object
               replicas:
                 default: 1

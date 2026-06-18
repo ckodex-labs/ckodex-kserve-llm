@@ -2,8 +2,8 @@ apiVersion: v2
 name: ckodex-kserve-llm-operator
 description: CKodex KServe LLM Operator — Kubernetes operator for managing LLM inference workloads
 type: application
-version: 0.2.0-beta.1
-appVersion: "0.18.0-beta.1"
+version: 0.18.0-beta.2
+appVersion: "0.18.0-beta.2"
 kubeVersion: ">=1.28.0"
 keywords:
   - kubernetes

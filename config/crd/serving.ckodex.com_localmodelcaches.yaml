@@ -272,8 +272,8 @@ spec:
               sourceModelUri:
                 description: |-
                   SourceModelURI is the model artifact to cache.
-                  Supported schemes: hf://, s3://, swfs://, gs://, pvc://, oci://.
-                pattern: ^(hf|s3|swfs|gs|pvc|oci|https?)://.*$
+                  Supported schemes: hf://, s3://, swfs://, gs://, pvc://, oci://, ocis://.
+                pattern: ^(hf|s3|swfs|gs|pvc|oci|ocis|https?)://.*$
                 type: string
               storage:
                 description: Storage configures credentials for model download.

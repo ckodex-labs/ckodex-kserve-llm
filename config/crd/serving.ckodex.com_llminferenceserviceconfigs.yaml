@@ -73,11 +73,23 @@ spec:
                     format: int32
                     minimum: 1
                     type: integer
+                  eplbEnabled:
+                    description: |-
+                      EPLBEnabled enables Expert Parallelism Load Balancing for MoE models (--enable-eplb).
+                      Dynamically rebalances expert routing — critical for DeepSeek-V4 and Gemma 4 MoE.
+                    type: boolean
                   expert:
                     description: |-
                       Expert enables expert parallelism for MoE models.
                       When true, distributes Mixture-of-Experts across GPUs.
                     type: boolean
+                  pipeline:
+                    description: |-
+                      Pipeline is the pipeline parallelism degree (--pipeline-parallel-size).
+                      Splits model layers sequentially across nodes. Combine with Tensor for 2D parallelism.
+                    format: int32
+                    minimum: 1
+                    type: integer
                   tensor:
                     description: Tensor is the tensor parallelism degree — splits
                       model layers across GPUs within a node.

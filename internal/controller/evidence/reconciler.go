@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -27,6 +28,7 @@ import (
 // It reads pod state (for base-model verification) and aggregates LoRA adapter evidence.
 type GovernanceReconciler struct {
 	Client             client.Client
+	Scheme             *runtime.Scheme
 	AirGappedMode      bool
 	LocalCosignKeyPath string
 }

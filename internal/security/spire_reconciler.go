@@ -54,10 +54,10 @@ func (r *SPIREReconciler) SPIFFEIDForService(namespace, serviceAccount, modelNam
 	ns := namespace
 	if r.VClusterMode && r.HostNamespace != "" {
 		// In vcluster mode, we use the virtual namespace for the tenant's logic,
-		// but we can also offer a mode where the host-cluster SPIRE expects the 
-		// physical (shadow) namespace. For now, we stay consistent with the virtual 
+		// but we can also offer a mode where the host-cluster SPIRE expects the
+		// physical (shadow) namespace. For now, we stay consistent with the virtual
 		// view unless the host-cluster SPIRE is configured otherwise.
-		ns = namespace 
+		ns = namespace
 	}
 	return fmt.Sprintf("spiffe://%s/ns/%s/sa/%s/model/%s",
 		SPIFFETrustDomain, ns, serviceAccount, modelName)

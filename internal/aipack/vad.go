@@ -4,12 +4,12 @@ package aipack
 type VADClass string
 
 const (
-	VADClassPromptInjection    VADClass = "prompt-injection"
-	VADClassJailbreak          VADClass = "jailbreak"
-	VADClassDataPoisoning      VADClass = "data-poisoning"
-	VADClassModelInversion     VADClass = "model-inversion"
+	VADClassPromptInjection     VADClass = "prompt-injection"
+	VADClassJailbreak           VADClass = "jailbreak"
+	VADClassDataPoisoning       VADClass = "data-poisoning"
+	VADClassModelInversion      VADClass = "model-inversion"
 	VADClassMembershipInference VADClass = "membership-inference"
-	VADClassAdversarialInput   VADClass = "adversarial-input"
+	VADClassAdversarialInput    VADClass = "adversarial-input"
 )
 
 // VADDeclaration records a §22 VAD test result for an artifact.

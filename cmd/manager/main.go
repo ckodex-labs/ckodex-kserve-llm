@@ -401,6 +401,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Set up RerankerInferenceService controller — cross-encoder reranking with vLLM --task score.
+	if err := (&controller.RerankerInferenceServiceReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RerankerInferenceService")
+		os.Exit(1)
+	}
+
 	// Set up ImagePullSecret controller — distributes registry credentials into tenant namespaces.
 	// OperatorNamespace is the namespace where source pull secrets reside (where this operator runs).
 	// Detected from POD_NAMESPACE (injected by Helm/Downward API); falls back to "ckodex-system".

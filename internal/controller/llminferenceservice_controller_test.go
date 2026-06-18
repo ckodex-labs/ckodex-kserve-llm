@@ -335,6 +335,9 @@ func TestBuildStorageInitializer_HFMountReturnsNil(t *testing.T) {
 	}
 }
 
+// TestBuildDeployment_HFMountCSIVolume verifies that hf-mount:// URIs produce a
+// PersistentVolumeClaim reference in the pod spec (not an inline CSI volume).
+// The actual PV+PVC are provisioned by HFCSIReconciler before pod scheduling.
 func TestBuildDeployment_HFMountCSIVolume(t *testing.T) {
 	r, ctx := reconcilerWithNodes(t, nodeWithArch("arm64", nil, nil))
 	llmSvc := baseLLMInferenceService()
@@ -350,28 +353,28 @@ func TestBuildDeployment_HFMountCSIVolume(t *testing.T) {
 		}
 	}
 
-	// Should have a CSI volume with the hf-mount driver
-	var csiVol *corev1.CSIVolumeSource
+	// Should reference a PVC (provisioned by HFCSIReconciler), not an inline CSI volume.
+	var pvcVol *corev1.PersistentVolumeClaimVolumeSource
 	for _, v := range podSpec.Volumes {
-		if v.Name == api.ModelVolumeName && v.CSI != nil {
-			csiVol = v.CSI
+		if v.Name == api.ModelVolumeName && v.PersistentVolumeClaim != nil {
+			pvcVol = v.PersistentVolumeClaim
 			break
 		}
 	}
-	if csiVol == nil {
-		t.Fatal("expected CSI volume for hf-mount:// URI, got none")
+	if pvcVol == nil {
+		t.Fatal("expected PVC volume for hf-mount:// URI — HFCSIReconciler provisions PV+PVC before pod scheduling")
 	}
-	if csiVol.Driver != api.HFMountCSIDriver {
-		t.Errorf("CSI driver = %q, want %q", csiVol.Driver, api.HFMountCSIDriver)
+	expectedPVC := "hf-model-" + llmSvc.Namespace + "-" + llmSvc.Name
+	if pvcVol.ClaimName != expectedPVC {
+		t.Errorf("PVC ClaimName = %q, want %q", pvcVol.ClaimName, expectedPVC)
 	}
-	if csiVol.VolumeAttributes["repo"] != "Qwen/Qwen2.5-0.5B-Instruct" {
-		t.Errorf("repo attr = %q, want %q", csiVol.VolumeAttributes["repo"], "Qwen/Qwen2.5-0.5B-Instruct")
-	}
-	if csiVol.ReadOnly == nil || !*csiVol.ReadOnly {
-		t.Error("hf-mount volume should be read-only")
+	if !pvcVol.ReadOnly {
+		t.Error("hf-mount PVC volume should be read-only")
 	}
 }
 
+// TestBuildDeployment_HFMountWithRevision checks that the PVC name is deterministic
+// even when the URI includes a revision suffix (@v1.0). Revision is handled in HFCSIReconciler.
 func TestBuildDeployment_HFMountWithRevision(t *testing.T) {
 	r, ctx := reconcilerWithNodes(t, nodeWithArch("arm64", nil, nil))
 	llmSvc := baseLLMInferenceService()
@@ -379,24 +382,25 @@ func TestBuildDeployment_HFMountWithRevision(t *testing.T) {
 
 	deploy := r.buildDeployment(ctx, llmSvc, 1)
 
-	var csiVol *corev1.CSIVolumeSource
+	var pvcVol *corev1.PersistentVolumeClaimVolumeSource
 	for _, v := range deploy.Spec.Template.Spec.Volumes {
-		if v.Name == api.ModelVolumeName && v.CSI != nil {
-			csiVol = v.CSI
+		if v.Name == api.ModelVolumeName && v.PersistentVolumeClaim != nil {
+			pvcVol = v.PersistentVolumeClaim
 			break
 		}
 	}
-	if csiVol == nil {
-		t.Fatal("expected CSI volume")
+	if pvcVol == nil {
+		t.Fatal("expected PVC volume for hf-mount:// URI")
 	}
-	if csiVol.VolumeAttributes["repo"] != "Qwen/Qwen2.5-0.5B-Instruct" {
-		t.Errorf("repo = %q, want without revision", csiVol.VolumeAttributes["repo"])
-	}
-	if csiVol.VolumeAttributes["revision"] != "v1.0" {
-		t.Errorf("revision = %q, want %q", csiVol.VolumeAttributes["revision"], "v1.0")
+	// PVC name is based on namespace+name, not the URI — revision is encoded in the PV spec.
+	expectedPVC := "hf-model-" + llmSvc.Namespace + "-" + llmSvc.Name
+	if pvcVol.ClaimName != expectedPVC {
+		t.Errorf("PVC ClaimName = %q, want %q", pvcVol.ClaimName, expectedPVC)
 	}
 }
 
+// TestBuildDeployment_HFMountWithSecret checks that secret handling does not affect
+// the pod-spec PVC reference. Auth is encoded in the PV's nodePublishSecretRef by HFCSIReconciler.
 func TestBuildDeployment_HFMountWithSecret(t *testing.T) {
 	r, ctx := reconcilerWithNodes(t, nodeWithArch("arm64", nil, nil))
 	llmSvc := baseLLMInferenceService()
@@ -407,19 +411,22 @@ func TestBuildDeployment_HFMountWithSecret(t *testing.T) {
 
 	deploy := r.buildDeployment(ctx, llmSvc, 1)
 
-	var csiVol *corev1.CSIVolumeSource
+	var pvcVol *corev1.PersistentVolumeClaimVolumeSource
 	for _, v := range deploy.Spec.Template.Spec.Volumes {
-		if v.Name == api.ModelVolumeName && v.CSI != nil {
-			csiVol = v.CSI
+		if v.Name == api.ModelVolumeName && v.PersistentVolumeClaim != nil {
+			pvcVol = v.PersistentVolumeClaim
 			break
 		}
 	}
-	if csiVol == nil {
-		t.Fatal("expected CSI volume")
+	if pvcVol == nil {
+		t.Fatal("expected PVC volume for hf-mount:// URI")
 	}
-	if csiVol.VolumeAttributes["tokenSecret"] != "hf-token-secret" {
-		t.Errorf("tokenSecret = %q, want %q", csiVol.VolumeAttributes["tokenSecret"], "hf-token-secret")
+	expectedPVC := "hf-model-" + llmSvc.Namespace + "-" + llmSvc.Name
+	if pvcVol.ClaimName != expectedPVC {
+		t.Errorf("PVC ClaimName = %q, want %q", pvcVol.ClaimName, expectedPVC)
 	}
+	// Auth (hf-token-secret) is bound in the PV's nodePublishSecretRef, not the pod spec.
+	// HFCSIReconciler_test.go validates that binding.
 }
 
 func TestReconcileGovernanceEvidence_SR2FailsClosedWithoutVerifiedArtifacts(t *testing.T) {

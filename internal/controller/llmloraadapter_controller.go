@@ -379,16 +379,25 @@ func (r *LLMLoraAdapterReconciler) registerWithTargetService(ctx context.Context
 			if httpClient == nil {
 				httpClient = http.DefaultClient
 			}
-			resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(reqBody))
-			if err != nil {
-				return nil, err
+			// 3-attempt retry with 500 ms backoff for transient vLLM startup races.
+			var lastErr error
+			for attempt := 0; attempt < 3; attempt++ {
+				resp, postErr := postJSON(ctx, httpClient, url, reqBody)
+				if postErr == nil {
+					ok := resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusAccepted
+					_ = resp.Body.Close()
+					if ok {
+						return nil, nil
+					}
+					lastErr = fmt.Errorf("vLLM returned non-OK status %d", resp.StatusCode)
+				} else {
+					lastErr = postErr
+				}
+				if attempt < 2 {
+					time.Sleep(500 * time.Millisecond)
+				}
 			}
-			defer func() { _ = resp.Body.Close() }()
-
-			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-				return nil, fmt.Errorf("vLLM returned non-OK status %d", resp.StatusCode)
-			}
-			return nil, nil
+			return nil, lastErr
 		})
 
 		if err != nil {
@@ -457,7 +466,7 @@ func (r *LLMLoraAdapterReconciler) unloadFromTargetService(ctx context.Context, 
 			if httpClient == nil {
 				httpClient = http.DefaultClient
 			}
-			resp, err := httpClient.Post(url, "application/json", bytes.NewBuffer(reqBody))
+			resp, err := postJSON(ctx, httpClient, url, reqBody)
 			if err != nil {
 				return nil, err
 			}
@@ -502,13 +511,26 @@ func (r *LLMLoraAdapterReconciler) performWarmup(ctx context.Context, podIP, ada
 	}
 	body, _ := json.Marshal(warmupReq)
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	httpClient := r.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	resp, err := postJSON(ctx, httpClient, url, body)
 	if err != nil {
 		logger.Error(err, "Warmup request failed", "pod", podIP)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	logger.Info("Proactive warmup complete", "pod", podIP, "adapter", adapterName)
+}
+
+func postJSON(ctx context.Context, httpClient *http.Client, url string, body []byte) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return httpClient.Do(req)
 }
 
 // SetupWithManager sets up the controller with the Manager.

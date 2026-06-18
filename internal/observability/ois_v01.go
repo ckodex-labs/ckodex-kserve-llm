@@ -37,11 +37,11 @@ const (
 
 // OIS Reproducibility Classes (Section 28)
 const (
-	ReproNone         = "none"
-	ReproExplanatory  = "explanatory"
-	ReproBounded      = "bounded"
+	ReproNone          = "none"
+	ReproExplanatory   = "explanatory"
+	ReproBounded       = "bounded"
 	ReproDeterministic = "deterministic"
-	ReproAttested     = "attested"
+	ReproAttested      = "attested"
 )
 
 // OIS Signal Classes (Section 8.1)
@@ -82,9 +82,9 @@ type QuantProfile struct {
 
 // ContentMessage defines a single OIS message (Section 17).
 type ContentMessage struct {
-	Role    string        `json:"role"`
-	Parts   []ContentPart `json:"parts"`
-	ToolID  string        `json:"tool_id,omitempty"`
+	Role     string        `json:"role"`
+	Parts    []ContentPart `json:"parts"`
+	ToolID   string        `json:"tool_id,omitempty"`
 	ToolCall *ToolCall     `json:"tool_call,omitempty"`
 }
 
@@ -103,21 +103,21 @@ type ToolCall struct {
 
 // PerformanceMetrics defines OIS timing fields (Section 18).
 type PerformanceMetrics struct {
-	LatencyMS      int64 `json:"latency.ms,omitempty"`
-	QueueMS        int64 `json:"queue.ms,omitempty"`
-	FirstTokenMS   int64 `json:"first_token.ms,omitempty"`
-	PrefillMS      int64 `json:"prefill.ms,omitempty"`
-	DecodeMS       int64 `json:"decode.ms,omitempty"`
-	TokensPerSec   float64 `json:"tokens_per_sec,omitempty"`
+	LatencyMS    int64   `json:"latency.ms,omitempty"`
+	QueueMS      int64   `json:"queue.ms,omitempty"`
+	FirstTokenMS int64   `json:"first_token.ms,omitempty"`
+	PrefillMS    int64   `json:"prefill.ms,omitempty"`
+	DecodeMS     int64   `json:"decode.ms,omitempty"`
+	TokensPerSec float64 `json:"tokens_per_sec,omitempty"`
 }
 
 // OIS Outcome values (Section 20.3)
 const (
-	OutcomeAllow    = "allow"
-	OutcomeDeny     = "deny"
-	OutcomeSelect   = "select"
-	OutcomeReject   = "reject"
-	OutcomeDegrade  = "degrade"
+	OutcomeAllow      = "allow"
+	OutcomeDeny       = "deny"
+	OutcomeSelect     = "select"
+	OutcomeReject     = "reject"
+	OutcomeDegrade    = "degrade"
 	OutcomeQuarantine = "quarantine"
 )
 
@@ -133,52 +133,52 @@ func URN(kind, id string) string {
 // OIS Semantic Attribute Keys for OTEL (Section 9/28)
 const (
 	// exec.* — execution envelope
-	AttrExecID              = "exec.id"
-	AttrExecKind            = "exec.kind"
-	AttrExecStatus          = "exec.status"
-	AttrExecStartTime       = "exec.start_time"
-	AttrExecEndTime         = "exec.end_time"
-	AttrExecReproClass      = "exec.reproducibility_class"
-	AttrExecMode            = "exec.mode"
-	AttrExecParentID        = "exec.parent_id"
-	AttrExecRootID          = "exec.root_id"
+	AttrExecID         = "exec.id"
+	AttrExecKind       = "exec.kind"
+	AttrExecStatus     = "exec.status"
+	AttrExecStartTime  = "exec.start_time"
+	AttrExecEndTime    = "exec.end_time"
+	AttrExecReproClass = "exec.reproducibility_class"
+	AttrExecMode       = "exec.mode"
+	AttrExecParentID   = "exec.parent_id"
+	AttrExecRootID     = "exec.root_id"
 
 	// actor.* — actor identity
-	AttrActorType           = "actor.type"
-	AttrActorID             = "actor.id"
-	AttrActorURN            = "actor.urn"
-	AttrActorRole           = "actor.role"
+	AttrActorType = "actor.type"
+	AttrActorID   = "actor.id"
+	AttrActorURN  = "actor.urn"
+	AttrActorRole = "actor.role"
 
 	// engine.* — runtime environment
-	AttrEngineRuntime       = "engine.runtime"
-	AttrEngineProvider      = "engine.provider"
-	AttrEngineURN           = "engine.urn"
+	AttrEngineRuntime  = "engine.runtime"
+	AttrEngineProvider = "engine.provider"
+	AttrEngineURN      = "engine.urn"
 
 	// model.* — model assembly
-	AttrModelBaseID         = "model.base.id"
-	AttrModelBaseURN        = "model.base.urn"
-	AttrModelBaseVersion    = "model.base.version"
-	AttrModelAdapterID      = "model.adapter.id"
+	AttrModelBaseID      = "model.base.id"
+	AttrModelBaseURN     = "model.base.urn"
+	AttrModelBaseVersion = "model.base.version"
+	AttrModelAdapterID   = "model.adapter.id"
 
 	// cost.* — economic semantics
-	AttrCostTokensInput     = "cost.tokens.input"
-	AttrCostTokensOutput    = "cost.tokens.output"
-	AttrCostTokensTotal     = "cost.tokens.total"
-	AttrCostUSDTotal        = "cost.usd.total"
+	AttrCostTokensInput  = "cost.tokens.input"
+	AttrCostTokensOutput = "cost.tokens.output"
+	AttrCostTokensTotal  = "cost.tokens.total"
+	AttrCostUSDTotal     = "cost.usd.total"
 
 	// perf.* — timing and performance
-	AttrPerfLatencyMS       = "perf.latency.ms"
-	AttrPerfQueueMS         = "perf.queue.ms"
-	AttrPerfFirstTokenMS    = "perf.first_token.ms"
+	AttrPerfLatencyMS    = "perf.latency.ms"
+	AttrPerfQueueMS      = "perf.queue.ms"
+	AttrPerfFirstTokenMS = "perf.first_token.ms"
 
 	// policy.* — evaluations
-	AttrPolicyDecision      = "policy.decision"
-	AttrPolicyBundleID      = "policy.bundle.id"
+	AttrPolicyDecision = "policy.decision"
+	AttrPolicyBundleID = "policy.bundle.id"
 
 	// privacy.* — sensitivity
-	AttrPrivacyRedacted     = "privacy.redacted"
-	AttrPrivacyPlaceholder  = "__REDACTED__"
+	AttrPrivacyRedacted    = "privacy.redacted"
+	AttrPrivacyPlaceholder = "__REDACTED__"
 
 	// compat.openinference.* — compatibility mapping
-	AttrCompatOISpanKind    = "compat.openinference.openinference.span.kind"
+	AttrCompatOISpanKind = "compat.openinference.openinference.span.kind"
 )

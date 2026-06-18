@@ -31,6 +31,10 @@ func TestBuildHTTPRoute_RoutePaths(t *testing.T) {
 		"/v1/chat/completions",
 		"/v1/embeddings",
 		"/v1/models",
+		// vLLM v0.23.0 Rust frontend endpoints
+		"/version",
+		"/server_info",
+		"/v1/responses",
 	}
 
 	if len(route.Spec.Rules) != len(expectedPaths) {

@@ -8,9 +8,13 @@ package evidence
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -57,6 +61,13 @@ func (g *GovernanceReconciler) ReconcileAIPacks(ctx context.Context, llmSvc *ser
 				"message", result.Message,
 			)
 		}
+
+		// Auto-create LLMLoraAdapter CRs from composition.adapters (Agent kind only).
+		if pack.Spec.Kind == servingv1alpha2.KindAgent {
+			if err := g.ReconcileAdapters(ctx, pack, llmSvc); err != nil {
+				logger.Error(err, "failed to reconcile adapters from AIPack composition (non-blocking)", "pack", pack.Name)
+			}
+		}
 	}
 
 	aipackSR2 := buildAIPackSR2Condition(totalPacks, verifiedPacks)
@@ -64,6 +75,83 @@ func (g *GovernanceReconciler) ReconcileAIPacks(ctx context.Context, llmSvc *ser
 
 	logger.Info("Updated AIPack governance evidence", "total", totalPacks, "verified", verifiedPacks)
 	return nil
+}
+
+// ReconcileAdapters creates LLMLoraAdapter CRs for each adapter slot in
+// pack.Spec.Composition.Adapters. Owner refs point to the AIPack so GC cascade
+// fires automatically when the AIPack is deleted. Existing CRs are left untouched
+// — the hot-load controller owns their lifecycle after creation.
+//
+// CR name pattern: {pack.Name}-lora-{index}  (stable, namespace-unique)
+// AdapterName:     {pack.Name}-{digest-suffix-8}  (usable as vLLM logical name)
+func (g *GovernanceReconciler) ReconcileAdapters(
+	ctx context.Context,
+	pack *servingv1alpha2.AIPack,
+	llmSvc *servingv1alpha2.LLMInferenceService,
+) error {
+	if pack.Spec.Composition == nil || len(pack.Spec.Composition.Adapters) == 0 {
+		return nil
+	}
+	if g.Scheme == nil {
+		return fmt.Errorf("ReconcileAdapters: Scheme is nil — wire GovernanceReconciler.Scheme in SetupWithManager")
+	}
+	logger := log.FromContext(ctx)
+
+	for i, ref := range pack.Spec.Composition.Adapters {
+		crName := fmt.Sprintf("%s-lora-%d", pack.Name, i)
+		adapterName := fmt.Sprintf("%s-%s", pack.Name, digestSuffix(ref.Ref))
+
+		desired := &servingv1alpha2.LLMLoraAdapter{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      crName,
+				Namespace: pack.Namespace,
+			},
+			Spec: servingv1alpha2.LLMLoraAdapterSpec{
+				TargetService: llmSvc.Name,
+				AdapterName:   adapterName,
+				Model: servingv1alpha2.ModelSpec{
+					URI:  ref.Ref,
+					Name: adapterName,
+				},
+			},
+		}
+		if err := controllerutil.SetControllerReference(pack, desired, g.Scheme); err != nil {
+			return fmt.Errorf("set owner ref on LLMLoraAdapter %s: %w", crName, err)
+		}
+
+		var existing servingv1alpha2.LLMLoraAdapter
+		err := g.Client.Get(ctx, types.NamespacedName{Name: crName, Namespace: pack.Namespace}, &existing)
+		if apierrors.IsNotFound(err) {
+			if createErr := g.Client.Create(ctx, desired); createErr != nil {
+				return fmt.Errorf("create LLMLoraAdapter %s: %w", crName, createErr)
+			}
+			logger.Info("Created LLMLoraAdapter from AIPack composition", "cr", crName, "adapter", adapterName)
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("get LLMLoraAdapter %s: %w", crName, err)
+		}
+		// Already exists — hot-load controller manages the rest; no update needed.
+	}
+	return nil
+}
+
+// digestSuffix returns the last 8 characters of an OCI digest for use in adapter names.
+// Input: "registry/image@sha256:abcdef0123456789..." → "01234567" (last 8 of the hex).
+func digestSuffix(ref string) string {
+	const suffixLen = 8
+	// sha256 digest is after the last ':'
+	if idx := strings.LastIndex(ref, ":"); idx >= 0 && idx+1+suffixLen <= len(ref) {
+		hex := ref[idx+1:]
+		if len(hex) >= suffixLen {
+			return hex[len(hex)-suffixLen:]
+		}
+	}
+	// Fallback: last 8 chars of the whole ref
+	if len(ref) >= suffixLen {
+		return ref[len(ref)-suffixLen:]
+	}
+	return ref
 }
 
 func buildAIPackSR2Condition(total, verified int) metav1.Condition {

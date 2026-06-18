@@ -113,6 +113,22 @@ type LLMInferenceServiceSpec struct {
 	// +optional
 	Canary *CanarySpec `json:"canary,omitempty"`
 
+	// SpeculativeDecoding configures speculative decoding for higher throughput (vLLM v0.23.0+).
+	// MTP (Multi-Token Prediction) provides ~2× throughput on Llama/Mistral without quality loss.
+	// +optional
+	SpeculativeDecoding *SpeculativeDecodingSpec `json:"speculativeDecoding,omitempty"`
+
+	// KVCache configures KV cache dtype and CPU swap space (vLLM v0.23.0+).
+	// Use Dtype:"fp8" for ~50% VRAM reduction on Hopper+ GPUs.
+	// +optional
+	KVCache *KVCacheSpec `json:"kvCache,omitempty"`
+
+	// Quantization configures weight quantization for reduced memory footprint.
+	// AWQ and GPTQ require pre-quantized model weights. GGUF routes to the
+	// quant-cpp engine automatically. bitsandbytes and fp8 quantize at load time.
+	// +optional
+	Quantization *QuantizationSpec `json:"quantization,omitempty"`
+
 	// Engine specifies the inference engine to use.
 	// Defaults to 'vllm'. Supported: 'vllm', 'quant-cpp'.
 	// +kubebuilder:default="vllm"
@@ -314,6 +330,64 @@ type ParallelismSpec struct {
 	// When true, distributes Mixture-of-Experts across GPUs.
 	// +optional
 	Expert bool `json:"expert,omitempty"`
+
+	// Pipeline is the pipeline parallelism degree (--pipeline-parallel-size).
+	// Splits model layers sequentially across nodes. Combine with Tensor for 2D parallelism.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Pipeline *int32 `json:"pipeline,omitempty"`
+
+	// EPLBEnabled enables Expert Parallelism Load Balancing for MoE models (--enable-eplb).
+	// Dynamically rebalances expert routing — critical for DeepSeek-V4 and Gemma 4 MoE.
+	// +optional
+	EPLBEnabled bool `json:"eplbEnabled,omitempty"`
+}
+
+// SpeculativeDecodingSpec configures speculative decoding (vLLM v0.23.0+).
+type SpeculativeDecodingSpec struct {
+	// Method selects the draft strategy: "mtp", "eagle", "medusa", "ngram".
+	// +kubebuilder:validation:Enum=mtp;eagle;medusa;ngram
+	Method string `json:"method"`
+
+	// NumTokens is the number of speculative tokens per step (--num-speculative-tokens).
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=16
+	// +optional
+	NumTokens *int32 `json:"numTokens,omitempty"`
+
+	// DraftModel URI for external drafter (eagle/medusa). Empty for mtp/ngram.
+	// +optional
+	DraftModel string `json:"draftModel,omitempty"`
+}
+
+// KVCacheSpec configures KV cache storage behavior.
+type KVCacheSpec struct {
+	// Dtype overrides KV cache type: "auto", "fp8", "fp16", "bf16".
+	// "fp8" enables FP8 KV quantization (~50% memory reduction, requires Hopper+).
+	// +kubebuilder:validation:Enum=auto;fp8;fp16;bf16
+	// +kubebuilder:default=auto
+	// +optional
+	Dtype string `json:"dtype,omitempty"`
+
+	// SwapSpaceGB sets CPU RAM swap in GiB (--swap-space). Multi-tier KV offload.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	SwapSpaceGB *int32 `json:"swapSpaceGB,omitempty"`
+}
+
+// QuantizationSpec configures weight quantization for reduced memory footprint.
+type QuantizationSpec struct {
+	// Method selects the quantization algorithm.
+	// "awq" and "gptq" require pre-quantized model weights.
+	// "gguf" routes to the quant-cpp engine automatically.
+	// "bitsandbytes" and "fp8" quantize at load time.
+	// +kubebuilder:validation:Enum=awq;gptq;gguf;bitsandbytes;fp8
+	Method string `json:"method"`
+
+	// CheckpointPath is the path to GPTQ quantization checkpoint files.
+	// Only valid when Method is "gptq".
+	// +optional
+	CheckpointPath string `json:"checkpointPath,omitempty"`
 }
 
 // ScalingSpec configures autoscaling for the inference service.

@@ -103,8 +103,8 @@ spec:
                   uri:
                     description: |-
                       URI is the model artifact location.
-                      Supported schemes: hf://, hf-mirror://, s3://, gs://, pvc://, oci://, seaweedfs://.
-                    pattern: ^(hf|hf-mirror|s3|swfs|gs|pvc|oci|modelpack|https?)://.*$
+                      Supported schemes: hf://, hf-mirror://, s3://, gs://, pvc://, oci://, ocis://, seaweedfs://.
+                    pattern: ^(hf|hf-mirror|s3|swfs|gs|pvc|oci|ocis|modelpack|https?)://.*$
                     type: string
                 required:
                 - name
@@ -367,10 +367,12 @@ spec:
                     description: |-
                       URI is the model artifact location.
                       Supported schemes: hf:// (HuggingFace Hub), hf-mount:// (HuggingFace CSI lazy mount),
-                      s3://, swfs://, gs://, pvc://, oci://, modelpack://.
+                      s3://, swfs://, gs://, pvc://, oci://, ocis://, modelpack://.
                       hf-mount:// uses the hf-csi-driver to mount repos as a FUSE/NFS filesystem —
                       only accessed bytes are fetched, eliminating full model downloads.
-                    pattern: ^(hf|hf-mount|s3|swfs|gs|pvc|oci|modelpack|https?)://.*$
+                      `ocis://` is an explicit secure-OCI alias and follows the same runtime
+                      verification path as `oci://`, while making the intent visible at the spec boundary.
+                    pattern: ^(hf|hf-mount|s3|swfs|gs|pvc|oci|ocis|modelpack|https?)://.*$
                     type: string
                 required:
                 - name
@@ -520,8 +522,12 @@ spec:
                   the model system.
                 properties:
                   binding:
+                    description: 'Deprecated: Binding is not reconciled by any controller.
+                      Tracked for removal in v0.3.0.'
                     type: string
                   composition:
+                    description: 'Deprecated: Composition is not reconciled by any
+                      controller. Tracked for removal in v0.3.0.'
                     type: string
                   lifecycle:
                     type: string

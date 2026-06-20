@@ -33,7 +33,7 @@ type RequestPipeline struct {
 func NewRequestPipeline() *RequestPipeline {
 	pool := NewConnectionPool(DefaultPoolConfig())
 	preloader := NewPreloader()
-	router := NewFastPathRouter(pool, preloader)
+	router := NewFastPathRouter(pool)
 
 	return &RequestPipeline{
 		pool:      pool,

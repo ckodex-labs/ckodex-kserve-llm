@@ -132,8 +132,7 @@ func TestHashPrompt_Length64Hex(t *testing.T) {
 
 func TestAnticipatoryPrefetcher_GetWarmedEndpoint_NotFound(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	preloader := NewPreloader()
-	router := NewFastPathRouter(pool, preloader)
+	router := NewFastPathRouter(pool)
 	ap := NewAnticipatoryPrefetcher(pool, router)
 
 	_, ok := ap.GetWarmedEndpoint("unknown-session")
@@ -142,8 +141,7 @@ func TestAnticipatoryPrefetcher_GetWarmedEndpoint_NotFound(t *testing.T) {
 
 func TestAnticipatoryPrefetcher_HandleIntent_LowConfidence_NoWarm(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	preloader := NewPreloader()
-	router := NewFastPathRouter(pool, preloader)
+	router := NewFastPathRouter(pool)
 	ap := NewAnticipatoryPrefetcher(pool, router)
 
 	intent := Intent{
@@ -160,8 +158,7 @@ func TestAnticipatoryPrefetcher_HandleIntent_LowConfidence_NoWarm(t *testing.T) 
 
 func TestAnticipatoryPrefetcher_HandleIntent_HighConfidence_WarmsEndpoint(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	preloader := NewPreloader()
-	router := NewFastPathRouter(pool, preloader)
+	router := NewFastPathRouter(pool)
 	ap := NewAnticipatoryPrefetcher(pool, router)
 
 	// The Route function uses sessionID as the session-bound endpoint.
@@ -207,8 +204,7 @@ func TestAnticipatoryPrefetcher_HandleIntent_NoCandidates_CanStillRoute(t *testi
 	// is used as the bound endpoint and has error count 0, so Route returns it.
 	// This means the warm path IS stored (with the sessionID as the endpoint string).
 	pool := NewConnectionPool(DefaultPoolConfig())
-	preloader := NewPreloader()
-	router := NewFastPathRouter(pool, preloader)
+	router := NewFastPathRouter(pool)
 	ap := NewAnticipatoryPrefetcher(pool, router)
 
 	intent := Intent{Confidence: 0.9, SessionID: "sess-no-cand"}

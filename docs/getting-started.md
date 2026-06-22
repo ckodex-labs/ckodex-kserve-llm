@@ -5,9 +5,16 @@ Welcome! This guide will walk you through installing the CKodex KServe LLM Opera
 ## Prerequisites
 
 - **Kubernetes Cluster**: v1.28 or later.
-- **GPU Driver**: NVIDIA driver (with `nvidia.com/gpu` resource available).
-- **Helm**: v3.10+ (recommended for installation).
-- **Gateway API CRDs**: Ensure Gateway API CRDs are installed if you want automatic routing.
+- **Docker**: Required for the local KIND bootstrap.
+- **kind**: Used by the repo-native local E2E path.
+- **kubectl**: Required for cluster inspection and cleanup.
+- **Helm**: v3.10+.
+- **curl** and **jq**: Used by the local inference probe.
+- **Network access**: Needed to fetch charts and container images.
+
+GPU-backed deployments still need GPU nodes and the matching driver stack, but
+the default local KIND E2E path is intentionally CPU-capable and does not
+require a GPU driver.
 
 ## 🌈 The Community Production Route (Recommended)
 
@@ -29,24 +36,37 @@ helm install kserve-llm-operator ckodex/ckodex-kserve-llm-operator \
 
 For testing locally on your laptop, we provide a streamlined setup using `kind`.
 
-### 1. Create a local cluster
+### 1. Run the full local E2E flow
 
 ```bash
-make kind-setup
+./run/e2e.sh
 ```
 
-### 2. Build and load the operator
+This command:
 
-```bash
-make docker-build
-make kind-load
-make deploy
-```
+- creates the KIND cluster if it does not already exist
+- installs cert-manager, Gateway API, Envoy Gateway, MetalLB, and the HuggingFace CSI driver
+- builds and loads the operator image into KIND
+- applies CRDs and deploys the controller
+- installs the sample `LLMInferenceService`
+- runs the live inference probe against `/v1/chat/completions`
+
+For sizing larger models without downloading or running them, see
+[Frontier Model Capacity Planning](model-capacity.md) or run
+`./run/capacity-plan.sh`.
+
+### 2. Inspect the cluster
 
 Verify the manager is running:
 
 ```bash
 kubectl get pods -n ckodex-system
+```
+
+### 3. Clean up when finished
+
+```bash
+./run/cleanup.sh
 ```
 
 ---
@@ -104,5 +124,6 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 ## Next Steps
 
 - **[Gemma 4 Deployment Guide](gemma4-deployment-guide.md)**: Deep dive into the Gemma 4 optimizations.
+- **[Frontier Model Capacity Planning](model-capacity.md)**: Static fit assessment for GLM-5.2 and Kimi K2.7 Code.
 - **[Architecture Decision Records](adr/)**: Understand why we built it this way.
 - **Join the Community**: Star us on GitHub or join our community Slack!

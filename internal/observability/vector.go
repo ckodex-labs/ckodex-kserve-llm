@@ -28,8 +28,14 @@ const (
 	// VectorLogVolumeName is the shared log volume between app and Vector sidecar.
 	VectorLogVolumeName = "shared-logs"
 
+	// VectorDataVolumeName is the writable state directory for Vector.
+	VectorDataVolumeName = "vector-data"
+
 	// VectorLogMountPath is the log directory in the app container.
 	VectorLogMountPath = "/var/log/ckodex"
+
+	// VectorDataMountPath stores Vector checkpoints and buffers.
+	VectorDataMountPath = "/var/lib/vector"
 )
 
 // VectorConfig defines Vector sidecar injection settings.
@@ -104,7 +110,7 @@ transforms:
     type: remap
     inputs: ["app_logs"]
     source: |
-      . = parse_json!(.message) ?? .
+      . = parse_json(.message) ?? .
       .model = "%s"
       .component = "llm-inference"
       .timestamp = now()
@@ -118,53 +124,9 @@ transforms:
       .tenant_id   = get_env_var("CKODEX_TENANT_ID") ?? "unknown"
       .namespace   = get_env_var("NAMESPACE") ?? "default"
 
-  # Promote OTel trace context fields to the log root so sinks can index them.
-  # Supports both debt (trace_id) and nested (span.trace_id) structures.
-  otel_correlation:
-    type: remap
-    inputs: ["enrich"]
-    source: |
-      if exists(.span) {
-        .trace_id = string(.span.trace_id) ?? ""
-        .span_id  = string(.span.span_id)  ?? ""
-        del(.span)
-      }
-      if exists(.traceId) {
-        .trace_id = string(.traceId) ?? .trace_id
-        .span_id  = string(.spanId)  ?? .span_id
-        del(.traceId)
-        del(.spanId)
-      }
-      .trace_id = downcase(string(.trace_id) ?? "")
-      .span_id  = downcase(string(.span_id)  ?? "")
-
-  # OIS v0.1: Promote canonical inference signals from model server logs.
-  # Maps internal vLLM/LMC metrics to the OIS semantic contract.
-  ois_enrichment:
-    type: remap
-    inputs: ["otel_correlation"]
-    source: |
-      # Core Profile
-      ."exec.id" = .exec_id ?? .trace_id
-      ."exec.kind" = "inference"
-      ."exec.status" = .status ?? "ok"
-      
-      # Timing Profile
-      ."perf.first_token.ms" = .ttft ?? .ttft_ms
-      ."perf.latency.ms" = .latency ?? .duration_ms
-      ."perf.queue.ms" = .queue_time ?? .queue_ms
-      
-      # Economic Profile
-      ."cost.tokens.input" = .prompt_tokens ?? .input_tokens
-      ."cost.tokens.output" = .completion_tokens ?? .output_tokens
-      ."cost.tokens.total" = .total_tokens ?? (."cost.tokens.input" + ."cost.tokens.output")
-      
-      # Cleanup internal vLLM fields if they were promoted
-      del(.ttft); del(.ttft_ms); del(.prompt_tokens); del(.completion_tokens); del(.total_tokens)
-
   filter_noise:
     type: filter
-    inputs: ["ois_enrichment"]
+    inputs: ["enrich"]
     condition:
       type: vrl
       source: '.level != "debug" && .level != "trace"'
@@ -217,10 +179,13 @@ func buildSinkConfig(cfg VectorConfig) string {
   otlp:
     type: opentelemetry
     inputs: ["filter_noise"]
-    endpoint: "%s"
-    protocol: http
-    encoding:
-      codec: json
+    protocol:
+      type: http
+      uri: "%s"
+      batch:
+        max_events: 1
+      encoding:
+        codec: json
     resource:
       service.name: ckodex-llm-operator
       service.namespace: ckodex`, cfg.SinkEndpoint)
@@ -250,6 +215,12 @@ func InjectVectorSidecar(podSpec *corev1.PodSpec, configMapName string) {
 		podSpec.Volumes = append(podSpec.Volumes,
 			corev1.Volume{
 				Name: VectorLogVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+			corev1.Volume{
+				Name: VectorDataVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
@@ -297,6 +268,7 @@ func InjectVectorSidecar(podSpec *corev1.PodSpec, configMapName string) {
 			Args:  []string{"--config-dir", "/etc/vector"},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: VectorLogVolumeName, MountPath: VectorLogMountPath, ReadOnly: true},
+				{Name: VectorDataVolumeName, MountPath: VectorDataMountPath},
 				{Name: "vector-config", MountPath: "/etc/vector", ReadOnly: true},
 			},
 			Resources: corev1.ResourceRequirements{
@@ -310,6 +282,8 @@ func InjectVectorSidecar(podSpec *corev1.PodSpec, configMapName string) {
 				},
 			},
 			SecurityContext: &corev1.SecurityContext{
+				RunAsUser:                ptr.To(int64(65532)),
+				RunAsGroup:               ptr.To(int64(65532)),
 				RunAsNonRoot:             ptr.To(true),
 				AllowPrivilegeEscalation: ptr.To(false),
 				ReadOnlyRootFilesystem:   ptr.To(true),

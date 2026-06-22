@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-kind create cluster --name kserve-017 --config - <<EOF
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-- role: control-plane
-  extraPortMappings:
-  - containerPort: 80
-    hostPort: 8080
-    protocol: TCP
-  - containerPort: 443
-    hostPort: 8443
-    protocol: TCP
-EOF
-kubectl config use-context kind-kserve-017
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kserve-017}"
+
+kind create cluster --name "$KIND_CLUSTER_NAME" --config "${ROOT_DIR}/deploy/kind/kind-config.yaml"
+kubectl config use-context "kind-${KIND_CLUSTER_NAME}"
 echo "KIND cluster ready with port-forward to 8080/8443"

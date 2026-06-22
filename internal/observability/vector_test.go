@@ -74,7 +74,11 @@ func TestBuildVectorConfigMap_OTLPSink_ContainsOpentelemetry(t *testing.T) {
 	cm := observability.BuildVectorConfigMap("svc", "ns", "model", cfg)
 	data := cm.Data[observability.VectorConfigKey]
 	assert.Contains(t, data, "opentelemetry")
-	assert.Contains(t, data, "http://otel-collector:4318")
+	assert.Contains(t, data, "protocol:")
+	assert.Contains(t, data, "type: http")
+	assert.Contains(t, data, "uri: \"http://otel-collector:4318\"")
+	assert.Contains(t, data, "max_events: 1")
+	assert.Contains(t, data, "codec: json")
 }
 
 func TestBuildVectorConfigMap_ModelNameInjected(t *testing.T) {
@@ -115,6 +119,19 @@ func TestInjectVectorSidecar_AddsSharedLogVolume(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "shared-logs volume must be present")
+}
+
+func TestInjectVectorSidecar_AddsWritableDataVolume(t *testing.T) {
+	spec := emptyPodSpec()
+	observability.InjectVectorSidecar(spec, "cfg")
+
+	var found bool
+	for _, v := range spec.Volumes {
+		if v.Name == observability.VectorDataVolumeName {
+			found = true
+		}
+	}
+	assert.True(t, found, "vector-data volume must be present")
 }
 
 func TestInjectVectorSidecar_AddsVectorConfigVolume(t *testing.T) {
@@ -165,6 +182,14 @@ func TestInjectVectorSidecar_Idempotent_NoDuplicates(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, logVolCount, "shared-logs volume must appear exactly once")
+
+	dataVolCount := 0
+	for _, v := range spec.Volumes {
+		if v.Name == observability.VectorDataVolumeName {
+			dataVolCount++
+		}
+	}
+	assert.Equal(t, 1, dataVolCount, "vector-data volume must appear exactly once")
 }
 
 func TestInjectVectorSidecar_EmptyPodSpec_NoPanic(t *testing.T) {
@@ -195,6 +220,44 @@ func TestInjectVectorSidecar_VectorContainerUsesExpectedImage(t *testing.T) {
 	for _, c := range spec.Containers {
 		if c.Name == "vector" {
 			assert.Equal(t, observability.VectorImage, c.Image)
+			return
+		}
+	}
+	t.Fatal("vector container not found")
+}
+
+func TestInjectVectorSidecar_VectorContainerMountsWritableDataDir(t *testing.T) {
+	spec := emptyPodSpec()
+	observability.InjectVectorSidecar(spec, "cfg")
+
+	for _, c := range spec.Containers {
+		if c.Name != "vector" {
+			continue
+		}
+		for _, m := range c.VolumeMounts {
+			if m.Name == observability.VectorDataVolumeName {
+				assert.Equal(t, observability.VectorDataMountPath, m.MountPath)
+				assert.False(t, m.ReadOnly)
+				return
+			}
+		}
+		t.Fatal("vector-data volume mount not found")
+	}
+	t.Fatal("vector container not found")
+}
+
+func TestInjectVectorSidecar_VectorContainerRunsAsNonRoot(t *testing.T) {
+	spec := emptyPodSpec()
+	observability.InjectVectorSidecar(spec, "cfg")
+
+	for _, c := range spec.Containers {
+		if c.Name == "vector" {
+			require.NotNil(t, c.SecurityContext)
+			require.NotNil(t, c.SecurityContext.RunAsUser)
+			require.NotNil(t, c.SecurityContext.RunAsGroup)
+			assert.True(t, *c.SecurityContext.RunAsNonRoot)
+			assert.Equal(t, int64(65532), *c.SecurityContext.RunAsUser)
+			assert.Equal(t, int64(65532), *c.SecurityContext.RunAsGroup)
 			return
 		}
 	}

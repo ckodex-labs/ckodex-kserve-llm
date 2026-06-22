@@ -11,6 +11,10 @@ rules:
   - namespaces
   - nodes
   verbs:
+  - create
+  - delete
+  - patch
+  - update
   - get
   - list
   - watch
@@ -47,6 +51,30 @@ rules:
   resources:
   - serviceaccounts
   verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  verbs:
+  - create
+  - delete
   - get
   - list
   - patch

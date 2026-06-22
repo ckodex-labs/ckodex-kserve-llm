@@ -6,7 +6,7 @@ metadata:
 spec:
   model:
     name: qwen-0.5b
-    uri: hf://Qwen/Qwen2.5-0.5B-Instruct
+    uri: hf-mount://Qwen/Qwen2.5-0.5B-Instruct
   autoOptimize: true
   template:
     spec:

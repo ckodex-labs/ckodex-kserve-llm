@@ -15,3 +15,10 @@ nodes:
     nodeRegistration:
       kubeletExtraArgs:
         node-labels: "ingress-ready=true"
+  - |
+    kind: ClusterConfiguration
+    etcd:
+      local:
+        extraArgs:
+        - name: max-request-bytes
+          value: "52428800"

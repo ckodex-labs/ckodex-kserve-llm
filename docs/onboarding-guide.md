@@ -32,6 +32,11 @@ spec:
 
 The operator will create a `storage-initializer` Job on each target node to populate a node-local PVC.
 
+For frontier models with very large weight footprints, review
+[Frontier Model Capacity Planning](model-capacity.md) before choosing a cache
+size or deployment target. The schema can represent the plan, but the default
+local KIND envelope is not sized for 200+ GiB model footprints.
+
 ## Phase 3: Service Deployment
 
 Define the `LLMInferenceService` to manage the serving workload.

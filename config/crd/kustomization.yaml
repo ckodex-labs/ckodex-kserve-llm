@@ -20,4 +20,5 @@ resources:
   - serving.ckodex.com_localmodelcaches.yaml
   - serving.ckodex.com_modelonboardings.yaml
   - serving.ckodex.com_multimodalinferenceservices.yaml
+  - serving.ckodex.com_rerankerinferenceservices.yaml
   - serving.ckodex.com_skillregistries.yaml

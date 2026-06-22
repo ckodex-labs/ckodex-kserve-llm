@@ -149,13 +149,14 @@ func TestApplyHardwareOptimizations_AppleSilicon(t *testing.T) {
 	hwType := deployment.DetectHardware([]corev1.Node{nodeWithArch("arm64", nil, nil)})
 	deployment.ApplyHardwareOptimizations(ctx, hwType, podSpec)
 
-	// Image should be set to CPU ARM64 image
-	if podSpec.Containers[0].Image != deployment.VLLMCPUArm64Image {
-		t.Errorf("image = %q, want %q", podSpec.Containers[0].Image, deployment.VLLMCPUArm64Image)
+	// Image should be set to the generic CPU image on Apple Silicon.
+	if podSpec.Containers[0].Image != deployment.VLLMGenericImage {
+		t.Errorf("image = %q, want %q", podSpec.Containers[0].Image, deployment.VLLMGenericImage)
 	}
 
 	assertEnvVar(t, podSpec.Containers[0].Env, "VLLM_CPU_OMP_THREADS_BIND", "nobind")
 	assertEnvVar(t, podSpec.Containers[0].Env, "VLLM_CPU_KVCACHE_SPACE", "4")
+	assertEnvVar(t, podSpec.Containers[0].Env, "VLLM_TARGET_DEVICE", "cpu")
 	assertArgPair(t, podSpec.Containers[0].Args, "--host", "0.0.0.0")
 	assertArgPair(t, podSpec.Containers[0].Args, "--port", "8000")
 	assertArgPair(t, podSpec.Containers[0].Args, "--max-model-len", "4096")
@@ -173,7 +174,7 @@ func TestApplyHardwareOptimizations_GenericX86(t *testing.T) {
 
 	assertEnvVar(t, podSpec.Containers[0].Env, "VLLM_CPU_OMP_THREADS_BIND", "auto")
 	assertEnvVar(t, podSpec.Containers[0].Env, "VLLM_CPU_KVCACHE_SPACE", "10")
-	assertArgPair(t, podSpec.Containers[0].Args, "--device", "cpu")
+	assertArgPair(t, podSpec.Containers[0].Args, "--host", "0.0.0.0")
 	assertArgPair(t, podSpec.Containers[0].Args, "--max-model-len", "4096")
 }
 
@@ -207,9 +208,9 @@ func TestApplyHardwareOptimizations_CUDAImageOverridden(t *testing.T) {
 	hwType := deployment.DetectHardware([]corev1.Node{nodeWithArch("arm64", nil, nil)})
 	deployment.ApplyHardwareOptimizations(ctx, hwType, podSpec)
 
-	if podSpec.Containers[0].Image != deployment.VLLMCPUArm64Image {
+	if podSpec.Containers[0].Image != deployment.VLLMGenericImage {
 		t.Errorf("CUDA image should be overridden on ARM64: got %q, want %q",
-			podSpec.Containers[0].Image, deployment.VLLMCPUArm64Image)
+			podSpec.Containers[0].Image, deployment.VLLMGenericImage)
 	}
 }
 

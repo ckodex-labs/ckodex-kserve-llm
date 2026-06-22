@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -89,7 +90,7 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 
 	b.ensureVLLMEnv(llmSvc, podSpec)
 
-	if b.SPIRE != nil {
+	if !isNilSPIREInjector(b.SPIRE) {
 		b.SPIRE.InjectSidecar(podSpec, llmSvc)
 	}
 
@@ -111,13 +112,7 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RollingUpdateDeploymentStrategyType,
-				RollingUpdate: &appsv1.RollingUpdateDeployment{
-					MaxUnavailable: &intstr.IntOrString{Type: intstr.Int, IntVal: 0},
-					MaxSurge:       &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
-				},
-			},
+			Strategy: deploymentStrategyForReplicas(replicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -132,6 +127,36 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 				Spec: *podSpec,
 			},
 		},
+	}
+}
+
+func deploymentStrategyForReplicas(replicas int32) appsv1.DeploymentStrategy {
+	if replicas <= 1 {
+		return appsv1.DeploymentStrategy{
+			Type: appsv1.RecreateDeploymentStrategyType,
+		}
+	}
+
+	return appsv1.DeploymentStrategy{
+		Type: appsv1.RollingUpdateDeploymentStrategyType,
+		RollingUpdate: &appsv1.RollingUpdateDeployment{
+			MaxUnavailable: &intstr.IntOrString{Type: intstr.Int, IntVal: 0},
+			MaxSurge:       &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
+		},
+	}
+}
+
+func isNilSPIREInjector(injector SPIREInjector) bool {
+	if injector == nil {
+		return true
+	}
+
+	v := reflect.ValueOf(injector)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
 	}
 }
 
@@ -520,7 +545,7 @@ func (b *Builder) ensureHealthProbes(podSpec *corev1.PodSpec) {
 	if c.ReadinessProbe == nil {
 		c.ReadinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{Path: "/v2/health/ready", Port: intstr.FromInt32(8000)},
+				HTTPGet: &corev1.HTTPGetAction{Path: "/health", Port: intstr.FromInt32(8000)},
 			},
 			InitialDelaySeconds: 30,
 			PeriodSeconds:       10,
@@ -595,6 +620,9 @@ func (b *Builder) ensureVLLMEnv(llmSvc *servingv1alpha2.LLMInferenceService, pod
 
 	envs := map[string]string{
 		"HOME":                    "/tmp",
+		"VLLM_TARGET_DEVICE":      "cpu",
+		"USER":                    "nonroot",
+		"LOGNAME":                 "nonroot",
 		"TORCHINDUCTOR_CACHE_DIR": "/tmp",
 		"VLLM_LOGGING_LEVEL":      "INFO",
 

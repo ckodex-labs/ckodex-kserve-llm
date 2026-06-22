@@ -5,6 +5,8 @@ ARG TARGETOS=linux
 ARG TARGETARCH
 
 WORKDIR /workspace
+ENV GOCACHE=/workspace/.cache/go-build
+ENV GOTMPDIR=/workspace/.tmp
 
 # Cache dependencies
 COPY go.mod go.sum ./
@@ -14,12 +16,13 @@ RUN go mod download
 COPY cmd/ cmd/
 COPY api/ api/
 COPY internal/ internal/
+RUN mkdir -p /workspace/.cache/go-build /workspace/.tmp
 
 # Build
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -a -ldflags="-s -w" -o manager cmd/manager/main.go
+    go build -trimpath -ldflags="-s -w" -o manager cmd/manager/main.go
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -a -ldflags="-s -w" -o storage-initializer cmd/storage-initializer/main.go
+    go build -trimpath -ldflags="-s -w" -o storage-initializer cmd/storage-initializer/main.go
 
 FROM gcr.io/projectsigstore/cosign:v3.0.4 AS cosign
 

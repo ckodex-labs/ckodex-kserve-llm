@@ -111,6 +111,14 @@ kind-load: docker-build ## Load docker image into KIND cluster
 kind-teardown: ## Delete KIND cluster
 	kind delete cluster --name $(KIND_CLUSTER_NAME)
 
+.PHONY: kind-e2e
+kind-e2e: ## Full local KIND E2E: cluster, dependencies, deploy, and live inference probe
+	bash run/e2e.sh
+
+.PHONY: kind-cleanup
+kind-cleanup: ## Tear down KIND cluster and prune local state
+	bash run/cleanup.sh
+
 ##@ Tools
 
 .PHONY: controller-gen

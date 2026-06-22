@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-kubectl apply -f 04-llm-inference-service.yaml
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+kubectl annotate llminferenceservice llama3-8b -n default \
+  ckodex.dev/e2e-run="$(date +%s)" --overwrite >/dev/null 2>&1 || true
+kubectl apply -f "${SCRIPT_DIR}/04-llm-inference-service.yaml"
+kubectl wait --for=condition=Ready pod -l app.kubernetes.io/instance=llama3-8b -n default --timeout=600s
+kubectl annotate llminferenceservice llama3-8b -n default \
+  ckodex.dev/e2e-ready="$(date +%s)" --overwrite >/dev/null 2>&1 || true
 kubectl wait --for=condition=Ready llminferenceservice/llama3-8b --timeout=600s
 
 # Option A: via MetalLB IP (through Gateway)

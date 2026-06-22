@@ -123,20 +123,20 @@ Comprehensive documentation for the lifecycle of models, tenants, and agents:
 ## Quick Start
 
 > [!IMPORTANT]
-> For a clean installation on a fresh KIND cluster, refer to `local/` scripts for infrastructure prerequisites.
+> For a clean installation on a fresh KIND cluster, use the repo-native wrapper
+> scripts in `run/` and the lower-level building blocks in `local/`.
 
 ### 1. Setup KIND cluster
 
 ```bash
-make kind-setup
+./run/e2e.sh
 ```
 
-### 2. Install infrastructure
+### 2. What it does
 
-```bash
-# KServe v0.17, cert-manager, and supporting resources
-cd local && bash 02-prereqs.sh && bash 03-kserve-helm-install.sh
-```
+The wrapper installs cert-manager, Gateway API, Envoy Gateway, MetalLB, the
+HuggingFace CSI driver, CRDs, and the controller, then probes the sample
+`LLMInferenceService`.
 
 ### 3. Verify your local environment with the Dagger pipeline
 
@@ -146,32 +146,16 @@ dagger call test --source=.
 
 This command expects a working local Docker daemon. If Docker or the Dagger engine cannot start, treat that as an environment prerequisite failure rather than proof that the repository is release-ready.
 
-### 4. Build and deploy the operator
-
-```bash
-make generate manifests
-make docker-build
-docker tag ghcr.io/ckodex/kserve-llm-operator:latest ckodex/kserve-llm-operator:dev
-kind load docker-image ckodex/kserve-llm-operator:dev --name kserve-017
-```
-
-### 5. Install CRDs
-
-```bash
-for f in config/crd/*.yaml; do kubectl apply --server-side -f "$f"; done
-```
-
-### 6. Deploy the operator
-
-```bash
-kubectl apply -f config/rbac/
-kubectl apply -f config/manager/
-```
-
-### 7. Verify
+### 4. Verify
 
 ```bash
 kubectl get pods -n ckodex-system
+```
+
+### 5. Tear down the local cluster
+
+```bash
+./run/cleanup.sh
 ```
 
 ## High-Assurance CI/CD (Dagger)

@@ -105,8 +105,9 @@ func ApplyHardwareOptimizations(ctx context.Context, hwType HardwareType, podSpe
 
 	case HardwareAppleSilicon:
 		if container.Image == "" || container.Image == "vllm/vllm-openai:latest" || strings.Contains(container.Image, "cuda") {
-			container.Image = VLLMCPUArm64Image
+			container.Image = VLLMGenericImage
 		}
+		envVars["VLLM_TARGET_DEVICE"] = "cpu"
 		envVars["VLLM_CPU_OMP_THREADS_BIND"] = "nobind"
 		envVars["VLLM_CPU_KVCACHE_SPACE"] = "4"
 		args = append(args, "--host", "0.0.0.0", "--port", "8000", "--max-model-len", "4096")
@@ -119,7 +120,7 @@ func ApplyHardwareOptimizations(ctx context.Context, hwType HardwareType, podSpe
 		envVars["VLLM_CPU_OMP_THREADS_BIND"] = "auto"
 		envVars["NVIDIA_VISIBLE_DEVICES"] = ""
 		envVars["TORCHINDUCTOR_FREEZING"] = "1"
-		args = append(args, "--device", "cpu", "--host", "0.0.0.0", "--port", "8000", "--max-model-len", "4096")
+		args = append(args, "--host", "0.0.0.0", "--port", "8000", "--max-model-len", "4096")
 
 	case HardwareNVIDIA:
 		envVars["VLLM_TARGET_DEVICE"] = "cuda"

@@ -40,3 +40,5 @@ profile.out
 # macOS
 .DS_Store
 target/
+# CocoIndex Code (ccc)
+/.cocoindex_code/

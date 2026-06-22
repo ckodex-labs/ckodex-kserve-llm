@@ -405,8 +405,7 @@ func TestStreamWriter_WriteDone_Idempotent(t *testing.T) {
 
 func TestFastPathRouter_Route_SessionBound_Healthy(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	preloader := NewPreloader()
-	router := NewFastPathRouter(pool, preloader)
+	router := NewFastPathRouter(pool)
 
 	// Session endpoint has low error count
 	pool.Get("session-ep:8000") // register it
@@ -417,8 +416,7 @@ func TestFastPathRouter_Route_SessionBound_Healthy(t *testing.T) {
 
 func TestFastPathRouter_Route_SessionBound_Unhealthy_FallsThrough(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	preloader := NewPreloader()
-	router := NewFastPathRouter(pool, preloader)
+	router := NewFastPathRouter(pool)
 
 	// Force session endpoint to be unhealthy
 	conn := pool.Get("broken:8000")
@@ -432,8 +430,7 @@ func TestFastPathRouter_Route_SessionBound_Unhealthy_FallsThrough(t *testing.T) 
 
 func TestFastPathRouter_Route_NoSession_PicksFastest(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	preloader := NewPreloader()
-	router := NewFastPathRouter(pool, preloader)
+	router := NewFastPathRouter(pool)
 
 	pool.RecordLatency("fast:8000", 10*time.Millisecond)
 	pool.RecordLatency("slow:8000", 500*time.Millisecond)
@@ -444,8 +441,7 @@ func TestFastPathRouter_Route_NoSession_PicksFastest(t *testing.T) {
 
 func TestFastPathRouter_Route_EmptyCandidates_EmptyResult(t *testing.T) {
 	pool := NewConnectionPool(DefaultPoolConfig())
-	preloader := NewPreloader()
-	router := NewFastPathRouter(pool, preloader)
+	router := NewFastPathRouter(pool)
 
 	result := router.Route(context.Background(), "", []string{})
 	assert.Equal(t, "", result.Endpoint)

@@ -30,8 +30,7 @@ func skipIfNoTCP(t *testing.T) {
 // ---- PrefixCacheWarmer -------------------------------------------------------
 
 func TestPrefixCacheWarmer_Register_NewPrefix(t *testing.T) {
-	pool := NewConnectionPool(DefaultPoolConfig())
-	w := NewPrefixCacheWarmer(pool)
+	w := NewPrefixCacheWarmer()
 	entry := w.Register("hello world", 3)
 	require.NotNil(t, entry)
 	assert.Equal(t, "hello world", entry.Text)
@@ -39,31 +38,27 @@ func TestPrefixCacheWarmer_Register_NewPrefix(t *testing.T) {
 }
 
 func TestPrefixCacheWarmer_Register_Idempotent(t *testing.T) {
-	pool := NewConnectionPool(DefaultPoolConfig())
-	w := NewPrefixCacheWarmer(pool)
+	w := NewPrefixCacheWarmer()
 	e1 := w.Register("prefix", 5)
 	e2 := w.Register("prefix", 5)
 	assert.Same(t, e1, e2)
 }
 
 func TestPrefixCacheWarmer_LookupEndpoint_NotRegistered_ReturnsNil(t *testing.T) {
-	pool := NewConnectionPool(DefaultPoolConfig())
-	w := NewPrefixCacheWarmer(pool)
+	w := NewPrefixCacheWarmer()
 	eps := w.LookupEndpoint("unknown prefix")
 	assert.Nil(t, eps)
 }
 
 func TestPrefixCacheWarmer_LookupEndpoint_NoCachedEndpoints(t *testing.T) {
-	pool := NewConnectionPool(DefaultPoolConfig())
-	w := NewPrefixCacheWarmer(pool)
+	w := NewPrefixCacheWarmer()
 	w.Register("system prompt", 10)
 	eps := w.LookupEndpoint("system prompt")
 	assert.Empty(t, eps)
 }
 
 func TestPrefixCacheWarmer_MarkCached_ThenLookup(t *testing.T) {
-	pool := NewConnectionPool(DefaultPoolConfig())
-	w := NewPrefixCacheWarmer(pool)
+	w := NewPrefixCacheWarmer()
 	w.Register("system prompt", 10)
 	w.MarkCached("system prompt", "ep1:8000")
 	w.MarkCached("system prompt", "ep2:8000")
@@ -75,8 +70,7 @@ func TestPrefixCacheWarmer_MarkCached_ThenLookup(t *testing.T) {
 }
 
 func TestPrefixCacheWarmer_MarkCached_DuplicateEndpoint_Ignored(t *testing.T) {
-	pool := NewConnectionPool(DefaultPoolConfig())
-	w := NewPrefixCacheWarmer(pool)
+	w := NewPrefixCacheWarmer()
 	w.Register("system prompt", 10)
 	w.MarkCached("system prompt", "ep1:8000")
 	w.MarkCached("system prompt", "ep1:8000") // duplicate
@@ -86,15 +80,13 @@ func TestPrefixCacheWarmer_MarkCached_DuplicateEndpoint_Ignored(t *testing.T) {
 }
 
 func TestPrefixCacheWarmer_MarkCached_UnregisteredPrefix_NoOp(t *testing.T) {
-	pool := NewConnectionPool(DefaultPoolConfig())
-	w := NewPrefixCacheWarmer(pool)
+	w := NewPrefixCacheWarmer()
 	// Should not panic
 	w.MarkCached("unknown prefix", "ep1:8000")
 }
 
 func TestPrefixCacheWarmer_EvictStale_RemovesOldEntry(t *testing.T) {
-	pool := NewConnectionPool(DefaultPoolConfig())
-	w := NewPrefixCacheWarmer(pool)
+	w := NewPrefixCacheWarmer()
 	w.Register("stale prefix", 5)
 	// LastUsed defaults to zero (never used), HitCount is 0 — should be evicted
 
@@ -103,8 +95,7 @@ func TestPrefixCacheWarmer_EvictStale_RemovesOldEntry(t *testing.T) {
 }
 
 func TestPrefixCacheWarmer_EvictStale_KeepsRecentlyUsed(t *testing.T) {
-	pool := NewConnectionPool(DefaultPoolConfig())
-	w := NewPrefixCacheWarmer(pool)
+	w := NewPrefixCacheWarmer()
 	w.Register("active prefix", 5)
 	// Simulate recent lookup
 	w.LookupEndpoint("active prefix")

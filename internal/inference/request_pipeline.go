@@ -10,11 +10,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
-	v2 "github.com/ckodex-labs/kserve-llm-operator/internal/protocol/v2"
 )
 
 // RequestPipeline orchestrates the full inference request lifecycle
@@ -35,7 +33,7 @@ type RequestPipeline struct {
 func NewRequestPipeline() *RequestPipeline {
 	pool := NewConnectionPool(DefaultPoolConfig())
 	preloader := NewPreloader()
-	router := NewFastPathRouter(pool, preloader)
+	router := NewFastPathRouter(pool)
 
 	return &RequestPipeline{
 		pool:      pool,
@@ -130,32 +128,10 @@ func (p *RequestPipeline) Execute(ctx context.Context, req *InferenceRequest) (*
 
 	// Phase 1: Route (budget: 50ms)
 	routeCtx, routeCancel := budget.PhaseContext(budgetCtx, "route")
-
 	routeCtx, routeSpan := p.obs.StartSessionRoute(routeCtx, req.SessionID)
-	defer routeSpan.End()
-
-	// Check bleeding-edge state: Did the user stream a massive context?
-	endpoint, seqID, pipelined := p.pipeliner.GetPipelinedEndpoint(req.SessionID)
-	if pipelined {
-		// We already have a warm KV cache block matching seqID on this endpoint
-		_ = seqID
-	} else {
-		// Fallback to anticipatory prefetcher (did we warm this while they typed?)
-		endpoint, pipelined = p.prefetcher.GetWarmedEndpoint(req.SessionID)
-	}
-
-	var routeResult RouteResult
-	if pipelined {
-		routeResult = RouteResult{
-			Endpoint:           endpoint,
-			CacheHit:           true,
-			EstimatedLatencyMs: 0,
-			RoutingLatency:     time.Since(start),
-		}
-	} else {
-		routeResult = p.router.Route(routeCtx, req.SessionEndpoint, req.Candidates)
-	}
+	routeResult := p.resolveRoute(routeCtx, req, start)
 	routeCancel()
+	routeSpan.End()
 
 	if routeResult.Endpoint == "" {
 		return nil, fmt.Errorf("no healthy endpoint for model %s", req.Model)
@@ -174,10 +150,7 @@ func (p *RequestPipeline) Execute(ctx context.Context, req *InferenceRequest) (*
 	// Phase 3: Acquire connection and track active requests
 	conn := p.pool.Get(routeResult.Endpoint)
 	conn.ActiveRequests.Add(1)
-	defer func() {
-		conn.ActiveRequests.Add(-1)
-		p.pool.RecordLatency(routeResult.Endpoint, time.Since(start))
-	}()
+	defer p.releaseRequest(routeResult.Endpoint, start, conn)
 
 	// Phase 4: Execute inference (budget: remaining)
 	if budget.Exceeded() {
@@ -186,35 +159,10 @@ func (p *RequestPipeline) Execute(ctx context.Context, req *InferenceRequest) (*
 		return nil, err
 	}
 
-	// Create V2 client using the pooled transport
-	v2Client := v2.NewClient(
-		fmt.Sprintf("http://%s", routeResult.Endpoint),
-		v2.WithHTTPClient(conn.Client),
-	)
-
-	// Map internal request to V2 protocol request
-	v2Req := &v2.InferRequest{
-		ID: req.SessionID,
-		Inputs: []v2.InferInput{
-			{
-				Name:     "prompt",
-				Shape:    []int64{1},
-				Datatype: v2.DatatypeBYTES,
-				Data:     []string{req.Prompt},
-			},
-		},
-	}
-
-	// Execute the HTTP call with span
-	v2Resp, err := v2Client.Infer(ctx, req.Model, "", v2Req)
-	if err != nil {
+	if err := p.runInference(ctx, conn, req, routeResult.Endpoint); err != nil {
 		observability.RecordError(span, err)
 		return nil, fmt.Errorf("V2 inference failed: %w", err)
 	}
-
-	// Map V2 response back to internal response
-	// In a real implementation, we'd extract the tensor data
-	_ = v2Resp
 
 	resp.TotalLatency = time.Since(start)
 
@@ -223,56 +171,4 @@ func (p *RequestPipeline) Execute(ctx context.Context, req *InferenceRequest) (*
 	observability.RecordSuccess(span)
 
 	return resp, nil
-}
-
-// --- Background Maintenance ---
-
-// StartMaintenance runs periodic pool cleanup in the background.
-func (p *RequestPipeline) StartMaintenance(ctx context.Context) {
-	var wg sync.WaitGroup
-
-	// Idle connection eviction every 30s
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				p.pool.EvictIdle(5 * time.Minute)
-			}
-		}
-	}()
-
-	// Request coalescer flush every 5ms
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(5 * time.Millisecond)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				batches := p.coalescer.Flush()
-				for key, waiters := range batches {
-					_ = key
-					// Execute batch inference and broadcast result
-					result := CoalescedResult{Data: nil, Error: nil}
-					for _, ch := range waiters {
-						ch <- result
-						close(ch)
-					}
-				}
-			}
-		}
-	}()
-
-	wg.Wait()
 }

@@ -92,6 +92,7 @@ jobs:
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: coverage-report
           path: coverage.out
@@ -100,6 +101,7 @@ jobs:
       - name: Upload release snapshot artifacts
         uses: actions/upload-artifact@v4
         if: success()
+        continue-on-error: true
         with:
           name: release-snapshot
           path: |

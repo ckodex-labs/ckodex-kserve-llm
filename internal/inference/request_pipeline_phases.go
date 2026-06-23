@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ckodex-labs/kserve-llm-operator/internal/protocol/v2"
+	v2 "github.com/ckodex-labs/kserve-llm-operator/internal/protocol/v2"
 )
 
 // resolveRoute picks the request endpoint using the fastest available path.

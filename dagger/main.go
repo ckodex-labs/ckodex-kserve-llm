@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"dagger/ckodex-operator/internal/dagger"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -39,23 +40,31 @@ func (m *CkodexOperator) Lint(
 	// +defaultPath="/"
 	source *dagger.Directory,
 ) (string, error) {
-	if _, err := goBase(source).
-		WithExec([]string{"go", "vet", "./..."}).
-		Sync(ctx); err != nil {
-		return "", fmt.Errorf("go vet: %w", err)
-	}
+	base := goBase(source)
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		if _, err := base.
+			WithExec([]string{"go", "vet", "./..."}).
+			Sync(ctx); err != nil {
+			return fmt.Errorf("go vet: %w", err)
+		}
+		return nil
+	})
 
-	out, err := dag.Container().
-		From(golangciLintImage).
-		WithMountedDirectory("/src", source).
-		WithWorkdir("/src").
-		WithMountedCache("/go/pkg/mod", dag.CacheVolume("go-mod")).
-		WithMountedCache("/root/.cache/go-build", dag.CacheVolume("go-build")).
-		WithMountedCache("/root/.cache/golangci-lint", dag.CacheVolume("golangci-lint")).
-		WithExec([]string{"golangci-lint", "run", "-v", "--timeout", "10m", "./..."}).
-		Stdout(ctx)
-	if err != nil {
-		return out, fmt.Errorf("golangci-lint: %w", err)
+	var lintOut string
+	g.Go(func() error {
+		out, err := golangciBase(source).
+			WithExec([]string{"golangci-lint", "run", "-v", "--timeout", "10m", "./..."}).
+			Stdout(ctx)
+		lintOut = out
+		if err != nil {
+			return fmt.Errorf("golangci-lint: %w", err)
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return lintOut, err
 	}
 	return "lint passed", nil
 }
@@ -260,7 +269,7 @@ lula validate -f lula/lula-component.yaml -o assessment-results.yaml`,
 		File("assessment-results.yaml")
 }
 
-// All runs lint, test, build, scan, and OSCAL validation in sequence.
+// All runs independent CI checks concurrently and fails on the first error.
 //
 // Usage: dagger call all --source=.
 func (m *CkodexOperator) All(
@@ -268,28 +277,67 @@ func (m *CkodexOperator) All(
 	// +defaultPath="/"
 	source *dagger.Directory,
 ) (string, error) {
-	if _, err := m.Lint(ctx, source); err != nil {
-		return "", fmt.Errorf("lint: %w", err)
-	}
-	if _, err := m.Test(ctx, source); err != nil {
-		return "", fmt.Errorf("test: %w", err)
-	}
-	if _, err := m.Scan(ctx, source); err != nil {
-		return "", fmt.Errorf("scan: %w", err)
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		if _, err := m.Lint(ctx, source); err != nil {
+			return fmt.Errorf("lint: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		if _, err := m.Test(ctx, source); err != nil {
+			return fmt.Errorf("test: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		if _, err := m.Scan(ctx, source); err != nil {
+			return fmt.Errorf("scan: %w", err)
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return "", err
 	}
 	return "all checks passed", nil
 }
 
-// goBase returns a configured Go container with source mounted and module cache warmed.
-func goBase(source *dagger.Directory) *dagger.Container {
+// goModBase warms dependency caches from only go.mod/go.sum so source edits do
+// not invalidate module downloads.
+func goModBase(source *dagger.Directory) *dagger.Container {
 	return dag.Container().
 		From(goBuilderImage).
-		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
+		WithMountedFile("/src/go.mod", source.File("go.mod")).
+		WithMountedFile("/src/go.sum", source.File("go.sum")).
 		WithMountedCache("/go/pkg/mod", dag.CacheVolume("go-mod")).
 		WithMountedCache("/root/.cache/go-build", dag.CacheVolume("go-build")).
+		WithEnvVariable("GOCACHE", "/root/.cache/go-build").
 		WithEnvVariable("GOFLAGS", "-mod=readonly").
 		WithExec([]string{"go", "mod", "download"})
+}
+
+// goBase returns a configured Go container with source mounted on a warmed module base.
+func goBase(source *dagger.Directory) *dagger.Container {
+	return goModBase(source).
+		WithMountedDirectory("/src", source)
+}
+
+// golangciBase mirrors goBase for the golangci-lint image so dependency
+// resolution stays cacheable independently of source changes.
+func golangciBase(source *dagger.Directory) *dagger.Container {
+	return dag.Container().
+		From(golangciLintImage).
+		WithWorkdir("/src").
+		WithMountedFile("/src/go.mod", source.File("go.mod")).
+		WithMountedFile("/src/go.sum", source.File("go.sum")).
+		WithMountedCache("/go/pkg/mod", dag.CacheVolume("go-mod")).
+		WithMountedCache("/root/.cache/go-build", dag.CacheVolume("go-build")).
+		WithMountedCache("/root/.cache/golangci-lint", dag.CacheVolume("golangci-lint")).
+		WithEnvVariable("GOCACHE", "/root/.cache/go-build").
+		WithEnvVariable("GOFLAGS", "-mod=readonly").
+		WithExec([]string{"go", "mod", "download"}).
+		WithMountedDirectory("/src", source)
 }
 
 // buildVariant builds the operator binary and wraps it in a distroless container

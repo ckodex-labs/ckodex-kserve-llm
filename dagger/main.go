@@ -301,11 +301,13 @@ func buildVariant(source *dagger.Directory, arch, version string) *dagger.Contai
 	)
 	platform := dagger.Platform("linux/" + arch)
 	binary := goBase(source).
+		WithExec([]string{"mkdir", "-p", "/root/.cache/go-build/tmp"}).
 		WithEnvVariable("CGO_ENABLED", "0").
 		WithEnvVariable("GOOS", "linux").
 		WithEnvVariable("GOARCH", arch).
+		WithEnvVariable("GOTMPDIR", "/root/.cache/go-build/tmp").
 		WithExec([]string{
-			"go", "build", "-a",
+			"go", "build",
 			"-ldflags", ldflags,
 			"-o", "/out/manager",
 			"cmd/manager/main.go",

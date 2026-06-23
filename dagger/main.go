@@ -54,7 +54,7 @@ func (m *CkodexOperator) Lint(
 	var lintOut string
 	g.Go(func() error {
 		out, err := golangciBase(source).
-			WithExec([]string{"golangci-lint", "run", "-v", "--timeout", "10m", "./..."}).
+			WithExec([]string{"golangci-lint", "run", "-v", "--timeout", "20m", "./..."}).
 			Stdout(ctx)
 		lintOut = out
 		if err != nil {

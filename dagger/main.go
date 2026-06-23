@@ -299,7 +299,6 @@ func buildVariant(source *dagger.Directory, arch, version string) *dagger.Contai
 		"-s -w -extldflags '-static' -X github.com/ckodex-labs/kserve-llm-operator/internal/version.Version=%s",
 		version,
 	)
-	binaryPath := "/root/.cache/go-build/out/manager"
 	platform := dagger.Platform("linux/" + arch)
 	binary := goBase(source).
 		WithExec([]string{"mkdir", "-p", "/root/.cache/go-build/tmp", "/root/.cache/go-build/out"}).
@@ -310,10 +309,10 @@ func buildVariant(source *dagger.Directory, arch, version string) *dagger.Contai
 		WithExec([]string{
 			"go", "build",
 			"-ldflags", ldflags,
-			"-o", binaryPath,
+			"-o", "/root/.cache/go-build/out/manager",
 			"cmd/manager/main.go",
 		}).
-		File(binaryPath)
+		File("/root/.cache/go-build/out/manager")
 
 	return dag.Container(dagger.ContainerOpts{Platform: platform}).
 		From(distrolessImage).

@@ -77,7 +77,17 @@ jobs:
         shell: bash
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
-        run: dagger call all --source=.
+          DAGGER_NO_NAG: "1"
+        run: |
+          df -h
+          docker system df || true
+          set +e
+          dagger --progress=plain call all --source=. 2>&1 | tee dagger-all.log
+          status=${PIPESTATUS[0]}
+          set -e
+          df -h
+          docker system df || true
+          exit "$status"
 
       - name: Export coverage report
         shell: bash

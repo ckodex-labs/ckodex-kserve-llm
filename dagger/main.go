@@ -1,7 +1,7 @@
 // Package main is the Dagger module for the ckodex-kserve-llm-operator CI/CD pipeline.
 //
 // Run `dagger develop` once to generate internal/dagger/ before calling any functions.
-// Available via: dagger call lint | test | coverage | build | scan | sbom | all
+// Available via: dagger call lint | test | coverage | build | build-check | scan | sbom | all
 package main
 
 import (
@@ -28,6 +28,23 @@ const (
 	coverageInference  = 80
 	coverageObs        = 80
 )
+
+var sourceExcludes = []string{
+	".git/",
+	".dagger/",
+	".cache/",
+	".cocoindex_code/",
+	".tmp/",
+	"bin/",
+	"console/.next/",
+	"console/node_modules/",
+	"dist/",
+	"scratch/bin/",
+	"target/",
+	"node_modules/",
+	"*.log",
+	"*.out",
+}
 
 // CkodexOperator is the root Dagger module type for the operator CI/CD pipeline.
 type CkodexOperator struct{}
@@ -141,6 +158,22 @@ func (m *CkodexOperator) Build(
 	version string,
 ) *dagger.Container {
 	return buildVariant(source, "amd64", resolveVersion(version))
+}
+
+// BuildCheck materializes the operator image without exporting it.
+//
+// Usage: dagger call build-check --source=.
+func (m *CkodexOperator) BuildCheck(
+	ctx context.Context,
+	// +defaultPath="/"
+	source *dagger.Directory,
+	// +optional
+	version string,
+) (string, error) {
+	if _, err := m.Build(source, version).Sync(ctx); err != nil {
+		return "", err
+	}
+	return "build passed", nil
 }
 
 // Scan runs a Trivy vulnerability scan on the amd64 build.
@@ -269,8 +302,8 @@ lula validate -f lula/lula-component.yaml -o assessment-results.yaml`,
 		File("assessment-results.yaml")
 }
 
-// All warms shared caches, runs compile-heavy checks concurrently, then scans the
-// resulting image rootfs after the parallel compile window closes.
+// All warms shared caches, runs independent checks in bounded parallel phases,
+// then scans the cached image rootfs after the compile-heavy window closes.
 //
 // Usage: dagger call all --source=.
 func (m *CkodexOperator) All(
@@ -281,17 +314,24 @@ func (m *CkodexOperator) All(
 	if _, err := goBase(source).Sync(ctx); err != nil {
 		return "", fmt.Errorf("warm go base: %w", err)
 	}
+	if _, err := golangciBase(source).Sync(ctx); err != nil {
+		return "", fmt.Errorf("warm golangci base: %w", err)
+	}
+
+	if _, err := m.Lint(ctx, source); err != nil {
+		return "", fmt.Errorf("lint: %w", err)
+	}
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		if _, err := m.Lint(ctx, source); err != nil {
-			return fmt.Errorf("lint: %w", err)
+		if _, err := m.Test(ctx, source); err != nil {
+			return fmt.Errorf("test: %w", err)
 		}
 		return nil
 	})
 	g.Go(func() error {
-		if _, err := m.Test(ctx, source); err != nil {
-			return fmt.Errorf("test: %w", err)
+		if _, err := m.BuildCheck(ctx, source, ""); err != nil {
+			return fmt.Errorf("build: %w", err)
 		}
 		return nil
 	})
@@ -324,7 +364,7 @@ func goModBase(source *dagger.Directory) *dagger.Container {
 // goBase returns a configured Go container with source mounted on a warmed module base.
 func goBase(source *dagger.Directory) *dagger.Container {
 	return goModBase(source).
-		WithMountedDirectory("/src", source)
+		WithMountedDirectory("/src", filteredSource(source))
 }
 
 // golangciBase mirrors goBase for the golangci-lint image so dependency
@@ -340,10 +380,18 @@ func golangciBase(source *dagger.Directory) *dagger.Container {
 		WithMountedCache("/root/.cache/golangci-lint", dag.CacheVolume("golangci-lint")).
 		WithExec([]string{"mkdir", "-p", "/root/.cache/go-build/tmp"}).
 		WithEnvVariable("GOCACHE", "/root/.cache/go-build").
+		WithEnvVariable("GOLANGCI_LINT_CACHE", "/root/.cache/golangci-lint").
 		WithEnvVariable("GOTMPDIR", "/root/.cache/go-build/tmp").
 		WithEnvVariable("GOFLAGS", "-mod=readonly").
 		WithExec([]string{"go", "mod", "download"}).
-		WithMountedDirectory("/src", source)
+		WithMountedDirectory("/src", filteredSource(source))
+}
+
+func filteredSource(source *dagger.Directory) *dagger.Directory {
+	return source.Filter(dagger.DirectoryFilterOpts{
+		Exclude:   sourceExcludes,
+		Gitignore: true,
+	})
 }
 
 // buildVariant builds the operator binary and wraps it in a distroless container

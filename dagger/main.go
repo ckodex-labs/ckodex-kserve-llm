@@ -322,15 +322,15 @@ func (m *CkodexOperator) All(
 		return "", fmt.Errorf("lint: %w", err)
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	g, groupCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		if _, err := m.Test(ctx, source); err != nil {
+		if _, err := m.Test(groupCtx, source); err != nil {
 			return fmt.Errorf("test: %w", err)
 		}
 		return nil
 	})
 	g.Go(func() error {
-		if _, err := m.BuildCheck(ctx, source, ""); err != nil {
+		if _, err := m.BuildCheck(groupCtx, source, ""); err != nil {
 			return fmt.Errorf("build: %w", err)
 		}
 		return nil
@@ -403,7 +403,7 @@ func buildVariant(source *dagger.Directory, arch, version string) *dagger.Contai
 	)
 	platform := dagger.Platform("linux/" + arch)
 	binary := goBase(source).
-		WithExec([]string{"mkdir", "-p", "/root/.cache/go-build/tmp", "/root/.cache/go-build/out"}).
+		WithExec([]string{"mkdir", "-p", "/root/.cache/go-build/tmp", "/tmp/ckodex-build"}).
 		WithEnvVariable("CGO_ENABLED", "0").
 		WithEnvVariable("GOOS", "linux").
 		WithEnvVariable("GOARCH", arch).
@@ -411,10 +411,10 @@ func buildVariant(source *dagger.Directory, arch, version string) *dagger.Contai
 		WithExec([]string{
 			"go", "build",
 			"-ldflags", ldflags,
-			"-o", "/root/.cache/go-build/out/manager",
+			"-o", "/tmp/ckodex-build/manager",
 			"cmd/manager/main.go",
 		}).
-		File("/root/.cache/go-build/out/manager")
+		File("/tmp/ckodex-build/manager")
 
 	return dag.Container(dagger.ContainerOpts{Platform: platform}).
 		From(distrolessImage).

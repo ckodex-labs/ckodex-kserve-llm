@@ -151,18 +151,18 @@ func (m *CkodexOperator) Scan(
 	// +defaultPath="/"
 	source *dagger.Directory,
 ) (string, error) {
-	imgTar := m.Build(source, "").AsTarball()
+	rootfs := m.Build(source, "").Rootfs()
 	return dag.Container().
 		From(fmt.Sprintf("aquasec/trivy:%s", trivyVersion)).
-		WithMountedFile("/image.tar", imgTar).
+		WithMountedDirectory("/rootfs", rootfs).
 		WithExec([]string{
-			"trivy", "image",
-			"--input", "/image.tar",
+			"trivy", "rootfs",
 			"--severity", "CRITICAL,HIGH",
 			"--scanners", "vuln",
 			"--exit-code", "1",
 			"--ignore-unfixed",
 			"--format", "table",
+			"/rootfs",
 		}).
 		Stdout(ctx)
 }
@@ -269,7 +269,8 @@ lula validate -f lula/lula-component.yaml -o assessment-results.yaml`,
 		File("assessment-results.yaml")
 }
 
-// All runs independent CI checks concurrently and fails on the first error.
+// All warms shared caches, runs compile-heavy checks concurrently, then scans the
+// resulting image rootfs after the parallel compile window closes.
 //
 // Usage: dagger call all --source=.
 func (m *CkodexOperator) All(
@@ -277,6 +278,10 @@ func (m *CkodexOperator) All(
 	// +defaultPath="/"
 	source *dagger.Directory,
 ) (string, error) {
+	if _, err := goBase(source).Sync(ctx); err != nil {
+		return "", fmt.Errorf("warm go base: %w", err)
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		if _, err := m.Lint(ctx, source); err != nil {
@@ -290,14 +295,11 @@ func (m *CkodexOperator) All(
 		}
 		return nil
 	})
-	g.Go(func() error {
-		if _, err := m.Scan(ctx, source); err != nil {
-			return fmt.Errorf("scan: %w", err)
-		}
-		return nil
-	})
 	if err := g.Wait(); err != nil {
 		return "", err
+	}
+	if _, err := m.Scan(ctx, source); err != nil {
+		return "", fmt.Errorf("scan: %w", err)
 	}
 	return "all checks passed", nil
 }
@@ -312,7 +314,9 @@ func goModBase(source *dagger.Directory) *dagger.Container {
 		WithMountedFile("/src/go.sum", source.File("go.sum")).
 		WithMountedCache("/go/pkg/mod", dag.CacheVolume("go-mod")).
 		WithMountedCache("/root/.cache/go-build", dag.CacheVolume("go-build")).
+		WithExec([]string{"mkdir", "-p", "/root/.cache/go-build/tmp"}).
 		WithEnvVariable("GOCACHE", "/root/.cache/go-build").
+		WithEnvVariable("GOTMPDIR", "/root/.cache/go-build/tmp").
 		WithEnvVariable("GOFLAGS", "-mod=readonly").
 		WithExec([]string{"go", "mod", "download"})
 }
@@ -334,7 +338,9 @@ func golangciBase(source *dagger.Directory) *dagger.Container {
 		WithMountedCache("/go/pkg/mod", dag.CacheVolume("go-mod")).
 		WithMountedCache("/root/.cache/go-build", dag.CacheVolume("go-build")).
 		WithMountedCache("/root/.cache/golangci-lint", dag.CacheVolume("golangci-lint")).
+		WithExec([]string{"mkdir", "-p", "/root/.cache/go-build/tmp"}).
 		WithEnvVariable("GOCACHE", "/root/.cache/go-build").
+		WithEnvVariable("GOTMPDIR", "/root/.cache/go-build/tmp").
 		WithEnvVariable("GOFLAGS", "-mod=readonly").
 		WithExec([]string{"go", "mod", "download"}).
 		WithMountedDirectory("/src", source)

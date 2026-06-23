@@ -9,8 +9,8 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/api/meta"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -172,7 +172,7 @@ func (r *EbpfReconciler) reconcileNetworkPolicy(ctx context.Context, llmSvc *ser
 						"syscall": true,
 						"args": []interface{}{
 							map[string]interface{}{"index": int64(0), "type": "int"},
-							map[string]interface{}{"index": int64(1), "type": "sockaddr"}, //nolint:gomnd
+							map[string]interface{}{"index": int64(1), "type": "sockaddr"},
 						},
 						"selectors": []interface{}{
 							map[string]interface{}{

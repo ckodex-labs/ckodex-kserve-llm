@@ -259,8 +259,11 @@ func (v *TokenVerifier) Verify(ctx context.Context, tokenString string) (*Infere
 		jwt.WithLeeway(30*time.Second),
 	)
 
-	if err != nil || !token.Valid {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidToken, err)
+	}
+	if !token.Valid {
+		return nil, fmt.Errorf("%w: token failed validation", ErrInvalidToken)
 	}
 
 	return claims, nil

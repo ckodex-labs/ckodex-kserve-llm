@@ -5,11 +5,13 @@ Licensed under the Apache License, Version 2.0.
 
 // Package aipack_conformance validates AIPACK-SPEC v0.1.1 conformance vectors.
 // Naming convention:
-//   V-NNN — valid/pass vectors (must not return an error)
-//   I-NNN — invalid/fail vectors (must return an error matching wantCode)
+//
+//	V-NNN — valid/pass vectors (must not return an error)
+//	I-NNN — invalid/fail vectors (must return an error matching wantCode)
 package aipack_conformance
 
 import (
+	"errors"
 	"testing"
 
 	v1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -261,8 +263,8 @@ func assertError(t *testing.T, id string, err error, wantCode string) {
 	if err == nil {
 		t.Fatalf("[%s] expected error with code %s but got nil", id, wantCode)
 	}
-	aipErr, ok := err.(*aipack.AIPackError)
-	if !ok {
+	var aipErr *aipack.AIPackError
+	if !errors.As(err, &aipErr) {
 		t.Fatalf("[%s] expected *aipack.AIPackError, got %T: %v", id, err, err)
 	}
 	if string(aipErr.Code) != wantCode {

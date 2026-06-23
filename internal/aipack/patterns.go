@@ -6,13 +6,13 @@ import v1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 type CompositionPattern string
 
 const (
-	PatternBaselineAgent     CompositionPattern = "baseline-agent"       // P1: model only
-	PatternRAGAgent          CompositionPattern = "rag-agent"            // P2: model + retrieval
-	PatternToolAgent         CompositionPattern = "tool-agent"           // P3: model + tools
-	PatternGuardedAgent      CompositionPattern = "guarded-agent"        // P4: model + guardrails
-	PatternWorkflowAgent     CompositionPattern = "workflow-agent"       // P5: model + workflow
-	PatternComplianceAgent   CompositionPattern = "compliance-agent"     // P6: model + policy bundle
-	PatternFullStackAgent    CompositionPattern = "full-stack-agent"     // P7: all slots
+	PatternBaselineAgent   CompositionPattern = "baseline-agent"   // P1: model only
+	PatternRAGAgent        CompositionPattern = "rag-agent"        // P2: model + retrieval
+	PatternToolAgent       CompositionPattern = "tool-agent"       // P3: model + tools
+	PatternGuardedAgent    CompositionPattern = "guarded-agent"    // P4: model + guardrails
+	PatternWorkflowAgent   CompositionPattern = "workflow-agent"   // P5: model + workflow
+	PatternComplianceAgent CompositionPattern = "compliance-agent" // P6: model + policy bundle
+	PatternFullStackAgent  CompositionPattern = "full-stack-agent" // P7: all slots
 )
 
 // InferPattern returns the closest matching canonical composition pattern for the given spec.

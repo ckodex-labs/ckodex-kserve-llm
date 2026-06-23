@@ -64,7 +64,7 @@ func (r *ExternalSecretReconciler) ReconcileExternalSecret(ctx context.Context, 
 	// Some fake client versions need these explicitly in the map to avoid panics
 	es.Object["apiVersion"] = ExternalSecretGVK.GroupVersion().String()
 	es.Object["kind"] = ExternalSecretGVK.Kind
-	
+
 	es.SetName(llmSvc.Name)
 	es.SetNamespace(llmSvc.Namespace)
 

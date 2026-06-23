@@ -30,9 +30,9 @@ type NetworkPolicyReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//  3. allow-lws-intra    — facilitates pod-to-pod communication for multi-worker models
-//  4. allow-tools        — permits egress to declared ToolSurface APIs and CIDRs (M3 Phase 4)
-//  5. egress-lockdown    — strict egress control permitting only DNS, Mesh, and SPIRE
+// 3. allow-lws-intra    — facilitates pod-to-pod communication for multi-worker models
+// 4. allow-tools        — permits egress to declared ToolSurface APIs and CIDRs (M3 Phase 4)
+// 5. egress-lockdown    — strict egress control permitting only DNS, Mesh, and SPIRE
 func (r *NetworkPolicyReconciler) ReconcileNetworkPolicy(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
 	logger := log.FromContext(ctx).WithValues("component", "network-policy")
 
@@ -188,8 +188,8 @@ func (r *NetworkPolicyReconciler) ReconcileNetworkPolicy(ctx context.Context, ll
 							},
 						})
 					}
-					// Note: FQDN-based policies (AllowedAPIs) require an Envoy/Istio-aware 
-					// NetworkPolicy implementation or a DNSPolicy sidecar. 
+					// Note: FQDN-based policies (AllowedAPIs) require an Envoy/Istio-aware
+					// NetworkPolicy implementation or a DNSPolicy sidecar.
 					// We emit IPBlock rules for base K8s compatibility.
 				}
 

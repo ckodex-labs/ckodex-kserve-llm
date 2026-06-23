@@ -44,7 +44,7 @@ Replace `$TAG` with the release tag and run verification as a downstream consume
 cosign verify \
   --certificate-identity-regexp '.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/ckodex-labs/kserve-llm-operator:$TAG
+  ghcr.io/ckodex-labs/ckodex-kserve-llm:$TAG
 ```
 
 ### Container Image Provenance
@@ -54,7 +54,7 @@ cosign verify-attestation \
   --type slsaprovenance1 \
   --certificate-identity-regexp '.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/ckodex-labs/kserve-llm-operator:$TAG
+  ghcr.io/ckodex-labs/ckodex-kserve-llm:$TAG
 ```
 
 ### Container Image SBOM Attestation
@@ -64,13 +64,13 @@ cosign verify-attestation \
   --type cyclonedx \
   --certificate-identity-regexp '.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/ckodex-labs/kserve-llm-operator:$TAG
+  ghcr.io/ckodex-labs/ckodex-kserve-llm:$TAG
 ```
 
 ### Binary Checksums
 
 ```bash
-gh release download "$TAG" --repo ckodex-labs/kserve-llm-operator --dir release-assets
+gh release download "$TAG" --repo ckodex-labs/ckodex-kserve-llm --dir release-assets
 (cd release-assets && sha256sum -c checksums.txt)
 ```
 

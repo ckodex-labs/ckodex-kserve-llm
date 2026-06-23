@@ -12,9 +12,6 @@ import (
 // digestRefPattern matches OCI digest references of the form <registry>/<repo>@sha256:<64hex>.
 var digestRefPattern = regexp.MustCompile(`^.+@sha256:[0-9a-f]{64}$`)
 
-// maxDAGDepth is the maximum allowed composition nesting depth per §5.2 (AIPACK-COMP-003).
-const maxDAGDepth = 8
-
 // AgentSlotConstraints declares which artifact kinds are valid in each Agent slot per §5.3.
 var AgentSlotConstraints = map[string][]v1alpha2.ArtifactKind{
 	"baseModel":        {v1alpha2.KindBaseModel, v1alpha2.KindLoRA, v1alpha2.KindFineTune},

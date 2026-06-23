@@ -221,9 +221,9 @@ func TestVADConformance(t *testing.T) {
 func TestOutlierConformance(t *testing.T) {
 	t.Run("V-EXT-010", func(t *testing.T) {
 		signal := &v1alpha2.AIPackOutlierSignal{
-			Category:         "statistical-outlier",
-			Acknowledged:     true,
-			AcknowledgedBy:   "security-reviewer",
+			Category:       "statistical-outlier",
+			Acknowledged:   true,
+			AcknowledgedBy: "security-reviewer",
 		}
 		err := aipack.ValidateOutlierSignal(signal)
 		if err != nil {

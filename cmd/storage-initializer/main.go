@@ -220,7 +220,7 @@ func assessProvenance(uri, scheme, destPath string, verifier verifierConfig) (pr
 	}
 
 	if len(assessment.ArtifactPaths) == 0 {
-		return provenanceAssessment{}, fmt.Errorf("No provenance artifact (slsa.provenance.json or .sig) found in model payload. Rejecting model to prevent tampering.")
+		return provenanceAssessment{}, fmt.Errorf("no provenance artifact (slsa.provenance.json or .sig) found in model payload; rejecting model to prevent tampering")
 	}
 
 	return assessment, nil
@@ -313,8 +313,14 @@ func runCosign(ref string, verifier verifierConfig, verb string, extraArgs ...st
 	args = append(args, extraArgs...)
 	args = append(args, ref)
 
-	cmd := exec.Command(cosignBinaryPath, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, cosignBinaryPath, args...)
 	output, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("cosign %s timed out: %w", verb, ctx.Err())
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
 	}

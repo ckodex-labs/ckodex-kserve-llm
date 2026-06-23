@@ -253,7 +253,7 @@ func BuildCanaryHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters 
 						rules = append(rules, gwapiv1.HTTPRouteRule{
 							Matches: []gwapiv1.HTTPRouteMatch{
 								{
-									Path: &gwapiv1.HTTPPathMatch{Type: &pathPrefix, Value: strPtr("/")},
+									Path:    &gwapiv1.HTTPPathMatch{Type: &pathPrefix, Value: strPtr("/")},
 									Headers: []gwapiv1.HTTPHeaderMatch{{Name: "x-ckodex-adapter", Value: adapter.Spec.Sandbox.HeaderValue}},
 								},
 							},

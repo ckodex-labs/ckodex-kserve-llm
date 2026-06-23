@@ -23,15 +23,15 @@ const (
 	PredLoRALossCurve   = "urn:lora:loss-curve:v1"
 
 	// A3 FineTune
-	PredFineTuneHyperparams      = "urn:finetune:hyperparameters:v1"
-	PredFineTuneBaseCompat       = "urn:finetune:base-compat:v1"
-	PredFineTuneSafetyRetention  = "urn:finetune:safety-retention:v1"
+	PredFineTuneHyperparams     = "urn:finetune:hyperparameters:v1"
+	PredFineTuneBaseCompat      = "urn:finetune:base-compat:v1"
+	PredFineTuneSafetyRetention = "urn:finetune:safety-retention:v1"
 
 	// A4 Skill
 	PredSkillSafetyReview          = "urn:skill:safety-review:v1"
-	PredSkillCapabilityDeclaration  = "urn:skill:capability-declaration:v1"
-	PredSkillStaticAnalysis         = "urn:skill:static-analysis:v1"
-	PredSkillRedTeam                = "urn:skill:red-team-eval:v1"
+	PredSkillCapabilityDeclaration = "urn:skill:capability-declaration:v1"
+	PredSkillStaticAnalysis        = "urn:skill:static-analysis:v1"
+	PredSkillRedTeam               = "urn:skill:red-team-eval:v1"
 
 	// A5 Tool
 	PredToolSchemaValidation = "urn:tool:schema-validation:v1"
@@ -78,23 +78,23 @@ const (
 	PredAgentScorecard        = "urn:scorecard:agent:v1"
 
 	// Operational predicates (§11–§22)
-	PredLineageEnvelope          = "urn:aipack:lineage-envelope:v1"
-	PredLineageAttestation       = "urn:aipack:lineage-attestation:v1"
-	PredBlastRadiusDeclaration   = "urn:aipack:blast-radius-declaration:v1"
-	PredQuarantineCascade        = "urn:aipack:quarantine-cascade:v1"
-	PredDependencyIndexSnapshot  = "urn:aipack:dependency-index-snapshot:v1"
-	PredRiskValence              = "urn:aipack:risk-valence:v1"
-	PredOutlierSignal            = "urn:aipack:outlier-signal:v1"
-	PredOutlierDismissal         = "urn:aipack:outlier-dismissal:v1"
-	PredDeprecationNotice        = "urn:aipack:deprecation:v1"
-	PredDeprecationRevocation    = "urn:aipack:deprecation-revocation:v1"
-	PredSunsetDerogation         = "urn:aipack:sunset-derogation:v1"
-	PredProfileDerogation        = "urn:aipack:profile-derogation:v1"
-	PredAirGapBundle             = "urn:aipack:airgap-bundle:v1"
-	PredAirGapHandoff            = "urn:aipack:airgap-handoff:v1"
-	PredReplayLog                = "urn:aipack:replay-log:v1"
-	PredQuarantineTrigger        = "urn:aipack:trigger-fired:v1"
-	PredVADResult                = "urn:aipack:vad-result:v1"
+	PredLineageEnvelope         = "urn:aipack:lineage-envelope:v1"
+	PredLineageAttestation      = "urn:aipack:lineage-attestation:v1"
+	PredBlastRadiusDeclaration  = "urn:aipack:blast-radius-declaration:v1"
+	PredQuarantineCascade       = "urn:aipack:quarantine-cascade:v1"
+	PredDependencyIndexSnapshot = "urn:aipack:dependency-index-snapshot:v1"
+	PredRiskValence             = "urn:aipack:risk-valence:v1"
+	PredOutlierSignal           = "urn:aipack:outlier-signal:v1"
+	PredOutlierDismissal        = "urn:aipack:outlier-dismissal:v1"
+	PredDeprecationNotice       = "urn:aipack:deprecation:v1"
+	PredDeprecationRevocation   = "urn:aipack:deprecation-revocation:v1"
+	PredSunsetDerogation        = "urn:aipack:sunset-derogation:v1"
+	PredProfileDerogation       = "urn:aipack:profile-derogation:v1"
+	PredAirGapBundle            = "urn:aipack:airgap-bundle:v1"
+	PredAirGapHandoff           = "urn:aipack:airgap-handoff:v1"
+	PredReplayLog               = "urn:aipack:replay-log:v1"
+	PredQuarantineTrigger       = "urn:aipack:trigger-fired:v1"
+	PredVADResult               = "urn:aipack:vad-result:v1"
 )
 
 // PredicateStatus is the verification status of a single attestation predicate.

@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -103,15 +104,7 @@ func TestVerifyFile_CaseInsensitive(t *testing.T) {
 	content := []byte("data")
 	path := writeTempFile(t, content)
 	// Uppercase expected — should still match
-	expected := sha256Hex(content)
-	upperExpected := ""
-	for _, c := range expected {
-		if c >= 'a' && c <= 'f' {
-			upperExpected += string(rune(c - 32))
-		} else {
-			upperExpected += string(c)
-		}
-	}
+	upperExpected := strings.ToUpper(sha256Hex(content))
 	require.NoError(t, VerifyFile(path, upperExpected))
 }
 

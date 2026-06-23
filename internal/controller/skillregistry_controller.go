@@ -90,7 +90,7 @@ func (r *SkillRegistryReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			Message:            fmt.Sprintf("%d skills registered", len(reg.Spec.Entries)),
 			ObservedGeneration: reg.Generation,
 		})
-		reg.Status.EntryCount = int32(len(reg.Spec.Entries)) //nolint:gosec
+		reg.Status.EntryCount = int32(len(reg.Spec.Entries))
 	}
 
 	// Only patch status if it actually changed to avoid infinite reconciliation loops

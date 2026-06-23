@@ -72,10 +72,10 @@ func TestOIS_ReceiptEmission(t *testing.T) {
 
 func TestOIS_RedactionCompliance(t *testing.T) {
 	redactor := NewRedactor(true)
-	
+
 	input := "My SSN is 123-45-6789"
 	output := redactor.RedactString(input)
-	
+
 	assert.Equal(t, "My SSN is __REDACTED__", output, "MUST use canonical __REDACTED__ placeholder")
 }
 
@@ -97,13 +97,13 @@ func TestOIS_SemanticMetrics(t *testing.T) {
 func TestOIS_InferenceProfile_Coverage(t *testing.T) {
 	t.Run("ModelAssembly_Serialization", func(t *testing.T) {
 		assembly := ModelAssembly{
-			Base: ModelIdentity{ID: "llama3", URN: URN("model", "llama3"), Version: "1.0"},
+			Base:         ModelIdentity{ID: "llama3", URN: URN("model", "llama3"), Version: "1.0"},
 			Quantization: &QuantProfile{ID: "4bit", Method: "awq", Bits: 4},
 			Adapters: []ModelIdentity{
 				{ID: "lora-finance", URN: URN("adapter", "lora-finance")},
 			},
 		}
-		
+
 		assert.Equal(t, "urn:ois:model:ckodex:llama3", assembly.Base.URN)
 		assert.Equal(t, 4, assembly.Quantization.Bits)
 		assert.Len(t, assembly.Adapters, 1)
@@ -116,10 +116,10 @@ func TestOIS_InferenceProfile_Coverage(t *testing.T) {
 
 		logger := NewAuditLoggerWithOptions(nil, nil, false)
 		ctx, span := tracer.Start(context.Background(), "inference")
-		
+
 		assembly := ModelAssembly{Base: ModelIdentity{ID: "phi-3"}}
 		perf := PerformanceMetrics{LatencyMS: 150, FirstTokenMS: 40}
-		
+
 		logger.LogRichInferenceSignal(ctx, "exec-123", "tenant-1", assembly, perf, AuditSuccess, nil)
 		span.End()
 
@@ -127,12 +127,12 @@ func TestOIS_InferenceProfile_Coverage(t *testing.T) {
 		require.Len(t, spans, 1)
 		events := spans[0].Events()
 		require.Len(t, events, 1)
-		
+
 		attrs := make(map[string]string)
 		for _, attr := range events[0].Attributes {
 			attrs[string(attr.Key)] = attr.Value.AsString()
 		}
-		
+
 		assert.Equal(t, "150", attrs[AttrPerfLatencyMS])
 		assert.Equal(t, "40", attrs[AttrPerfFirstTokenMS])
 		assert.Equal(t, "phi-3", attrs[AttrModelBaseID])

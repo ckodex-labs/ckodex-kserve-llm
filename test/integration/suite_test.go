@@ -184,14 +184,14 @@ func TestMain(m *testing.M) {
 	mustf((&controller.LocalModelCacheReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("localmodelcache-controller"), //nolint:staticcheck
+		Recorder: mgr.GetEventRecorderFor("localmodelcache-controller"),
 	}).SetupWithManager(mgr), "setup localmodelcache controller")
 
 	mustf((&controller.LLMLoraAdapterReconciler{
 		Client:     mgr.GetClient(),
 		Scheme:     mgr.GetScheme(),
 		HTTPClient: &http.Client{},
-		Recorder:   mgr.GetEventRecorderFor("llmloraadapter-controller"), //nolint:staticcheck
+		Recorder:   mgr.GetEventRecorderFor("llmloraadapter-controller"),
 	}).SetupWithManager(mgr), "setup llmloraadapter controller")
 
 	mustf((&controller.EmbeddingInferenceServiceReconciler{

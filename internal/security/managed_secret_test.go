@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -24,7 +24,7 @@ import (
 
 type mockESClient struct {
 	client.Client
-	scheme *runtime.Scheme
+	scheme  *runtime.Scheme
 	objects map[string]client.Object
 }
 
@@ -93,7 +93,7 @@ func TestManagedSecret_LatentSyncResilience(t *testing.T) {
 		scheme:  scheme,
 		objects: make(map[string]client.Object),
 	}
-	
+
 	r := &ExternalSecretReconciler{
 		Client: mcl,
 		Scheme: scheme,
@@ -106,7 +106,7 @@ func TestManagedSecret_LatentSyncResilience(t *testing.T) {
 	// 2. Verify ExternalSecret was created
 	es := &unstructured.Unstructured{}
 	es.SetGroupVersionKind(ExternalSecretGVK)
-	require.NoError(t, mcl.Get(context.Background(), 
+	require.NoError(t, mcl.Get(context.Background(),
 		client.ObjectKey{Name: svc.Name, Namespace: svc.Namespace}, es))
 
 	// 3. Verify target secret name
@@ -116,7 +116,7 @@ func TestManagedSecret_LatentSyncResilience(t *testing.T) {
 	targetMap, ok := specMap["target"].(map[string]interface{})
 	require.True(t, ok, "target should be a map")
 	assert.Equal(t, targetSecretName, targetMap["name"])
-	
+
 	// 4. Simulate the secret appearing
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -129,7 +129,7 @@ func TestManagedSecret_LatentSyncResilience(t *testing.T) {
 
 	// 5. Verify that fetching the secret now succeeds
 	var found corev1.Secret
-	require.NoError(t, mcl.Get(context.Background(), 
+	require.NoError(t, mcl.Get(context.Background(),
 		client.ObjectKey{Name: targetSecretName, Namespace: svc.Namespace}, &found))
 	assert.Equal(t, []byte("ready"), found.Data["token"])
 }
@@ -156,11 +156,11 @@ func TestManagedSecret_UpdateIdempotency(t *testing.T) {
 
 	// 1. Initial creation
 	require.NoError(t, r.ReconcileExternalSecret(context.Background(), svc))
-	
+
 	es := &unstructured.Unstructured{}
 	es.SetGroupVersionKind(ExternalSecretGVK)
 	require.NoError(t, mcl.Get(context.Background(), client.ObjectKey{Name: svc.Name, Namespace: svc.Namespace}, es))
-	
+
 	oldSpec := es.Object["spec"].(map[string]interface{})
 	assert.Equal(t, "old-store", oldSpec["secretStoreRef"].(map[string]interface{})["name"])
 
@@ -195,7 +195,7 @@ func TestManagedSecret_GVKAbsenceResilience(t *testing.T) {
 	// This should NOT return an error, but skip (professionally non-blocking)
 	err := r.ReconcileExternalSecret(context.Background(), svc)
 	assert.NoError(t, err, "GVK absence must not cause reconciliation error")
-	
+
 	// Verify nothing was created
 	assert.Empty(t, mcl.objects, "No objects should be created when GVK is missing")
 }

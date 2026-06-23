@@ -9,9 +9,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"github.com/google/uuid"
 	"sort"
 	"time"
+
+	"github.com/google/uuid"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -274,7 +275,6 @@ func (r *LocalModelCacheReconciler) reconcileNodeCache(
 	modelHash string,
 	now metav1.Time,
 ) (servingv1alpha2.NodeCacheStatus, error) {
-
 	pvcName := PVCNameForNode(modelHash, nodeName)
 	targetNamespace := lmc.Namespace
 	if targetNamespace == "" {
@@ -617,7 +617,6 @@ func (r *LocalModelCacheReconciler) buildCachedModelsStatus(
 	lmc *servingv1alpha2.LocalModelCache,
 	nodeStatuses []servingv1alpha2.NodeCacheStatus,
 ) ([]servingv1alpha2.CachedModelStatus, resource.Quantity) {
-
 	total := resource.Quantity{}
 	nodeNames := []string{}
 	var latestUsed *metav1.Time

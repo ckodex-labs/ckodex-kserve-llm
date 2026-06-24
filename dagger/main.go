@@ -76,8 +76,7 @@ func (m *CkodexOperator) Test(
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
-	return goBase(source).
-		WithExec(coverageTestArgs()).
+	return testBase(source, raceCoverageTestArgs()).
 		WithExec([]string{"sh", "-c", coverageGateScript()}).
 		Stdout(ctx)
 }
@@ -109,11 +108,14 @@ check observability %d
 func coverageTestArgs() []string {
 	return []string{
 		"go", "test",
-		"-race",
 		"-coverprofile=coverage.out",
 		"-covermode=atomic",
 		"./...",
 	}
+}
+
+func raceCoverageTestArgs() []string {
+	return append([]string{"go", "test", "-race"}, coverageTestArgs()[2:]...)
 }
 
 // Coverage runs tests and exports the coverage profile file.
@@ -124,8 +126,7 @@ func (m *CkodexOperator) Coverage(
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) *dagger.File {
-	return goBase(source).
-		WithExec(coverageTestArgs()).
+	return testBase(source, coverageTestArgs()).
 		File("coverage.out")
 }
 
@@ -311,7 +312,9 @@ func (m *CkodexOperator) All(
 
 	g, groupCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		if _, err := m.Test(groupCtx, source); err != nil {
+		if _, err := testBase(source, coverageTestArgs()).
+			WithExec([]string{"sh", "-c", coverageGateScript()}).
+			Stdout(groupCtx); err != nil {
 			return fmt.Errorf("test: %w", err)
 		}
 		return nil
@@ -352,6 +355,10 @@ func goModBase(source *dagger.Directory) *dagger.Container {
 func goBase(source *dagger.Directory) *dagger.Container {
 	return goModBase(source).
 		WithMountedDirectory("/src", filteredSource(source))
+}
+
+func testBase(source *dagger.Directory, args []string) *dagger.Container {
+	return goBase(source).WithExec(args)
 }
 
 // golangciBase mirrors goBase for the golangci-lint image so dependency

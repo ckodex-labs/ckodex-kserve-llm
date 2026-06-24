@@ -62,7 +62,7 @@ jobs:
           npm ci
           npm run build
 
-      - name: Run CI Pipeline (lint + test + build)
+      - name: Run CI Pipeline (lint + build)
         uses: dagger/dagger-for-github@v8.4.0
         timeout-minutes: 5
         with:

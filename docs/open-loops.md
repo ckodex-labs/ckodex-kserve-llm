@@ -15,7 +15,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Status:** done
 - **Priority:** P2
 - **Context:** Both workflows migrated (2026-06-14):
-  - `ci.yml`: replaced `go run ./ci/main.go` with `dagger develop` + `dagger call all --source=.` + `dagger call scan --source=.` + `dagger call coverage --source=. export --path=coverage.out`.
+  - `ci.yml`: replaced `go run ./ci/main.go` with Dagger hosted fast gate (`dagger call all --source=.`), vulnerability scan, and coverage export.
   - `release.yml` `image-release` job: replaced `go run ./ci/main.go --skip-lint --skip-tests --image ... --push --sign` with `dagger call publish` + `cosign sign` (OIDC) + `dagger call sbom`.
   All `${{ }}` expressions routed through `env:` blocks per GHA injection-safety policy.
 - **Reference:** ADR-008, `.github/workflows/ci.yml`, `.github/workflows/release.yml`

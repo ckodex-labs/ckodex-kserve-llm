@@ -310,7 +310,7 @@ lula validate -f lula/lula-component.yaml -o assessment-results.yaml`,
 		File("assessment-results.yaml")
 }
 
-// All runs the fast operational gate in bounded parallel branches.
+// All runs the hosted fast operational gate in bounded parallel branches.
 //
 // Usage: dagger call all --source=.
 func (m *CkodexOperator) All(
@@ -323,12 +323,6 @@ func (m *CkodexOperator) All(
 	g.Go(func() error {
 		if _, err := m.Lint(groupCtx, source); err != nil {
 			return fmt.Errorf("lint: %w", err)
-		}
-		return nil
-	})
-	g.Go(func() error {
-		if _, err := testBase(source, testArgs()).Stdout(groupCtx); err != nil {
-			return fmt.Errorf("test: %w", err)
 		}
 		return nil
 	})

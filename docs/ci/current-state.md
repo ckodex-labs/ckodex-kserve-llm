@@ -98,7 +98,7 @@ Implemented in `dagger/main.go`. Requires `dagger develop` for first-time setup.
 | `sbom` | `dagger call sbom --source=. --image-ref=<ref> export --path=sbom.cdx.json` | File |
 | `lula` | `dagger call lula --source=. export --path=assessment-results.yaml` | File |
 | `publish` | `dagger call publish --source=. --image-ref=... --version=... --registry-username=... --registry-token=env:GITHUB_TOKEN` | string (digest) |
-| `all` | `dagger call all --source=.` | string (fast lint + short test + build pass/fail) |
+| `all` | `dagger call all --source=.` | string (hosted fast lint + build-check pass/fail) |
 
 ---
 

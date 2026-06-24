@@ -72,14 +72,12 @@ jobs:
       - name: Generate Dagger SDK
         shell: bash
         env:
-          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           DAGGER_NO_NAG: "1"
         run: dagger develop
 
       - name: Run CI Pipeline (lint + test + build)
         shell: bash
         env:
-          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           DAGGER_NO_NAG: "1"
         run: |
           df -h
@@ -95,7 +93,6 @@ jobs:
       - name: Run vulnerability scan
         shell: bash
         env:
-          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           DAGGER_NO_NAG: "1"
         run: dagger --progress=plain call scan --source=.
 
@@ -103,7 +100,6 @@ jobs:
         shell: bash
         if: success()
         env:
-          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           DAGGER_NO_NAG: "1"
         run: dagger --progress=plain call coverage --source=. export --path=coverage.out
 

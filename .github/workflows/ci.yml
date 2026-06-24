@@ -71,7 +71,15 @@ jobs:
 
       - name: Generate Dagger SDK
         shell: bash
-        run: dagger develop
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          DAGGER_NO_NAG: "1"
+        run: |
+          dagger_flags=()
+          if [[ -n "${DAGGER_CLOUD_TOKEN:-}" ]]; then
+            dagger_flags+=(--cloud)
+          fi
+          dagger "${dagger_flags[@]}" develop
 
       - name: Run CI Pipeline (lint + test + scan)
         shell: bash
@@ -79,10 +87,14 @@ jobs:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           DAGGER_NO_NAG: "1"
         run: |
+          dagger_flags=()
+          if [[ -n "${DAGGER_CLOUD_TOKEN:-}" ]]; then
+            dagger_flags+=(--cloud)
+          fi
           df -h
           docker system df || true
           set +e
-          dagger --progress=plain call all --source=. 2>&1 | tee dagger-all.log
+          dagger "${dagger_flags[@]}" --progress=plain call all --source=. 2>&1 | tee dagger-all.log
           status=${PIPESTATUS[0]}
           set -e
           df -h
@@ -95,7 +107,12 @@ jobs:
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
           DAGGER_NO_NAG: "1"
-        run: dagger --progress=plain call coverage --source=. export --path=coverage.out
+        run: |
+          dagger_flags=()
+          if [[ -n "${DAGGER_CLOUD_TOKEN:-}" ]]; then
+            dagger_flags+=(--cloud)
+          fi
+          dagger "${dagger_flags[@]}" --progress=plain call coverage --source=. export --path=coverage.out
 
       - name: Rehearse release artifacts
         run: make release-readiness

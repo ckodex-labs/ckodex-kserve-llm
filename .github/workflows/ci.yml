@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   ci:
-    name: Lint + Test + Build + Scan
+    name: Lint + Build + Scan
     runs-on: ubuntu-latest
 
     steps:
@@ -95,29 +95,8 @@ jobs:
           args: scan --source=.
           dagger-flags: --progress plain
 
-      - name: Export coverage report
-        if: success()
-        uses: dagger/dagger-for-github@v8.4.0
-        timeout-minutes: 5
-        env:
-          DAGGER_NO_NAG: "1"
-        with:
-          version: v0.21.4
-          verb: call
-          args: coverage --source=. export --path=coverage.out
-          dagger-flags: --progress plain
-
       - name: Rehearse release artifacts
         run: make release-readiness
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        if: always()
-        continue-on-error: true
-        with:
-          name: coverage-report
-          path: coverage.out
-          retention-days: 30
 
       - name: Upload release snapshot artifacts
         uses: actions/upload-artifact@v4

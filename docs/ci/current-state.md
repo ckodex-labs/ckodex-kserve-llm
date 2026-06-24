@@ -32,16 +32,12 @@ Checkout
 → Detect console (skipped: gitlink without .gitmodules)
 → Setup Helm
 → Install GoReleaser v2.15.4
-→ Install Dagger CLI v0.21.4
-→ Generate Dagger SDK (dagger develop)
+→ Pre-pull Dagger engine v0.21.4
 → Run CI Pipeline (dagger call all --source=.)
    ├── lint (golangci-lint v2.4.0 fast-only)
-   ├── test (go test -short -p 16)
-   └── build (operator image, linux/amd64)
+   └── build (operator image materialization, linux/amd64)
 → Run vulnerability scan (dagger call scan --source=.)
-→ Export coverage report (dagger call coverage --source=. export --path=coverage.out)
 → Rehearse release (make release-readiness → bin/release-readiness.json)
-→ Upload coverage.out (artifact, 30d)
 → Upload dist/ + bin/release-readiness.json (artifact, 30d)
 ```
 

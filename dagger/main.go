@@ -188,7 +188,7 @@ func (m *CkodexOperator) BuildCheck(
 	// +optional
 	version string,
 ) (string, error) {
-	if _, err := m.Build(source, version).Sync(ctx); err != nil {
+	if _, err := buildCheck(source, resolveVersion(version)).Sync(ctx); err != nil {
 		return "", err
 	}
 	return "build passed", nil
@@ -411,6 +411,28 @@ func filteredSource(source *dagger.Directory) *dagger.Directory {
 		Exclude:   sourceExcludes,
 		Gitignore: true,
 	})
+}
+
+// buildCheck compiles the manager binary without release-image assembly. The
+// full static/distroless path remains covered by Build, Scan, and Publish.
+func buildCheck(source *dagger.Directory, version string) *dagger.Container {
+	ldflags := fmt.Sprintf(
+		"-X github.com/ckodex-labs/kserve-llm-operator/internal/version.Version=%s",
+		version,
+	)
+	return goBase(source).
+		WithExec([]string{"mkdir", "-p", "/root/.cache/go-build/tmp", "/tmp/ckodex-build"}).
+		WithEnvVariable("CGO_ENABLED", "0").
+		WithEnvVariable("GOOS", "linux").
+		WithEnvVariable("GOARCH", "amd64").
+		WithEnvVariable("GOTMPDIR", "/root/.cache/go-build/tmp").
+		WithExec([]string{
+			"go", "build",
+			"-trimpath",
+			"-ldflags", ldflags,
+			"-o", "/tmp/ckodex-build/manager",
+			"./cmd/manager",
+		})
 }
 
 // buildVariant builds the operator binary and wraps it in a distroless container

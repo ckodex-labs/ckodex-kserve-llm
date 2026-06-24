@@ -33,10 +33,10 @@ Checkout
 → Setup Helm
 → Install GoReleaser v2.15.4
 → Pre-pull Dagger engine v0.21.4
-→ Run CI Pipeline (dagger call all --source=.)
+→ Run CI Pipeline (dagger call all --source=. ; lint + non-release compile check)
    ├── lint (golangci-lint v2.4.0 fast-only)
-   └── build (operator image materialization, linux/amd64)
-→ Run vulnerability scan (dagger call scan --source=.)
+   └── build-check (operator compile check, linux/amd64)
+→ Run vulnerability scan (dagger call scan --source=. ; full image rootfs + Trivy)
 → Rehearse release (make release-readiness → bin/release-readiness.json)
 → Upload dist/ + bin/release-readiness.json (artifact, 30d)
 ```

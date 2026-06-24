@@ -73,7 +73,7 @@ jobs:
           done
           exit 1
 
-      - name: Run CI Pipeline (lint + build)
+      - name: Run CI Pipeline (lint + compile)
         uses: dagger/dagger-for-github@v8.4.0
         timeout-minutes: 5
         env:

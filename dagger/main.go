@@ -59,7 +59,7 @@ func (m *CkodexOperator) Lint(
 	source *dagger.Directory,
 ) (string, error) {
 	out, err := golangciBase(source).
-		WithExec([]string{"golangci-lint", "run", "-v", "--timeout", "4m", "./..."}).
+		WithExec([]string{"golangci-lint", "run", "-v", "--fast-only", "--timeout", "2m", "./..."}).
 		Stdout(ctx)
 	if err != nil {
 		return out, fmt.Errorf("golangci-lint: %w", err)

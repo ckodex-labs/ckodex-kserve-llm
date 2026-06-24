@@ -35,9 +35,10 @@ Checkout
 → Install Dagger CLI v0.21.4
 → Generate Dagger SDK (dagger develop)
 → Run CI Pipeline (dagger call all --source=.)
-   ├── lint (go vet + golangci-lint v2.4.0)
-   ├── test (go test -race, coverage gate)
-   └── scan (Trivy 0.69.3 — CRITICAL/HIGH, exit-code 1)
+   ├── lint (golangci-lint v2.4.0 fast-only)
+   ├── test (go test -short -p 16)
+   └── build (operator image, linux/amd64)
+→ Run vulnerability scan (dagger call scan --source=.)
 → Export coverage report (dagger call coverage --source=. export --path=coverage.out)
 → Rehearse release (make release-readiness → bin/release-readiness.json)
 → Upload coverage.out (artifact, 30d)
@@ -97,7 +98,7 @@ Implemented in `dagger/main.go`. Requires `dagger develop` for first-time setup.
 | `sbom` | `dagger call sbom --source=. --image-ref=<ref> export --path=sbom.cdx.json` | File |
 | `lula` | `dagger call lula --source=. export --path=assessment-results.yaml` | File |
 | `publish` | `dagger call publish --source=. --image-ref=... --version=... --registry-username=... --registry-token=env:GITHUB_TOKEN` | string (digest) |
-| `all` | `dagger call all --source=.` | string (lint + test + scan pass/fail) |
+| `all` | `dagger call all --source=.` | string (fast lint + short test + build pass/fail) |
 
 ---
 

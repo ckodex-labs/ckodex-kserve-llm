@@ -87,21 +87,43 @@ func coverageGateScript() string {
 	return fmt.Sprintf(`
 set -e
 if [ ! -f coverage.out ]; then echo "FAIL: coverage.out not found" >&2; exit 1; fi
-check() {
-  pkg=$1; min=$2
-  pct=$(go tool cover -func=coverage.out | grep "internal/${pkg}/" | awk \
-    '{ sum += $NF; count++ } END { if (count > 0) print int(sum/count); else print 0 }')
-  echo "Coverage internal/${pkg}: ${pct}%% (min: ${min}%%)"
-  if [ "$pct" -lt "$min" ]; then
-    echo "FAIL: internal/${pkg} coverage ${pct}%% < ${min}%% threshold" >&2; exit 1
-  fi
+go tool cover -func=coverage.out > coverage.func
+awk '
+BEGIN {
+  order = "controller gateway storage auth inference observability"
+  split(order, pkgs, " ")
+  min["controller"] = %d
+  min["gateway"] = %d
+  min["storage"] = %d
+  min["auth"] = %d
+  min["inference"] = %d
+  min["observability"] = %d
 }
-check controller %d
-check gateway %d
-check storage %d
-check auth %d
-check inference %d
-check observability %d
+{
+  for (i = 1; i <= length(pkgs); i++) {
+    pkg = pkgs[i]
+    if ($1 ~ "internal/" pkg "/") {
+      pct = $NF
+      sub("%%", "", pct)
+      sum[pkg] += pct
+      count[pkg]++
+    }
+  }
+}
+END {
+  failed = 0
+  for (i = 1; i <= length(pkgs); i++) {
+    pkg = pkgs[i]
+    pct = count[pkg] > 0 ? int(sum[pkg] / count[pkg]) : 0
+    printf("Coverage internal/%%s: %%d%%%% (min: %%d%%%%)\n", pkg, pct, min[pkg])
+    if (pct < min[pkg]) {
+      printf("FAIL: internal/%%s coverage %%d%%%% < %%d%%%% threshold\n", pkg, pct, min[pkg]) > "/dev/stderr"
+      failed = 1
+    }
+  }
+  exit failed
+}
+' coverage.func
 `, coverageController, coverageGateway, coverageStorage, coverageAuth, coverageInference, coverageObs)
 }
 
@@ -115,7 +137,18 @@ func coverageTestArgs() []string {
 }
 
 func raceCoverageTestArgs() []string {
-	return append([]string{"go", "test", "-race"}, coverageTestArgs()[2:]...)
+	return []string{
+		"go", "test",
+		"-race",
+		"-p", "16",
+		"-coverprofile=coverage.out",
+		"-covermode=atomic",
+		"./...",
+	}
+}
+
+func testArgs() []string {
+	return []string{"go", "test", "-short", "-p", "16", "./..."}
 }
 
 // Coverage runs tests and exports the coverage profile file.
@@ -170,19 +203,7 @@ func (m *CkodexOperator) Scan(
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
-	rootfs := m.Build(source, "").Rootfs()
-	return trivyBase().
-		WithMountedDirectory("/rootfs", rootfs).
-		WithExec([]string{
-			"trivy", "rootfs",
-			"--severity", "CRITICAL,HIGH",
-			"--scanners", "vuln",
-			"--exit-code", "1",
-			"--ignore-unfixed",
-			"--format", "table",
-			"/rootfs",
-		}).
-		Stdout(ctx)
+	return scanRootfs(m.Build(source, "").Rootfs()).Stdout(ctx)
 }
 
 // Sbom generates a CycloneDX SBOM for a given image reference.
@@ -289,8 +310,7 @@ lula validate -f lula/lula-component.yaml -o assessment-results.yaml`,
 		File("assessment-results.yaml")
 }
 
-// All warms shared caches, runs independent checks in bounded parallel phases,
-// then scans the cached image rootfs after the compile-heavy window closes.
+// All runs the fast operational gate in bounded parallel branches.
 //
 // Usage: dagger call all --source=.
 func (m *CkodexOperator) All(
@@ -299,22 +319,15 @@ func (m *CkodexOperator) All(
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
-	if _, err := goBase(source).Sync(ctx); err != nil {
-		return "", fmt.Errorf("warm go base: %w", err)
-	}
-	if _, err := golangciBase(source).Sync(ctx); err != nil {
-		return "", fmt.Errorf("warm golangci base: %w", err)
-	}
-
-	if _, err := m.Lint(ctx, source); err != nil {
-		return "", fmt.Errorf("lint: %w", err)
-	}
-
 	g, groupCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		if _, err := testBase(source, coverageTestArgs()).
-			WithExec([]string{"sh", "-c", coverageGateScript()}).
-			Stdout(groupCtx); err != nil {
+		if _, err := m.Lint(groupCtx, source); err != nil {
+			return fmt.Errorf("lint: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		if _, err := testBase(source, testArgs()).Stdout(groupCtx); err != nil {
 			return fmt.Errorf("test: %w", err)
 		}
 		return nil
@@ -327,9 +340,6 @@ func (m *CkodexOperator) All(
 	})
 	if err := g.Wait(); err != nil {
 		return "", err
-	}
-	if _, err := m.Scan(ctx, source); err != nil {
-		return "", fmt.Errorf("scan: %w", err)
 	}
 	return "all checks passed", nil
 }
@@ -382,10 +392,24 @@ func golangciBase(source *dagger.Directory) *dagger.Container {
 }
 
 func trivyBase() *dagger.Container {
-	return dag.Container().
+	return dag.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).
 		From(fmt.Sprintf("aquasec/trivy:%s", trivyVersion)).
 		WithMountedCache("/root/.cache/trivy", dag.CacheVolume("trivy-db")).
 		WithEnvVariable("TRIVY_CACHE_DIR", "/root/.cache/trivy")
+}
+
+func scanRootfs(rootfs *dagger.Directory) *dagger.Container {
+	return trivyBase().
+		WithMountedDirectory("/rootfs", rootfs).
+		WithExec([]string{
+			"trivy", "rootfs",
+			"--severity", "CRITICAL,HIGH",
+			"--scanners", "vuln",
+			"--exit-code", "1",
+			"--ignore-unfixed",
+			"--format", "table",
+			"/rootfs",
+		})
 }
 
 func filteredSource(source *dagger.Directory) *dagger.Directory {

@@ -1672,8 +1672,11 @@ func TestSeaweedFSClient_Exists_RequestError(t *testing.T) {
 // where InjectVaultSecrets proceeds past the empty-path guard and creates a
 // VaultClient, then attempts to fetch a secret from an unreachable Vault.
 func TestInjectVaultSecrets_NonEmptyPath_AttemptsFetch(t *testing.T) {
-	t.Setenv("VAULT_ADDR", "http://127.0.0.1:19995") // unreachable
+	srv := buildVaultServer(t, http.StatusForbidden, `{"errors":["forbidden"]}`)
+	defer srv.Close()
+
+	t.Setenv("VAULT_ADDR", srv.URL)
+	t.Setenv("VAULT_TOKEN", "test-vault-token")
 	err := InjectVaultSecrets(context.Background(), "secret/myapp")
-	// Expects either a connection error or a nil-data error from FetchSecret.
 	require.Error(t, err)
 }

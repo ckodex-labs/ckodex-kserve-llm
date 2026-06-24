@@ -81,7 +81,7 @@ jobs:
           fi
           dagger "${dagger_flags[@]}" develop
 
-      - name: Run CI Pipeline (lint + test + scan)
+      - name: Run CI Pipeline (lint + test + build)
         shell: bash
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
@@ -100,6 +100,18 @@ jobs:
           df -h
           docker system df || true
           exit "$status"
+
+      - name: Run vulnerability scan
+        shell: bash
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          DAGGER_NO_NAG: "1"
+        run: |
+          dagger_flags=()
+          if [[ -n "${DAGGER_CLOUD_TOKEN:-}" ]]; then
+            dagger_flags+=(--cloud)
+          fi
+          dagger "${dagger_flags[@]}" --progress=plain call scan --source=.
 
       - name: Export coverage report
         shell: bash

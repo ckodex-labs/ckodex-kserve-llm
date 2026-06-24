@@ -26,11 +26,11 @@ import (
 // ============================================================================
 
 // TestGitLabClient_PullRecursive_APIError exercises the error branch when
-// GetFile returns a non-404 error (e.g. 500 from the server).
+// GetFile returns a non-404 client error.
 func TestGitLabClient_PullRecursive_APIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"message":"internal server error"}`))
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"message":"bad request"}`))
 	}))
 	defer srv.Close()
 

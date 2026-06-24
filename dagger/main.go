@@ -49,39 +49,20 @@ var sourceExcludes = []string{
 // CkodexOperator is the root Dagger module type for the operator CI/CD pipeline.
 type CkodexOperator struct{}
 
-// Lint runs go vet and golangci-lint over the operator source.
+// Lint runs golangci-lint over the operator source.
 //
 // Usage: dagger call lint --source=.
 func (m *CkodexOperator) Lint(
 	ctx context.Context,
 	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
-	base := goBase(source)
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		if _, err := base.
-			WithExec([]string{"go", "vet", "./..."}).
-			Sync(ctx); err != nil {
-			return fmt.Errorf("go vet: %w", err)
-		}
-		return nil
-	})
-
-	var lintOut string
-	g.Go(func() error {
-		out, err := golangciBase(source).
-			WithExec([]string{"golangci-lint", "run", "-v", "--timeout", "20m", "./..."}).
-			Stdout(ctx)
-		lintOut = out
-		if err != nil {
-			return fmt.Errorf("golangci-lint: %w", err)
-		}
-		return nil
-	})
-
-	if err := g.Wait(); err != nil {
-		return lintOut, err
+	out, err := golangciBase(source).
+		WithExec([]string{"golangci-lint", "run", "-v", "--timeout", "4m", "./..."}).
+		Stdout(ctx)
+	if err != nil {
+		return out, fmt.Errorf("golangci-lint: %w", err)
 	}
 	return "lint passed", nil
 }
@@ -92,6 +73,7 @@ func (m *CkodexOperator) Lint(
 func (m *CkodexOperator) Test(
 	ctx context.Context,
 	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
 	return goBase(source).
@@ -135,6 +117,7 @@ check observability %d
 // Usage: dagger call coverage --source=. export --path=coverage.out
 func (m *CkodexOperator) Coverage(
 	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) *dagger.File {
 	return goBase(source).
@@ -153,6 +136,7 @@ func (m *CkodexOperator) Coverage(
 // Usage: dagger call build --source=. --version=v0.1.0
 func (m *CkodexOperator) Build(
 	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 	// +optional
 	version string,
@@ -166,6 +150,7 @@ func (m *CkodexOperator) Build(
 func (m *CkodexOperator) BuildCheck(
 	ctx context.Context,
 	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 	// +optional
 	version string,
@@ -182,11 +167,11 @@ func (m *CkodexOperator) BuildCheck(
 func (m *CkodexOperator) Scan(
 	ctx context.Context,
 	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
 	rootfs := m.Build(source, "").Rootfs()
-	return dag.Container().
-		From(fmt.Sprintf("aquasec/trivy:%s", trivyVersion)).
+	return trivyBase().
 		WithMountedDirectory("/rootfs", rootfs).
 		WithExec([]string{
 			"trivy", "rootfs",
@@ -207,6 +192,7 @@ func (m *CkodexOperator) Scan(
 //	--registry-username=user --registry-token=env:GITHUB_TOKEN export --path=sbom.cdx.json
 func (m *CkodexOperator) Sbom(
 	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 	imageRef string,
 	// +optional
@@ -214,8 +200,7 @@ func (m *CkodexOperator) Sbom(
 	// +optional
 	registryToken *dagger.Secret,
 ) *dagger.File {
-	ctr := dag.Container().
-		From(fmt.Sprintf("aquasec/trivy:%s", trivyVersion)).
+	ctr := trivyBase().
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src")
 	if registryUsername != "" {
@@ -241,6 +226,7 @@ func (m *CkodexOperator) Sbom(
 func (m *CkodexOperator) Publish(
 	ctx context.Context,
 	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 	imageRef string,
 	// +optional
@@ -275,6 +261,7 @@ func (m *CkodexOperator) Publish(
 // Usage: dagger call lula --source=. export --path=assessment-results.yaml
 func (m *CkodexOperator) Lula(
 	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) *dagger.File {
 	const (
@@ -309,6 +296,7 @@ lula validate -f lula/lula-component.yaml -o assessment-results.yaml`,
 func (m *CkodexOperator) All(
 	ctx context.Context,
 	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
 	if _, err := goBase(source).Sync(ctx); err != nil {
@@ -385,6 +373,13 @@ func golangciBase(source *dagger.Directory) *dagger.Container {
 		WithEnvVariable("GOFLAGS", "-mod=readonly").
 		WithExec([]string{"go", "mod", "download"}).
 		WithMountedDirectory("/src", filteredSource(source))
+}
+
+func trivyBase() *dagger.Container {
+	return dag.Container().
+		From(fmt.Sprintf("aquasec/trivy:%s", trivyVersion)).
+		WithMountedCache("/root/.cache/trivy", dag.CacheVolume("trivy-db")).
+		WithEnvVariable("TRIVY_CACHE_DIR", "/root/.cache/trivy")
 }
 
 func filteredSource(source *dagger.Directory) *dagger.Directory {

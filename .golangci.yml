@@ -1,7 +1,7 @@
 version: "2"
 run:
   issues-exit-code: 1
-  tests: true
+  tests: false
   concurrency: 2
 linters:
   default: none

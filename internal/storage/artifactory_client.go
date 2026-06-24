@@ -101,9 +101,3 @@ func (c *ArtifactoryClient) Pull(ctx context.Context, uri string, destPath strin
 	_, _, err := manager.DownloadFiles(params)
 	return err
 }
-
-// Dummy implementation to satisfy interface if not initialized with credentials
-func (c *ArtifactoryClient) downloadFile(ctx context.Context, url, destFile string) error {
-	// fallback logic if needed
-	return nil
-}

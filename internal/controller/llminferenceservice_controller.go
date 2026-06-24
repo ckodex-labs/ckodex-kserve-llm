@@ -438,18 +438,6 @@ func (r *LLMInferenceServiceReconciler) cleanupResources(ctx context.Context, ll
 	return nil
 }
 
-// buildDeployment is a wrapper for tests.
-func (r *LLMInferenceServiceReconciler) buildDeployment(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32) *appsv1.Deployment {
-	hwType := r.HardwareCache.Get(ctx, r.Client, r.APIReader)
-	return r.DeploymentBuilder.Build(ctx, llmSvc, replicas, hwType, nil)
-}
-
-// buildStorageInitializer is a wrapper for tests.
-func (r *LLMInferenceServiceReconciler) buildStorageInitializer(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, lmc *servingv1alpha2.LocalModelCache) *corev1.Container {
-	hwType := r.HardwareCache.Get(ctx, r.Client, r.APIReader)
-	return r.DeploymentBuilder.BuildStorageInitializer(ctx, llmSvc, hwType, lmc)
-}
-
 func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.APIReader = mgr.GetAPIReader()
 	r.DeploymentBuilder = &deployment.Builder{

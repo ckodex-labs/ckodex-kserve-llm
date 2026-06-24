@@ -91,10 +91,11 @@ jobs:
 
       - name: Export coverage report
         shell: bash
-        if: always()
+        if: success()
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
-        run: dagger call coverage --source=. export --path=coverage.out
+          DAGGER_NO_NAG: "1"
+        run: dagger --progress=plain call coverage --source=. export --path=coverage.out
 
       - name: Rehearse release artifacts
         run: make release-readiness

@@ -77,13 +77,7 @@ func (m *CkodexOperator) Test(
 	source *dagger.Directory,
 ) (string, error) {
 	return goBase(source).
-		WithExec([]string{
-			"go", "test",
-			"-race",
-			"-coverprofile=coverage.out",
-			"-covermode=atomic",
-			"./...",
-		}).
+		WithExec(coverageTestArgs()).
 		WithExec([]string{"sh", "-c", coverageGateScript()}).
 		Stdout(ctx)
 }
@@ -112,6 +106,16 @@ check observability %d
 `, coverageController, coverageGateway, coverageStorage, coverageAuth, coverageInference, coverageObs)
 }
 
+func coverageTestArgs() []string {
+	return []string{
+		"go", "test",
+		"-race",
+		"-coverprofile=coverage.out",
+		"-covermode=atomic",
+		"./...",
+	}
+}
+
 // Coverage runs tests and exports the coverage profile file.
 //
 // Usage: dagger call coverage --source=. export --path=coverage.out
@@ -121,12 +125,7 @@ func (m *CkodexOperator) Coverage(
 	source *dagger.Directory,
 ) *dagger.File {
 	return goBase(source).
-		WithExec([]string{
-			"go", "test",
-			"-coverprofile=coverage.out",
-			"-covermode=atomic",
-			"./...",
-		}).
+		WithExec(coverageTestArgs()).
 		File("coverage.out")
 }
 

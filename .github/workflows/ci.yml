@@ -62,9 +62,22 @@ jobs:
           npm ci
           npm run build
 
+      - name: Pre-pull Dagger engine
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 60s docker pull registry.dagger.io/engine:v0.21.4; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          exit 1
+
       - name: Run CI Pipeline (lint + build)
         uses: dagger/dagger-for-github@v8.4.0
         timeout-minutes: 5
+        env:
+          DAGGER_NO_NAG: "1"
         with:
           version: v0.21.4
           verb: call
@@ -74,6 +87,8 @@ jobs:
       - name: Run vulnerability scan
         uses: dagger/dagger-for-github@v8.4.0
         timeout-minutes: 5
+        env:
+          DAGGER_NO_NAG: "1"
         with:
           version: v0.21.4
           verb: call
@@ -84,6 +99,8 @@ jobs:
         if: success()
         uses: dagger/dagger-for-github@v8.4.0
         timeout-minutes: 5
+        env:
+          DAGGER_NO_NAG: "1"
         with:
           version: v0.21.4
           verb: call

@@ -96,6 +96,11 @@ Implemented in `dagger/main.go`. Requires `dagger develop` for first-time setup.
 | `publish` | `dagger call publish --source=. --image-ref=... --version=... --registry-username=... --registry-token=env:GITHUB_TOKEN` | string (digest) |
 | `all` | `dagger call all --source=.` | string (hosted fast lint + build-check pass/fail) |
 
+`lula` always lints the linked validation definitions and runs offline positive
+and negative IA-9 fixtures. Its exported OSCAL assessment evaluates the live
+cluster when Kubernetes credentials are available; without them, controls are
+reported as `not-satisfied`.
+
 ---
 
 ## Coverage Thresholds

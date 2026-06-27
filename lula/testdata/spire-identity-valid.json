@@ -1,0 +1,33 @@
+{
+  "llmServices": [
+    {
+      "apiVersion": "serving.ckodex.com/v1alpha2",
+      "kind": "LLMInferenceService",
+      "metadata": {
+        "name": "llama3",
+        "namespace": "inference"
+      }
+    }
+  ],
+  "spireEntries": [
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "ckodex-spire-entry-inference-llama3",
+        "namespace": "spire",
+        "labels": {
+          "spire.ckodex.com/registration-entry": "true"
+        },
+        "annotations": {
+          "ckodex.com/source-namespace": "inference",
+          "ckodex.com/source-service": "llama3",
+          "ckodex.com/spiffe-id": "spiffe://ckodex.com/ns/inference/sa/llama3/model/llama3"
+        }
+      },
+      "data": {
+        "entry.json": "{\"spiffeId\":\"spiffe://ckodex.com/ns/inference/sa/llama3/model/llama3\",\"selectors\":[\"k8s:ns:inference\",\"k8s:sa:llama3\"],\"ttl\":3600,\"dnsSans\":[\"llama3.inference.svc.cluster.local\"]}"
+      }
+    }
+  ]
+}

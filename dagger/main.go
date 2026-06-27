@@ -274,10 +274,11 @@ func (m *CkodexOperator) Publish(
 	return digest, nil
 }
 
-// Lula runs OSCAL compliance validation and returns the assessment results file.
+// Lula verifies the linked validation definitions, runs offline IA-9 policy
+// checks, then evaluates the OSCAL component against the available cluster.
 //
-// Mirrors ci/pkg/security.Lula. Downloads the Lula binary, verifies its checksum,
-// and validates controls defined in lula/lula-component.yaml.
+// Downloads the Lula binary, verifies its checksum, and validates controls
+// defined in lula/lula-component.yaml.
 //
 // Usage: dagger call lula --source=. export --path=assessment-results.yaml
 func (m *CkodexOperator) Lula(
@@ -292,21 +293,36 @@ func (m *CkodexOperator) Lula(
 		lulaBinaryURL  = lulaBase + "/" + lulaBinaryName
 		lulaChecksums  = lulaBase + "/checksums.txt"
 	)
-	cmd := fmt.Sprintf(`set -eu
+	installCmd := fmt.Sprintf(`set -eu
 apk add --no-cache curl ca-certificates coreutils >/dev/null
 curl -fsSL -o /tmp/lula %q
 curl -fsSL -o /tmp/checksums.txt %q
 expected="$(grep "  %s$" /tmp/checksums.txt | awk '{print $1}')"
 echo "${expected}  /tmp/lula" | sha256sum -c -
-install -m 0755 /tmp/lula /usr/local/bin/lula
-lula validate -f lula/lula-component.yaml -o assessment-results.yaml`,
+install -m 0755 /tmp/lula /usr/local/bin/lula`,
 		lulaBinaryURL, lulaChecksums, lulaBinaryName)
+	validateCmd := `set -eu
+for validation in \
+  lula/network-policy-validation.yaml \
+  lula/governance-validation.yaml \
+  lula/supply-chain-validation.yaml \
+  lula/ois-validation.yaml \
+  lula/spire-identity-validation.yaml
+do
+  lula dev lint -f "${validation}"
+done
+lula dev validate -f lula/spire-identity-validation.yaml \
+  -r lula/testdata/spire-identity-valid.json
+lula dev validate -f lula/spire-identity-validation.yaml \
+  -r lula/testdata/spire-identity-missing-registration.json -e=false
+lula validate -f lula/lula-component.yaml -o assessment-results.yaml`
 
 	return dag.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).
 		From("alpine:3.20").
+		WithExec([]string{"sh", "-lc", installCmd}).
 		WithMountedDirectory("/src", source).
 		WithWorkdir("/src").
-		WithExec([]string{"sh", "-lc", cmd}).
+		WithExec([]string{"sh", "-lc", validateCmd}).
 		File("assessment-results.yaml")
 }
 

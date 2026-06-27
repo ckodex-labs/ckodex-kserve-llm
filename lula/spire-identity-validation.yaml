@@ -1,0 +1,67 @@
+metadata:
+  name: validate-spire-workload-identity
+  uuid: F0A03A1B-BFB3-477A-A5E8-17DB42F3496F
+domain:
+  type: kubernetes
+  kubernetes-spec:
+    resources:
+      - name: llmServices
+        resource-rule:
+          group: serving.ckodex.com
+          version: v1alpha2
+          resource: llminferenceservices
+          namespaces: []
+      - name: spireEntries
+        resource-rule:
+          version: v1
+          resource: configmaps
+          namespaces: [spire]
+provider:
+  type: opa
+  opa-spec:
+    rego: |
+      package validate
+      import rego.v1
+
+      default validate := false
+
+      validate if {
+        count(input.llmServices) > 0
+        every service in input.llmServices {
+          valid_registration(service)
+        }
+      }
+
+      valid_registration(service) if {
+        entries := [entry |
+          some entry in input.spireEntries
+          entry.metadata.labels["spire.ckodex.com/registration-entry"] == "true"
+          entry.metadata.annotations["ckodex.com/source-namespace"] == service.metadata.namespace
+          entry.metadata.annotations["ckodex.com/source-service"] == service.metadata.name
+        ]
+        count(entries) == 1
+
+        registration := json.unmarshal(entries[0].data["entry.json"])
+        expected_id := sprintf(
+          "spiffe://ckodex.com/ns/%s/sa/%s/model/%s",
+          [service.metadata.namespace, service.metadata.name, service.metadata.name],
+        )
+        registration.spiffeId == expected_id
+        entries[0].metadata.annotations["ckodex.com/spiffe-id"] == expected_id
+        registration.selectors[_] == sprintf("k8s:ns:%s", [service.metadata.namespace])
+        registration.selectors[_] == sprintf("k8s:sa:%s", [service.metadata.name])
+        registration.ttl > 0
+        registration.ttl <= 3600
+        registration.dnsSans[_] == sprintf(
+          "%s.%s.svc.cluster.local",
+          [service.metadata.name, service.metadata.namespace],
+        )
+      }
+
+      service_count := count(input.llmServices)
+      registration_count := count(input.spireEntries)
+    output:
+      validation: validate.validate
+      observations:
+        - validate.service_count
+        - validate.registration_count

@@ -1,25 +1,43 @@
-apiVersion: lula.dev/v1alpha1
-kind: Validation
 metadata:
-  name: lula-network-policy-enforcement
-  labels:
-    oscal-control: ac-4
-spec:
-  description: "Ensure that LLMInferenceService deployments have associated NetworkPolicies"
-  domain:
-    type: kubernetes
-    kubernetesSpec:
-      resources:
-        - name: networkpolicies
+  name: validate-network-policy-enforcement
+  uuid: CBCAB505-D5C0-4D6E-80FC-A9E1B893964F
+domain:
+  type: kubernetes
+  kubernetes-spec:
+    resources:
+      - name: llmServices
+        resource-rule:
+          group: serving.ckodex.com
+          version: v1alpha2
+          resource: llminferenceservices
+          namespaces: []
+      - name: networkPolicies
+        resource-rule:
+          group: networking.k8s.io
+          version: v1
           resource: networkpolicies
-          allNamespaces: true
-  payload:
+          namespaces: []
+provider:
+  type: opa
+  opa-spec:
     rego: |
-      package lula
+      package validate
+      import rego.v1
 
-      # Check that at least one NetworkPolicy exists in the same namespace as each LLMInferenceService.
-      # In a real environment, we would join across resources, but for this validation 
-      # we simplified to checking that NetworkPolicies are present.
-      validate {
-        count(input.resources) > 0
+      default validate := false
+
+      validate if {
+        count(input.llmServices) > 0
+        every service in input.llmServices {
+          some policy in input.networkPolicies
+          policy.metadata.namespace == service.metadata.namespace
+        }
       }
+
+      service_count := count(input.llmServices)
+      network_policy_count := count(input.networkPolicies)
+    output:
+      validation: validate.validate
+      observations:
+        - validate.service_count
+        - validate.network_policy_count

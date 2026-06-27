@@ -1,26 +1,42 @@
-apiVersion: lula.dev/v1alpha1
-kind: Validation
 metadata:
-  name: lula-supply-chain-verification
-  labels:
-    oscal-control: sr-2
-spec:
-  description: "Ensure that LLMInferenceService artifacts are verified via SLSA provenance"
-  domain:
-    type: kubernetes
-    kubernetesSpec:
-      resources:
-        - name: llm-supply-chain
+  name: validate-supply-chain-evidence
+  uuid: 73764513-F2FC-4063-A481-E70439958C64
+domain:
+  type: kubernetes
+  kubernetes-spec:
+    resources:
+      - name: llmServices
+        resource-rule:
+          group: serving.ckodex.com
+          version: v1alpha2
           resource: llminferenceservices
-          allNamespaces: true
-  payload:
+          namespaces: []
+provider:
+  type: opa
+  opa-spec:
     rego: |
-      package lula
+      package validate
+      import rego.v1
 
-      # Check for SR-2: Supply Chain Risk Management
-      validate {
-        condition := input.resources[0].status.conditions[_]
-        condition.type == "Compliance-SR-2"
-        condition.status == "True"
-        condition.reason == "ProvenanceVerified"
+      default validate := false
+
+      validate if {
+        count(input.llmServices) > 0
+        every service in input.llmServices {
+          has_condition(service, "Compliance-SI-7", "IntegrityVerified")
+          has_condition(service, "Compliance-SR-2", "ProvenanceVerified")
+        }
       }
+
+      has_condition(service, condition_type, reason) if {
+        some condition in service.status.conditions
+        condition.type == condition_type
+        condition.status == "True"
+        condition.reason == reason
+      }
+
+      service_count := count(input.llmServices)
+    output:
+      validation: validate.validate
+      observations:
+        - validate.service_count

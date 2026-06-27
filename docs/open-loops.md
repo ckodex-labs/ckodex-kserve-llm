@@ -140,10 +140,13 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-DOC-003 — Add Lula validator for IA-9 (SPIFFE/SPIRE SVID issuance)
 
-- **Status:** open
+- **Status:** done
 - **Priority:** P2
-- **Context:** SPIFFE/SPIRE identity issuance is implemented in SPIREReconciler but has no Lula validation YAML yet. Deferred post-beta.
-- **Reference:** `lula/` directory, `internal/security/spire_reconciler.go`
+- **Context:** Added `spire-identity-validation.yaml` (2026-06-27). The validator
+  requires every LLMInferenceService to have exactly one SPIRE registration
+  ConfigMap with the expected SPIFFE ID, workload selectors, bounded SVID TTL,
+  and DNS SAN.
+- **Reference:** `lula/spire-identity-validation.yaml`, `internal/security/spire_registration.go`
 
 ### L-DOC-004 — Rewire Mermaid architecture diagram
 

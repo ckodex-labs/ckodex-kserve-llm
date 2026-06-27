@@ -9,7 +9,7 @@ This document outlines the security controls implemented by the **ckodex-kserve-
 | **AC-4** | Information Flow Enforcement | ToolSurface Istio DPI & default-deny NetworkPolicies | `Compliance-AC-4` condition · `lula/network-policy-validation.yaml` |
 | **AU-2** | Audit Events | Structured JSONL audit logging to shared audit plane | `Compliance-AU-2` condition · `lula/governance-validation.yaml` |
 | **CA-7** | Continuous Monitoring | Lifecycle (L) plane tracks active/healthy state via Deployment readiness | Lifecycle state = `active` |
-| **IA-9** | Service Identification and Authentication | SPIFFE/SPIRE issues X.509 SVIDs for all inference workloads (non-person entity auth) | SVID issuance via `SPIREReconciler`; no Lula validator yet — tracked L-DOC-003 |
+| **IA-9** | Service Identification and Authentication | SPIFFE/SPIRE issues X.509 SVIDs for all inference workloads (non-person entity auth) | `SPIRERegistrationReconciler` · `lula/spire-identity-validation.yaml` |
 | **SI-4** | System Monitoring | Open Inference Signals (OIS) v0.1 behavioral telemetry | `Compliance-SI-4` condition · `lula/ois-validation.yaml` |
 | **SI-7** | Software, Firmware, and Information Integrity | Cosign signatures + SLSA provenance + SBOM attestation | `Compliance-SI-7` condition · `lula/supply-chain-validation.yaml` |
 | **SR-2** | Supply-Chain Risk Management Plan | Supply-Chain Contract v1.0 (the risk-management plan wrapper) | `Compliance-SR-2` condition · `lula/supply-chain-validation.yaml` |
@@ -31,7 +31,7 @@ Compliance evidence is generated continuously, but the evidence surface is still
 - **Artifacts**: CI exports `oscal-assessment-results.yaml` to `bin/`. On tagged releases, GitHub Actions is configured to publish signing and provenance artifacts for downstream review.
 - **Enforcement**: **FedRAMP Mode** and admission controls enforce configuration policy, but supply-chain verification should only be treated as complete when `Compliance-SR-2` is backed by recorded cryptographic results.
 
-> **Implementation status (as of v0.18.0-beta.1):** AC-4, AU-2, SI-4, SI-7, and SR-2 are validated by Lula in CI. CA-7 and SR-4 are tracked via reconciler conditions and release artifacts respectively. IA-9 (SPIFFE/SPIRE SVID issuance) has no Lula validator yet — see L-DOC-003 in `docs/open-loops.md`.
+> **Implementation status:** AC-4, AU-2, IA-9, SI-4, SI-7, and SR-2 have Lula validation definitions. CA-7 and SR-4 are tracked via reconciler conditions and release artifacts respectively.
 
 ---
 

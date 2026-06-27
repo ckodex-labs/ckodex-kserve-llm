@@ -1,26 +1,37 @@
-apiVersion: lula.dev/v1alpha1
-kind: Validation
 metadata:
-  name: lula-ois-monitoring
-  labels:
-    oscal-control: si-4
-spec:
-  description: "Ensure that LLMInferenceService workloads are integrated with Open Inference Signals (OIS) v0.1"
-  domain:
-    type: kubernetes
-    kubernetesSpec:
-      resources:
-        - name: llm-monitoring
+  name: validate-ois-monitoring
+  uuid: 2F2AF80D-7E28-49BE-BCCE-06F90D4C0D47
+domain:
+  type: kubernetes
+  kubernetes-spec:
+    resources:
+      - name: llmServices
+        resource-rule:
+          group: serving.ckodex.com
+          version: v1alpha2
           resource: llminferenceservices
-          allNamespaces: true
-  payload:
+          namespaces: []
+provider:
+  type: opa
+  opa-spec:
     rego: |
-      package lula
+      package validate
+      import rego.v1
 
-      # Check for SI-4: Information System Monitoring
-      validate {
-        condition := input.resources[0].status.conditions[_]
-        condition.type == "Compliance-SI-4"
-        condition.status == "True"
-        condition.reason == "OISSignalsActive"
+      default validate := false
+
+      validate if {
+        count(input.llmServices) > 0
+        every service in input.llmServices {
+          some condition in service.status.conditions
+          condition.type == "Compliance-SI-4"
+          condition.status == "True"
+          condition.reason == "OISSignalsActive"
+        }
       }
+
+      service_count := count(input.llmServices)
+    output:
+      validation: validate.validate
+      observations:
+        - validate.service_count

@@ -1,33 +1,37 @@
-lula-validation:
-  uuid: 66666666-6666-6666-6666-666666666667
-  attributes:
-    provider: kubernetes
-    domain: llminferenceservices
-  payload:
+metadata:
+  name: validate-audit-governance
+  uuid: 0EE4FFB8-8B8C-43D5-9ADE-7AF5BD8DCF1A
+domain:
+  type: kubernetes
+  kubernetes-spec:
     resources:
-      - name: llm-audit
-        resource: llminferenceservices
-    regos:
-      - |
-        package lula
+      - name: llmServices
+        resource-rule:
+          group: serving.ckodex.com
+          version: v1alpha2
+          resource: llminferenceservices
+          namespaces: []
+provider:
+  type: opa
+  opa-spec:
+    rego: |
+      package validate
+      import rego.v1
 
-        # Validate AU-2: Audit Logging
-        validate_audit {
-          condition := input.status.conditions[_]
+      default validate := false
+
+      validate if {
+        count(input.llmServices) > 0
+        every service in input.llmServices {
+          some condition in service.status.conditions
           condition.type == "Compliance-AU-2"
           condition.status == "True"
           condition.reason == "AuditPersistent"
         }
+      }
 
-        # Validate SI-7: Software and Information Integrity
-        validate_integrity {
-          condition := input.status.conditions[_]
-          condition.type == "Compliance-SI-7"
-          condition.status == "True"
-          condition.reason == "IntegrityVerified"
-        }
-
-        validate {
-          validate_audit
-          validate_integrity
-        }
+      service_count := count(input.llmServices)
+    output:
+      validation: validate.validate
+      observations:
+        - validate.service_count

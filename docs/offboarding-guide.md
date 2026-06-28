@@ -53,7 +53,7 @@ If the service used **SPIRE** for identity, its SVID entries will automatically 
 
 ---
 
-## Best Practices
+## Operating Checks
 
 - **Verify Traffic**: Check Prometheus metrics for `llm_inference_request_count` to ensure zero active traffic before beginning a manual offboarding.
 - **Audit Logs**: Review the `Controller Manager` logs to confirm that all finalizers completed without errors.

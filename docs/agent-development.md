@@ -1,93 +1,100 @@
-# Agent Development Guide
+# Experimental Agent Metadata
 
-This guide describes how to build and deploy AI agents that leverage the LLM inference backends and specialized function-calling tools within the CKodex cluster.
+## Current Capability
 
-## Overview
+`Agent` and `SkillRegistry` have stable v1 API schemas, but their controllers
+are still experimental product features. Their
+controllers are disabled by default and are enabled with:
 
-Agents are higher-level abstractions that bind a specific **LLMInferenceService** (the "brain") to a set of **SkillRegistries** (the "tools").
-
-## Step 1: Connecting an Agent to a Model
-
-Use the `Agent` CRD to define the agent's identity and its underlying model backend.
-
-```yaml
-apiVersion: serving.ckodex.com/v1
-kind: Agent
-metadata:
-  name: customer-support-agent
-spec:
-  identity:
-    name: "SupportBot v2"
-    description: "Handles L1 support tickets via RAG and tools"
-  modelRef: "llama-3-8b" # Reference to an LLMInferenceService
-  maxTokens: 4096
+```text
+CKODEX_FEATURE_ENABLE_EXPERIMENTAL_AGENTS=true
 ```
 
-## Step 2: Defining & Registering Skills
+Today the controllers:
 
-Skills are reusable tool definitions (functions) that an agent can invoke during its inference cycle. These are managed via `SkillRegistry`.
+- validate that an Agent references an existing, ready
+  `LLMInferenceService`;
+- validate that referenced skill names exist in a `SkillRegistry`;
+- validate required skill metadata and duplicate names;
+- publish readiness conditions and entry counts.
+
+They do not deploy an agent runtime, intercept model tool calls, invoke skill
+endpoints, or expose an agent-specific inference gateway.
+
+## Register Skill Metadata
 
 ```yaml
 apiVersion: serving.ckodex.com/v1
 kind: SkillRegistry
 metadata:
-  name: platform-tools
+  name: research-tools
+  namespace: inference
 spec:
   entries:
-    - name: "get_ticket_status"
-      version: "1.0.0"
-      description: "Retrieves the status of a support ticket"
-      endpoint: "http://ticketing-system.internal.svc/v1/status"
+    - name: search-papers
+      version: 1.0.0
+      description: Search an internal paper index
+      endpoint: http://paper-search.inference.svc.cluster.local/query
       inputSchema: |
         {
           "type": "object",
           "properties": {
-            "ticket_id": { "type": "string" }
+            "query": {"type": "string"}
           },
-          "required": ["ticket_id"]
+          "required": ["query"]
         }
 ```
 
-## Step 3: Binding Skills to the Agent
-
-You can bind specific skills to your agent using `SkillRef`.
+## Bind Agent Metadata
 
 ```yaml
 apiVersion: serving.ckodex.com/v1
 kind: Agent
 metadata:
-  name: customer-support-agent
+  name: research-assistant
+  namespace: inference
 spec:
-  # ... identity and modelRef ...
+  identity:
+    name: Research Assistant
+    description: Metadata binding for a research model and paper search skill
+    version: 0.1.0
+  modelRef: llama-3-8b
+  maxTokens: 4096
   skills:
-    - registryRef: "platform-tools"
-      skillName: "get_ticket_status"
+    - registryRef: research-tools
+      skillName: search-papers
+      version: 1.0.0
 ```
 
-## Step 4: Invocation & Tool Use
+Apply and inspect:
 
-Clients interact with agents via the standard OpenAI-compatible `/v1/chat/completions` endpoint.
-
-- **System Prompt**: The operator automatically injects the agent's identity and tool descriptions into the system prompt of the inference request.
-- **Function Calling**: When the model emits a tool call (e.g., `get_ticket_status`), the agent-sidecar (EPP) intercepts the call, executes the tool against the registered `endpoint`, and returns the result to the model for final answer generation.
-
-### Example Request (via Python SDK)
-
-```python
-import openai
-
-client = openai.OpenAI(base_url="http://agent-gateway.internal.svc/v1")
-
-response = client.chat.completions.create(
-    model="customer-support-agent",
-    messages=[{"role": "user", "content": "What is the status of ticket #INC-99?"}]
-)
-
-print(response.choices[0].message.content)
+```bash
+kubectl apply -f skill-registry.yaml
+kubectl apply -f agent.yaml
+kubectl get skillregistry,agent -n inference
+kubectl describe agent research-assistant -n inference
 ```
 
-## Best Practices
+An `Agent` reporting ready means its metadata references are valid. It does not
+mean an agent execution service is running.
 
-- **Security**: Always use **SPIRE** sidecars for agent workloads to ensure mutual TLS when communicating with SkillRegistry endpoints.
-- **Versioning**: Pin your agent's skills to specific versions (e.g., `version: "1.2.0"`) to avoid breaking changes during automated registry updates.
-- **Monitoring**: Monitor the `agent_tool_invocation_latency` and `agent_token_usage` metrics via Prometheus to track operational costs and performance.
+## Building an Execution Runtime
+
+An external agent runtime may consume these resources as configuration. That
+runtime must independently implement:
+
+- request authentication and authorization;
+- model invocation;
+- tool-call parsing and execution;
+- endpoint allowlisting and network policy;
+- retries, timeouts, and output validation;
+- audit and trace correlation.
+
+Do not route untrusted model-generated arguments directly to a skill endpoint.
+
+## Source of Truth
+
+- API: `api/v1alpha2/agent_types.go`
+- Controllers: `internal/controller/agent_controller.go` and
+  `internal/controller/skillregistry_controller.go`
+- Feature gate: `internal/config/operator_config.go`

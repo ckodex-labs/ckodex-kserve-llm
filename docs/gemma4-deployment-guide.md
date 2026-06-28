@@ -21,7 +21,7 @@ This guide documents the operator defaults currently associated with the Gemma 4
 
 ### 1. Simple Deployment (E4B)
 
-Gemma 4 E4B is the best all-rounder. Use the following manifest:
+The E4B profile uses one GPU in the current WellKnown configuration:
 
 ```yaml
 apiVersion: serving.ckodex.com/v1
@@ -30,9 +30,26 @@ metadata:
   name: gemma-4-e4b
 spec:
   model:
-    uri: "hf://google/gemma-4-E4B-it"
-    name: "gemma-4-e4b"
+    uri: hf://google/gemma-4-E4B-it
+    name: gemma-4-e4b
   replicas: 1
+  template:
+    spec:
+      containers:
+        - name: vllm
+          resources:
+            limits:
+              cpu: "16"
+              memory: 64Gi
+              nvidia.com/gpu: "1"
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute: {}
+    scheduler:
+      pool: {}
 ```
 
 The operator applies its current Gemma 4 Well-Known settings:
@@ -52,9 +69,27 @@ metadata:
   name: gemma-4-31b
 spec:
   model:
-    uri: "hf://google/gemma-4-31B-it"
+    uri: hf://google/gemma-4-31B-it
+    name: gemma-4-31b
   parallelism:
     tensor: 2
+  template:
+    spec:
+      containers:
+        - name: vllm
+          resources:
+            limits:
+              cpu: "32"
+              memory: 256Gi
+              nvidia.com/gpu: "2"
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute: {}
+    scheduler:
+      pool: {}
 ```
 
 ### 3. Mixture-of-Experts (26B-A4B)
@@ -77,12 +112,16 @@ kubectl get llmisvc gemma-4-31b -o jsonpath='{.status.conditions[?(@.type=="GPUC
 
 ## Optimization Tips
 
-- **TurboQuant**: All Gemma 4 models are pre-configured with `--enable-turboquant`. This significantly reduces VRAM footprint and improves throughput.
+- **TurboQuant**: The current WellKnown profiles add `--enable-turboquant`.
 - **CPU KV Offloading**: For the 31B model, if you have limited GPU VRAM but plenty of system RAM, you can manually enable CPU offloading:
 
   ```yaml
   spec:
-    vllmArgs: ["--cpu-offload-gb", "16"]
+    template:
+      spec:
+        containers:
+          - name: vllm
+            args: ["--cpu-offload-gb", "16"]
   ```
 
 If you're using custom mirrors, ensure your registry has the `vllm/vllm-openai:gemma4` image expected by your operator configuration.

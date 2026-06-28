@@ -51,25 +51,6 @@ spec:
 
   replicas: 1
 
-  template:
-    spec:
-      # GPU required for VLM inference — uncomment the appropriate block.
-      # nodeSelector:
-      #   nvidia.com/gpu.present: "true"
-      # tolerations:
-      # - key: "nvidia.com/gpu"
-      #   operator: Exists
-      #   effect: NoSchedule
-      resources:
-        requests:
-          cpu: "4"
-          memory: 20Gi
-          # nvidia.com/gpu: "1"
-        limits:
-          cpu: "8"
-          memory: 40Gi
-          # nvidia.com/gpu: "1"
-
 ---
 # LLaVA-v1.6 — vision-language model via vLLM (CPU fallback for testing).
 # NOTE: LLaVA inference on CPU is very slow — use GPU for production workloads.
@@ -91,13 +72,3 @@ spec:
   maxImagesPerPrompt: 1
 
   replicas: 1
-
-  template:
-    spec:
-      resources:
-        requests:
-          cpu: "4"
-          memory: 16Gi
-        limits:
-          cpu: "8"
-          memory: 32Gi

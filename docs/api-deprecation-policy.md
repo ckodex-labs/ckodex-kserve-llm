@@ -18,10 +18,11 @@ and never silent.
 
 | API Version | Kind                    | Status            | Storage Version | Notes                          |
 |-------------|-------------------------|-------------------|-----------------|-------------------------------|
-| `v1`        | `LLMInferenceService`   | **Stable (GA)**   | ✅ Yes          | Use for all new resources      |
-| `v1`        | `LLMLoraAdapter`        | **Stable (GA)**   | ✅ Yes          |                                |
-| `v1alpha2`  | `LLMInferenceService`   | **Deprecated**    | No              | Removal: 2 releases after v1 GA |
-| `v1alpha2`  | `LLMLoraAdapter`        | **Deprecated**    | No              | Removal: 2 releases after v1 GA |
+| `v1`        | `LLMInferenceService`   | Stable            | Yes             | Use when the stable schema covers the workload |
+| `v1`        | `LLMLoraAdapter`        | Stable            | Yes             | Use for new adapter resources |
+| `v1`        | Agent/session family    | Stable schema     | Yes             | Product feature gates still apply |
+| `v1alpha2`  | Core resources above    | Deprecated        | No              | Served during migration window |
+| `v1alpha2`  | Specialized CRDs        | Current alpha API | Varies          | No v1 schema exists for several specialized kinds |
 
 ---
 
@@ -106,7 +107,7 @@ kubectl get llminferenceservices -A \
   -o jsonpath='{range .items[*]}{.apiVersion}{"\t"}{.metadata.namespace}{"\t"}{.metadata.name}{"\n"}{end}'
 ```
 
-All entries should show `serving.ckodex.com/v1`.
+All `LLMInferenceService` entries should show `serving.ckodex.com/v1`.
 
 ### 4. Update Helm values (if chart-managed)
 

@@ -31,10 +31,23 @@ spec:
     targetP99LatencyMs: 3000
     targetAvailability: 0.999
     errorBudgetDays: 30
+  template:
+    spec:
+      containers:
+        - name: vllm
+          resources:
+            limits:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
   router:
     gateway:
       managed:
         gatewayClassName: envoy
+    route:
+      httpRoute: {}
+    scheduler:
+      pool: {}
 ```
 
 ```bash
@@ -88,11 +101,24 @@ spec:
   slo:
     targetP99LatencyMs: 3000
     targetAvailability: 0.999
+  template:
+    spec:
+      containers:
+        - name: vllm
+          resources:
+            limits:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
   router:
     gateway:
       existingRef:
         name: llama-3-8b-gateway
         namespace: ml-team-a
+    route:
+      httpRoute: {}
+    scheduler:
+      pool: {}
 ```
 
 ```bash
@@ -122,7 +148,7 @@ kubectl patch llminferenceservice llama-3-8b-canary -n ml-team-a \
 kubectl patch llminferenceservice llama-3-8b-canary -n ml-team-a \
   --type=merge -p '{"spec":{"canary":{"weight":50}}}'
 
-# 50% → 100% (promote)
+# 50% → 100% after the declared observation window
 kubectl patch llminferenceservice llama-3-8b-canary -n ml-team-a \
   --type=merge -p '{"spec":{"canary":{"weight":100}}}'
 ```
@@ -134,24 +160,28 @@ kubectl patch llminferenceservice llama-3-8b-canary -n ml-team-a \
   --type=merge -p '{"spec":{"canary":{"weight":0}}}'
 ```
 
-This instantly routes all traffic back to the stable service without deleting any resource.
+This routes all traffic back to the stable service without deleting either
+workload.
 
-### Step 5 — Promote (replace stable)
+### Step 5 — Promote the tested spec
 
-After canary at 100% is stable for >1 hour:
+After the canary satisfies the team-owned observation window:
+
+1. Update the stable service manifest in Git or Helm with the tested canary
+   model URI and runtime settings.
+2. Apply that stable manifest and wait for its Deployment and
+   `LLMInferenceService` readiness.
+3. Set the canary weight to `0`.
+4. Delete the canary only after the stable endpoint has passed a smoke test.
 
 ```bash
-# 1. Remove canary spec from the canary service (it becomes the new stable)
-kubectl patch llminferenceservice llama-3-8b-canary -n ml-team-a \
-  --type=merge -p '{"spec":{"canary":null}}'
+kubectl apply -f llama-3-8b-stable-v2.yaml
+kubectl rollout status deployment/llama-3-8b -n ml-team-a
 
-# 2. Rename via create+delete (or use Helm)
-kubectl get llminferenceservice llama-3-8b-canary -n ml-team-a -o yaml \
-  | sed 's/name: llama-3-8b-canary/name: llama-3-8b/' \
-  | kubectl apply -f -
+kubectl patch llminferenceservice llama-3-8b-canary -n ml-team-a \
+  --type=merge -p '{"spec":{"canary":{"weight":0}}}'
 
 kubectl delete llminferenceservice llama-3-8b-canary -n ml-team-a
-kubectl delete llminferenceservice llama-3-8b -n ml-team-a
 ```
 
 ---

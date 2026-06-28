@@ -26,7 +26,7 @@ We have modularized the controller into a set of specialized sub-packages under 
 
 - **`ServiceReconciler`**: Manages the inference `Service` lifecycle.
 - **`PDBReconciler`**: Manages the `PodDisruptionBudget`.
-- **`Diff`**: Provides robust, order-insensitive comparison utilities for `Containers`, `EnvVars`, and `Volumes`.
+- **`Diff`**: Provides order-insensitive comparison utilities for `Containers`, `EnvVars`, and `Volumes`.
 
 ### 3. `status` Package
 

@@ -34,7 +34,7 @@ Zero-trust infrastructure injected into every governed workload.
 | **SPIFFE Helper** | `v0.9.0` | `ghcr.io/spiffe/spiffe-helper:0.9.0` | SVID rotation and PEM management. |
 | **OPA Gatekeeper** | `v3.x` | `templates.gatekeeper.sh/v1` | Policy enforcement (GPU Quotas, etc.). |
 | **Istio Proxy** | `v1.29.1` | Managed by Istio Operator | L7 DPI and egress isolation. |
-| **Lula Validation** | `v0.9.5` | `defenseunicorns/lula:v0.9.5` | Automated OSCAL control assessment. |
+| **Lula Validation** | `v0.16.0` | Release binary verified by checksum in Dagger | OSCAL control assessment. |
 | **OSCAL Schema** | `v1.1.2` | NIST SP 800-53 Rev 5 | Standard for security control mapping. |
 
 ---

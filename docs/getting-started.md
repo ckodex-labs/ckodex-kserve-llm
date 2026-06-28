@@ -1,129 +1,148 @@
 # Getting Started
 
-Welcome! This guide will walk you through installing the CKodex KServe LLM Operator and deploying your first model in under 5 minutes.
+Read [the big picture](overview.md) first if you do not yet know which parts are
+owned by the scientist, the platform team, and the operator.
+
+## Choose a Path
+
+| Goal | Path |
+|---|---|
+| Prove the repository works on a laptop | Local KIND proof |
+| Deploy a model on an existing CKodex cluster | Scientist path |
+| Integrate the operator into a cluster | Platform developer path |
 
 ## Prerequisites
 
-- **Kubernetes Cluster**: v1.28 or later.
-- **Docker**: Required for the local KIND bootstrap.
-- **kind**: Used by the repo-native local E2E path.
-- **kubectl**: Required for cluster inspection and cleanup.
-- **Helm**: v3.10+.
-- **curl** and **jq**: Used by the local inference probe.
-- **Network access**: Needed to fetch charts and container images.
+For the local proof:
 
-GPU-backed deployments still need GPU nodes and the matching driver stack, but
-the default local KIND E2E path is intentionally CPU-capable and does not
-require a GPU driver.
+- Docker
+- KIND
+- Kubernetes CLI (`kubectl`)
+- Helm
+- `curl` and `jq`
+- network access for charts and images
 
-## 🌈 The Community Production Route (Recommended)
+GPU-backed models additionally require compatible nodes, drivers, runtime
+configuration, and model images. The local proof uses a small CPU-capable model
+and does not prove GPU performance.
 
-To install the operator into a production cluster, use the official Helm chart:
+## Local KIND Proof
 
-```bash
-# Add the CKodex Labs repo
-helm repo add ckodex https://ckodex-labs.github.io/ckodex-kserve-llm
-helm repo update
-
-# Install the operator into a dedicated namespace
-helm install kserve-llm-operator ckodex/ckodex-kserve-llm-operator \
-  --namespace ckodex-system \
-  --create-namespace \
-  --set crds.install=true
-```
-
-## 🛠 The Local Development Route (Kind)
-
-For testing locally on your laptop, we provide a streamlined setup using `kind`.
-
-### 1. Run the full local E2E flow
+Run:
 
 ```bash
 ./run/e2e.sh
 ```
 
-This command:
+The script:
 
-- creates the KIND cluster if it does not already exist
-- installs cert-manager, Gateway API, Envoy Gateway, MetalLB, and the HuggingFace CSI driver
-- builds and loads the operator image into KIND
-- applies CRDs and deploys the controller
-- installs the sample `LLMInferenceService`
-- runs the live inference probe against `/v1/chat/completions`
+1. creates or reuses the `kserve-017` KIND cluster;
+2. installs cert-manager, Gateway API, Envoy Gateway, MetalLB, KServe, and the
+   Hugging Face CSI driver;
+3. builds and loads the operator and storage initializer images;
+4. installs CRDs and RBAC;
+5. applies `local/04-llm-inference-service.yaml`;
+6. waits for readiness and sends an OpenAI-compatible chat request.
 
-For sizing larger models without downloading or running them, see
-[Frontier Model Capacity Planning](model-capacity.md) or run
-`./run/capacity-plan.sh`.
+The local manifest currently uses the served `v1alpha2` API because
+`hf-mount://` is not part of the stable v1 model URI schema. Use stable v1 for
+new workloads that do not require an alpha-only field.
 
-### 2. Inspect the cluster
-
-Verify the manager is running:
+Inspect the control plane:
 
 ```bash
 kubectl get pods -n ckodex-system
+kubectl get llminferenceservice llama3-8b -n default -o wide
+kubectl describe llminferenceservice llama3-8b -n default
 ```
 
-### 3. Clean up when finished
+Inspect generated resources:
+
+```bash
+kubectl get deployment,service -n default
+kubectl get gateway,httproute -n default
+kubectl get events -n default --sort-by=.lastTimestamp
+```
+
+Clean up:
 
 ```bash
 ./run/cleanup.sh
 ```
 
----
+## Scientist Path
 
-## 🚀 Deploying Your First Model (Gemma 4)
+Assumption: the platform team has installed the operator and its cluster
+dependencies and has given you a namespace.
 
-The operator includes a **WellKnown** model registry. This means it already knows how to optimize popular models like Gemma 4 for production performance (enabling `TurboQuant`, setting Guaranteed QoS, etc.).
+1. Start from the stable maintained example:
 
-### 1. Create the Inference Service
+   ```bash
+   cp config/samples/llminferenceservice_basic.yaml /tmp/my-model.yaml
+   ```
 
-Apply the following manifest. Even with minimal configuration, the operator will apply best-practice defaults.
+2. Change:
 
-```yaml
-apiVersion: serving.ckodex.com/v1
-kind: LLMInferenceService
-metadata:
-  name: gemma-4-e2b
-spec:
-  model:
-    uri: "hf://google/gemma-4-E2B-it" # You may need an HF_TOKEN secret
-  replicas: 1
-```
+   - `metadata.name` and `metadata.namespace`;
+   - `spec.model.name`, which clients send in inference requests;
+   - `spec.model.uri`, which tells the runtime where weights live;
+   - container resources and parallelism for the target hardware.
 
-### 2. Monitor Readiness
+3. Apply and observe:
+
+   ```bash
+   kubectl apply -f /tmp/my-model.yaml
+   kubectl get llminferenceservice -n <namespace> -w
+   ```
+
+4. Diagnose readiness from the custom resource, Deployment, and events:
+
+   ```bash
+   kubectl describe llminferenceservice <name> -n <namespace>
+   kubectl get pods -n <namespace>
+   kubectl get events -n <namespace> --sort-by=.lastTimestamp
+   ```
+
+5. Use the route or port-forward supplied by the platform team, then send
+   `spec.model.name` in the request's `model` field.
+
+For capacity planning and promotion, continue with
+[Model Onboarding](onboarding-guide.md).
+
+## Platform Developer Path
+
+The repository-native bootstrap in `run/e2e.sh` is the maintained integration
+reference. For another cluster, reproduce its dependency contract rather than
+assuming the Helm chart installs every prerequisite.
+
+At minimum:
+
+1. install Gateway API and the selected Gateway implementation;
+2. install the storage path required by model URIs;
+3. apply CRDs from `config/crd/`;
+4. apply cluster and namespace RBAC;
+5. deploy the operator with feature gates matching installed dependencies;
+6. configure Prometheus before using metrics-backed promotion gates;
+7. verify with a small model before introducing GPU or distributed inference.
+
+The chart under `deploy/helm/` does not install CRDs or all external
+dependencies. Review `deploy/helm/values.yaml` before use.
+
+## Repository Verification
 
 ```bash
-kubectl get llminferenceservice gemma-4-e2b -w
+dagger call all --source=.
+dagger call test --source=.
+dagger call scan --source=.
 ```
 
-### 3. Send a Request
-
-Once ready, the operator automatically creates a Kubernetes Service (and optionally an `HTTPRoute`). You can port-forward to test it:
-
-```bash
-kubectl port-forward svc/gemma-4-e2b 8000:8000 &
-
-curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"gemma-4-e2b","messages":[{"role":"user","content":"Hello!"}]}'
-```
-
----
-
-## CRD Reference
-
-| CRD | Kind | Purpose |
-|---|---|---|
-| `LLMInferenceService` | `LLMInferenceService` | Core model serving CR — model URI, replicas, routing, scaling |
-| `LLMInferenceServiceConfig` | `LLMInferenceServiceConfig` | Cluster-wide operator defaults and compliance profiles |
-| `LocalModelCache` | `LocalModelCache` | Node-local model weight cache |
-| `ModelOnboarding` | `ModelOnboarding` | Promotion gate workflow for new models |
-
----
+See [CI State](ci/current-state.md) for function contracts and
+[Release Verification](release-verification.md) for published artifacts.
 
 ## Next Steps
 
-- **[Gemma 4 Deployment Guide](gemma4-deployment-guide.md)**: Deep dive into the Gemma 4 optimizations.
-- **[Frontier Model Capacity Planning](model-capacity.md)**: Static fit assessment for GLM-5.2 and Kimi K2.7 Code.
-- **[Architecture Decision Records](adr/)**: Understand why we built it this way.
-- **Join the Community**: Star us on GitHub or join our community Slack!
+- [Big Picture](overview.md)
+- [Model Onboarding](onboarding-guide.md)
+- [Model Capacity](model-capacity.md)
+- [Tenant Onboarding](tenant-onboarding.md)
+- [Model Deployment Runbook](runbooks/model-deployment.md)

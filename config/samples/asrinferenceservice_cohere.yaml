@@ -43,24 +43,6 @@ spec:
 
   replicas: 1
 
-  template:
-    spec:
-      containers: []
-      # GPU node selector — uncomment for GPU inference.
-      # nodeSelector:
-      #   nvidia.com/gpu.present: "true"
-      # tolerations:
-      # - key: "nvidia.com/gpu"
-      #   operator: Exists
-      #   effect: NoSchedule
-      resources:
-        requests:
-          cpu: "2"
-          memory: 8Gi
-        limits:
-          cpu: "4"
-          memory: 16Gi
-
 ---
 # Faster-whisper example — Whisper large-v3 on CPU (no GPU required).
 # This uses the default faster-whisper runtime image automatically.
@@ -85,13 +67,3 @@ spec:
     - de
 
   replicas: 1
-
-  template:
-    spec:
-      resources:
-        requests:
-          cpu: "2"
-          memory: 4Gi
-        limits:
-          cpu: "4"
-          memory: 8Gi

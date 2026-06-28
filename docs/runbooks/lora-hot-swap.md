@@ -1,22 +1,19 @@
 # Runbook: LoRA Adapter Hot-Swap
 
 **Audience:** ML engineers, platform engineers
-**Applies to:** `LLMLoraAdapter` CRD, vLLM dynamic adapter loading
-**Related alerts:** None (hot-swap is fast; alert if base service becomes unavailable)
+**Applies to:** `LLMLoraAdapter`, `LocalModelCache`, vLLM adapter API
 
----
+## Runtime Contract
 
-## Overview
+The reconciler creates a `LocalModelCache` for the adapter, waits for cache
+readiness and governance checks, verifies the target service is ready, then
+calls the vLLM load API. Deleting the adapter triggers an unload attempt through
+its finalizer.
 
-LoRA (Low-Rank Adaptation) adapters extend a base model's behavior without reloading the
-full model weights. The operator manages `LLMLoraAdapter` resources and triggers hot-swaps
-via the vLLM `/v1/load_lora_adapter` API endpoint — no pod restart required.
+No latency objective is asserted by this runbook. Measure adapter load time in
+the target cluster.
 
-Hot-swap latency is typically 200–800 ms depending on adapter size and GPU memory bandwidth.
-
----
-
-## Apply a LoRA Adapter
+## Apply an Adapter
 
 ```yaml
 apiVersion: serving.ckodex.com/v1
@@ -25,35 +22,38 @@ metadata:
   name: customer-support-v3
   namespace: ml-team-a
 spec:
-  baseServiceRef:
-    name: llama-3-8b
-  adapterURI: hf://acme/llama3-customer-support-v3
+  targetService: llama-3-8b
   adapterName: customer-support-v3
+  model:
+    uri: hf://acme/llama3-customer-support-v3
+    name: customer-support-v3
 ```
 
 ```bash
 kubectl apply -f customer-support-v3.yaml
+kubectl get llmloraadapter customer-support-v3 -n ml-team-a -w
 ```
 
-The operator reconciler detects the new `LLMLoraAdapter`, downloads the adapter weights,
-and calls the vLLM load API on each pod replica.
+## Verify Loading
 
----
-
-## Verify the Adapter is Loaded
+Inspect the adapter, generated cache, target model, and events:
 
 ```bash
-# Check adapter status
-kubectl get llmloraadapter customer-support-v3 -n ml-team-a
-
-# Verify adapter is registered on vLLM
-kubectl exec -n ml-team-a deploy/llama-3-8b -- \
-  curl -s http://localhost:8000/v1/models | jq '.data[].id'
+kubectl describe llmloraadapter customer-support-v3 -n ml-team-a
+kubectl get localmodelcache lora-customer-support-v3
+kubectl get llminferenceservice llama-3-8b -n ml-team-a
+kubectl get events -n ml-team-a --sort-by=.lastTimestamp
 ```
 
-Expected output includes `customer-support-v3`.
+Verify the runtime model list:
 
----
+```bash
+kubectl exec -n ml-team-a deploy/llama-3-8b -- \
+  curl -s http://localhost:8000/v1/models
+```
+
+The output must include `customer-support-v3` before clients use that model
+name.
 
 ## Test the Adapter
 
@@ -69,61 +69,36 @@ curl -s "${ENDPOINT}/v1/chat/completions" \
   }'
 ```
 
----
+## Replace a Version
 
-## Swap to a New Adapter Version
+Use a new resource and adapter name so the previous version remains available
+for rollback:
 
 ```bash
-# 1. Apply the new adapter version
 kubectl apply -f customer-support-v4.yaml
-
-# 2. Wait for reconcile
-kubectl wait --for=condition=Ready llmloraadapter/customer-support-v4 -n ml-team-a --timeout=120s
-
-# 3. Update inference clients to use the new adapter name
-# (or rename the adapter by patching spec.adapterName)
-
-# 4. Remove the old adapter (unloads from vLLM automatically)
-kubectl delete llmloraadapter customer-support-v3 -n ml-team-a
+kubectl wait --for=condition=Ready \
+  llmloraadapter/customer-support-v4 -n ml-team-a --timeout=120s
 ```
 
----
-
-## Rollback
+After clients have switched and the new adapter is verified:
 
 ```bash
-# Re-apply the previous version
-kubectl apply -f customer-support-v2.yaml
-
-# Remove the failed version
 kubectl delete llmloraadapter customer-support-v3 -n ml-team-a
 ```
 
----
+Deletion invokes the unload path. Confirm removal through `/v1/models` and the
+adapter's Kubernetes events.
 
 ## Troubleshooting
 
-| Symptom | Check | Fix |
-|---------|-------|-----|
-| Adapter not loading | `kubectl describe llmloraadapter -n ml-team-a` | Check `hf://` URI, Vault token for private repos |
-| vLLM returns 404 for adapter | `kubectl logs -n ml-team-a deploy/llama-3-8b -c vllm \| grep lora` | Re-apply LLMLoraAdapter to trigger reload |
-| OOM after adapter load | `kubectl top pod -n ml-team-a` | Reduce `gpu_memory_utilization` in base service template, or use a smaller adapter rank |
-| Adapter loads but quality degraded | Compare outputs with base model | Roll back adapter, validate training data |
+| Symptom | Check |
+|---|---|
+| Cache never becomes ready | `LocalModelCache` conditions and warm-up Job logs |
+| Target service is missing | `spec.targetService`, namespace, service readiness |
+| Governance blocks loading | adapter state planes, evidence fields, warning events |
+| vLLM rejects loading | operator logs and target pod logs |
+| Adapter causes memory pressure | pod events, GPU memory, adapter rank and count |
 
----
-
-## OTel Trace Events
-
-The operator emits `ckodex.lora.swap_start` and `ckodex.lora.swap_done` span events on
-each reconcile. Filter in Grafana Tempo:
-
-```
-{ resource.service.name = "ckodex-llm-operator" } | select(event.name = "ckodex.lora.swap_done")
-```
-
-The audit log also records `AuditLoraSwap` events:
-
-```bash
-kubectl logs -n ckodex-system deploy/ckodex-kserve-llm-operator | \
-  grep '"action":"LoraSwap"'
-```
+The observability package defines LoRA audit and trace event types, but the
+current reconciler does not emit those helpers directly. Use adapter status,
+Kubernetes events, and controller logs as the operational evidence.

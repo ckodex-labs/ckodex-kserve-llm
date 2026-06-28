@@ -51,6 +51,18 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ## Operator
 
+### L-OP-005 — Align LoRA cache ownership with cluster-scoped LocalModelCache
+
+- **Status:** open
+- **Priority:** P1
+- **Context:** `LocalModelCache` is cluster-scoped, but
+  `LLMLoraAdapterReconciler` constructs the generated cache with the adapter
+  namespace and a namespaced adapter owner reference. Confirm the intended
+  lifecycle contract and replace it with a valid cluster-scoped ownership and
+  cleanup mechanism.
+- **Reference:** `internal/controller/llmloraadapter_controller.go`,
+  `api/v1alpha2/localmodelcache_types.go`
+
 ### L-OP-001 — Add `kustomization.yaml` to `config/crd/` and `config/rbac/`
 
 - **Status:** done

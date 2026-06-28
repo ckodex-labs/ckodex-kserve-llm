@@ -1,4 +1,4 @@
-apiVersion: serving.ckodex.com/v1alpha2
+apiVersion: serving.ckodex.com/v1
 kind: LLMInferenceService
 metadata:
   name: gemma-4-31b
@@ -8,7 +8,17 @@ spec:
     uri: hf://google/gemma-4-31B-it
     name: google/gemma-4-31B-it
   replicas: 1
-  # The operator will apply TP=2 and 2 GPUs for this 33B dense model.
+  parallelism:
+    tensor: 2
+  template:
+    spec:
+      containers:
+      - name: vllm
+        resources:
+          limits:
+            cpu: "32"
+            memory: 256Gi
+            nvidia.com/gpu: "2"
   router:
     gateway:
       managed:

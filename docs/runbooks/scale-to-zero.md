@@ -139,9 +139,9 @@ kubectl describe nodes | grep -A5 "Allocatable:" | grep nvidia
 For business-critical models, pre-warm by keeping `minReplicas: 1`. Use KEDA
 `initialCooldownPeriod` to delay the first scale-in after deployment.
 
-For cost-sensitive workloads that still need fast cold starts, use `LocalModelCache`:
-the model weights are pre-loaded on every node so pod startup is <30 seconds instead
-of 3–8 minutes.
+For workloads that need model weights staged before a scale-up, use
+`LocalModelCache`. Measure the resulting cold-start time in the target cluster;
+this runbook does not assert a fixed improvement.
 
 ```yaml
 apiVersion: serving.ckodex.com/v1alpha2
@@ -149,9 +149,11 @@ kind: LocalModelCache
 metadata:
   name: llama-3-8b-cache
 spec:
-  sourceModelURI: hf://meta-llama/Llama-3-8B-Instruct
-  nodeSelector:
-    cloud.google.com/gke-accelerator: nvidia-l4
+  sourceModelUri: hf://meta-llama/Llama-3-8B-Instruct
+  nodeGroup:
+    labelSelector:
+      matchLabels:
+        cloud.google.com/gke-accelerator: nvidia-l4
 ```
 
 ---

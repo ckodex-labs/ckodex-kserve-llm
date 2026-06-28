@@ -1,56 +1,39 @@
 # Tenant Onboarding Guide
 
-This guide describes the standard procedure for setting up a new multi-tenant environment within the CKodex KServe cluster.
+This guide defines the platform-owned steps for adding a tenant namespace.
 
-## Tenant Isolation Strategy
+## 1. Create and Label the Namespace
 
-CKodex implements multi-tenancy through a combination of Kubernetes native features and custom CRDs.
-
-### 1. Namespace-Based Isolation
-
-Every tenant must occupy one or more dedicated Kubernetes namespaces.
-
-- **`ckodex.com/tenant-id`**: All tenant namespaces must be labeled with this ID. This label is used by the **LLMModelAccess** OPA Gatekeeper constraint to audit and enforce model-to-tenant permission bindings.
-
-### 2. Multi-Tenant Identity (SPIRE)
-
-The operator automatically manages **SPIFFE** identities for all inference workloads.
-
-- **Workload ID**: `spiffe://ckodex.com/ns/{ns}/sa/{sa}/model/{model}`
-- **mTLS Enforcement**: The Gateway and sidecars use these SVIDs to guarantee that only authorized clients (from the allowed tenant ID) can communicate with the inference backend.
-
-## Security & Compliance Silos
-
-Use `LLMInferenceServiceConfig` to apply pre-validated security profiles (Compliance Profiles) for each tenant.
-
-### Standard Compliance Profiles
-
-- **`hipaa`**: Enforces JWT-based auth and disables local model caching (PCI-DSS mode).
-- **`soc2`**: Enforces eBPF-based security monitoring and durable audit sinks.
-- **`fedramp`**: Restricts model downloads to FedRAMP-authorized OCI registries only.
-
-### Example Tenant Config
-
-```yaml
-apiVersion: serving.ckodex.com/v1alpha2
-kind: LLMInferenceServiceConfig
-metadata:
-  name: healthcare-tenant-std
-  namespace: healthcare-prod
-spec:
-  complianceProfiles:
-    - hipaa
-    - soc2
-  vllmDefaults:
-    args:
-      - "--disable-log-stats"
+```bash
+kubectl create namespace tenant-a
+kubectl label namespace tenant-a ckodex.com/tenant-id=t-12345
 ```
 
-## Resource Quotas & Scheduling
+The tenant label is consumed by quota and policy paths. A label alone does not
+create isolation; RBAC, NetworkPolicy, identity, and Gateway policy must also be
+configured.
 
-To prevent a single tenant from exhausting cluster-wide GPU resources, apply standard `ResourceQuota` and `LimitRange` objects in the tenant namespace.
+## 2. Grant Operator Access
 
-### Recommended Quota Pattern
+Add the namespace to `managedNamespaces` in the Helm values so the operator
+service account receives the namespace-scoped RoleBinding:
+
+```yaml
+managedNamespaces:
+  - tenant-a
+```
+
+Verify:
+
+```bash
+kubectl auth can-i create deployments \
+  --as=system:serviceaccount:ckodex-system:ckodex-kserve-llm-operator \
+  -n tenant-a
+```
+
+Use the actual service-account name from the installed release if it differs.
+
+## 3. Apply Resource Limits
 
 ```yaml
 apiVersion: v1
@@ -60,17 +43,71 @@ metadata:
   namespace: tenant-a
 spec:
   hard:
-    requests.nvidia.com/gpu: 4
-    limits.nvidia.com/gpu: 4
+    requests.nvidia.com/gpu: "4"
+    limits.nvidia.com/gpu: "4"
 ```
 
-> [!TIP]
-> **PriorityClasses**: For critical production tenants, assign a higher `PriorityClass` to their inference services to ensure they are scheduled before experimental or batch workloads during resource contention.
+Also apply a `LimitRange`, storage quotas, and any organization-specific
+PriorityClasses.
 
-## Workflow: Onboarding a New Tenant
+## 4. Configure Optional Security
 
-1. **Create Namespace**: `kubectl create namespace tenant-a`.
-2. **Apply Tenant Label**: `kubectl label namespace tenant-a ckodex.com/tenant-id=t-12345`.
-3. **Configure Identity**: Assign a `ServiceAccount` with the appropriate SPIRE-aware permissions.
-4. **Deploy Base Config**: Apply the tenant's `LLMInferenceServiceConfig` for compliance enforcement.
-5. **Verify Access**: Attempt an inference request using the `InferenceSession` API to confirm end-to-end connectivity.
+SPIFFE/SPIRE and OPA integration are disabled by default. Enable security only
+after SPIRE, its CSI driver, policy dependencies, RBAC, and health checks are
+available:
+
+```text
+CKODEX_FEATURE_ENABLE_SECURITY=true
+```
+
+When enabled, the operator creates SPIRE registration entries with IDs shaped
+as:
+
+```text
+spiffe://ckodex.com/ns/{namespace}/sa/{service-account}/model/{model}
+```
+
+The registration entry enables SVID issuance. End-to-end mTLS still depends on
+the workload API socket, sidecars or clients, trust bundles, and Gateway policy.
+
+## 5. Configure Compliance Profiles
+
+Runtime profile enforcement is configured on the operator process:
+
+```text
+CKODEX_COMPLIANCE_PROFILES=hipaa,soc2
+```
+
+The startup validator checks the corresponding operator feature gates, audit
+sink, retention, redaction, and cache posture. The
+`LLMInferenceServiceConfig.spec.complianceProfiles` field exists in the alpha
+API but is not currently consumed by a reconciler; do not treat that field as
+active enforcement.
+
+## 6. Deploy and Verify a Tenant Workload
+
+Use a stable v1 `LLMInferenceService`, then inspect:
+
+```bash
+kubectl get llminferenceservice -n tenant-a
+kubectl get deployment,service,gateway,httproute -n tenant-a
+kubectl get networkpolicy -n tenant-a
+kubectl get events -n tenant-a --sort-by=.lastTimestamp
+```
+
+For security-enabled clusters, also inspect the SPIRE registration entry and
+verify an actual SVID through the SPIFFE workload API.
+
+## Acceptance Checklist
+
+- operator RBAC is limited to the intended namespace;
+- tenant labels and quotas are present;
+- default-deny and required allow policies are active;
+- model storage credentials are namespace-scoped;
+- routes do not expose unintended hostnames;
+- Prometheus and audit data carry tenant identity;
+- optional compliance profiles pass startup validation;
+- an inference request succeeds using the tenant's authorized path.
+
+See [Security Architecture](SECURITY_ARCHITECTURE.md) for the control model and
+[Model Onboarding](onboarding-guide.md) for workload creation.

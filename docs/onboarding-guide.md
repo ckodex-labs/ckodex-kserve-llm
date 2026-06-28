@@ -1,21 +1,92 @@
 # Model Onboarding Guide
 
-This guide provides a step-by-step workflow for onboarding a new Large Language Model (LLM) into the CKodex KServe environment, from initial binary acquisition to production promotion.
+This guide moves a model from artifact selection to an observable serving
+resource and an optional promotion gate.
 
-## Phase 1: Model Acquisition & URIs
+## Responsibility Split
 
-CKodex supports multiple model distribution schemes. Select the one best suited for your infrastructure:
+The model scientist owns the model, serving requirements, and acceptance
+criteria. The platform team owns storage access, cluster capacity, Gateway API,
+metrics, and feature gates.
 
-- **`hf://<repo-id>`**: Direct download from Hugging Face Hub (requires `HUGGING_FACE_HUB_TOKEN` if private).
-- **`oci://<registry>/<image>:<tag>`**: Models packaged as OCI artifacts.
-- **`ocis://<registry>/<image>:<tag>`**: Same OCI transport, but with explicit secure-OCI intent. It routes through the same runtime signature, provenance, and SBOM attestation verification path as `oci://`.
-- **`s3://<bucket>/<path>`**: Models stored in S3-compatible object storage.
-- **`pvc://<claim-name>/<path>`**: Pre-existing models on a PersistentVolumeClaim.
-- **`modelpack://<name>`**: CKodex-optimized model packages with built-in metadata.
+## 1. Plan Capacity
 
-## Phase 2: Zero-Latency Startup via `LocalModelCache`
+Estimate weight memory, KV cache, runtime overhead, parallelism, and expected
+traffic before creating a workload. For the large models covered by this
+repository:
 
-To avoid multi-gigabyte downloads during pod startup, use `LocalModelCache` to pre-warm nodes.
+```bash
+./run/capacity-plan.sh
+```
+
+The local KIND environment is not a capacity test for large models.
+
+## 2. Choose an Artifact URI
+
+`LLMInferenceService.spec.model.uri` supports:
+
+- `hf://` for Hugging Face download;
+- `hf-mount://` for the Hugging Face CSI path;
+- `oci://` and `ocis://` for OCI artifacts;
+- `s3://`, `gs://`, and `swfs://` for object or distributed storage;
+- `pvc://` for an existing PersistentVolumeClaim;
+- `modelpack://` for a model package;
+- `https://` for a direct HTTPS source.
+
+Use `spec.model.storage` references for credentials. Do not put tokens in the
+manifest.
+
+## 3. Declare the Service
+
+Start from a maintained sample. Use the stable
+`serving.ckodex.com/v1` API when its schema covers the workload.
+
+```yaml
+apiVersion: serving.ckodex.com/v1
+kind: LLMInferenceService
+metadata:
+  name: llama-3-8b
+  namespace: inference
+spec:
+  model:
+    name: llama-3-8b
+    uri: hf://meta-llama/Meta-Llama-3-8B-Instruct
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: vllm
+          resources:
+            limits:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute: {}
+    scheduler:
+      pool: {}
+```
+
+Apply and inspect:
+
+```bash
+kubectl apply -f model.yaml
+kubectl get llminferenceservice llama-3-8b -n inference -w
+kubectl describe llminferenceservice llama-3-8b -n inference
+kubectl get deployment,service,gateway,httproute -n inference
+```
+
+Readiness means the model and generated runtime resources are ready. Object
+creation alone is not readiness.
+
+## 4. Pre-Stage Weights When Needed
+
+`LocalModelCache` can create node-targeted warm-up jobs. It is cluster-scoped
+and requires a working storage class and model download path.
 
 ```yaml
 apiVersion: serving.ckodex.com/v1alpha2
@@ -23,81 +94,78 @@ kind: LocalModelCache
 metadata:
   name: llama-3-8b-cache
 spec:
-  sourceModelUri: "hf://meta-llama/Meta-Llama-3-8B-Instruct"
-  modelSize: "15Gi"
+  sourceModelUri: hf://meta-llama/Meta-Llama-3-8B-Instruct
+  modelSize: 15Gi
   warmNodes:
-    - "gpu-node-01"
-    - "gpu-node-02"
+    - gpu-node-01
 ```
 
-The operator will create a `storage-initializer` Job on each target node to populate a node-local PVC.
+Observe it before pointing a service at the resulting storage:
 
-For frontier models with very large weight footprints, review
-[Frontier Model Capacity Planning](model-capacity.md) before choosing a cache
-size or deployment target. The schema can represent the plan, but the default
-local KIND envelope is not sized for 200+ GiB model footprints.
-
-## Phase 3: Service Deployment
-
-Define the `LLMInferenceService` to manage the serving workload.
-
-```yaml
-apiVersion: serving.ckodex.com/v1
-kind: LLMInferenceService
-metadata:
-  name: llama-3-8b
-spec:
-  model:
-    uri: "pvc://llama-3-8b-cache/model" # Points to the local cache
-    name: "llama-3-8b"
-  parallelism:
-    tensor: 1
-    data: 2
-  template:
-    spec:
-      containers:
-        - name: vllm
-          resources:
-            limits:
-              nvidia.com/gpu: 1
+```bash
+kubectl get localmodelcache llama-3-8b-cache -w
+kubectl describe localmodelcache llama-3-8b-cache
 ```
 
-> [!TIP]
-> **Guaranteed QoS**: The operator automatically synchronizes resource requests to match limits for optimal scheduling performance.
+The platform team must confirm the actual generated PVC names and access policy.
+Do not assume the cache object name is itself a valid `pvc://` claim.
 
-## Phase 4: Automated Promotion Pipeline
+## 5. Add a Promotion Sequence
 
-For production workloads, use the `ModelOnboarding` CRD to automate the promotion cycle.
+`ModelOnboarding` sequences checks against an existing
+`LLMInferenceService`.
 
 ```yaml
 apiVersion: serving.ckodex.com/v1
 kind: ModelOnboarding
 metadata:
   name: llama-3-8b-promotion
+  namespace: inference
 spec:
-  modelRef: "llama-3-8b"
+  modelRef: llama-3-8b
+  rollbackOnFailure: true
   stages:
-    - name: "static-validation"
-      type: "validation"
-    - name: "canary-rollout"
-      type: "canary"
+    - name: model-ready
+      type: validation
+    - name: canary-ready
+      type: canary
+    - name: service-objectives
+      type: gate
       gate:
         minSuccessRate: 99
         maxLatencyP99: 500
-    - name: "promote-to-stable"
-      type: "promotion"
+    - name: promotion-ready
+      type: promotion
 ```
 
-### Pipeline Stages
+Current behavior:
 
-1. **Validation**: Checks model integrity and configuration compatibility.
-2. **Canary**: Routes a small percentage of traffic (configured via `CanarySpec` in the service) and monitors metrics.
-3. **Gate**: Blocking stage that requires success metrics to be met (e.g., MinSuccessRate).
-4. **Promotion**: Updates the stable Gateway route to point entirely to the new model version.
+- `validation` requires `status.modelReady`;
+- `canary` requires at least one ready replica;
+- `gate` queries Prometheus when criteria are present;
+- `promotion` requires the model to remain ready;
+- missing Prometheus configuration causes metric gates to fail closed.
 
----
+The controller does not change traffic weights in canary or promotion stages.
+Configure desired weights through `LLMInferenceService.spec.canary` and let the
+Gateway reconciler apply them.
 
-## Troubleshooting
+Observe the sequence:
 
-- **Phase 2 Fails**: Check `LocalModelCache` node statuses and Job logs for storage credential issues.
-- **Phase 4 Fails**: If `rollbackOnFailure` is true (default), the operator will automatically revert the Gateway route to the previous stable version.
+```bash
+kubectl get modelonboarding llama-3-8b-promotion -n inference -w
+kubectl describe modelonboarding llama-3-8b-promotion -n inference
+```
+
+## Failure Diagnosis
+
+| Symptom | Check |
+|---|---|
+| Model never becomes ready | Pod logs, model URI, credentials, node resources |
+| Route is absent | Gateway feature gate, GatewayClass, HTTPRoute events |
+| Cache does not warm | Node name, storage class, warm-up Job logs |
+| Gate rolls back | Prometheus URL, query data, ready replicas, declared thresholds |
+| Request uses wrong model | Request `model` must equal `spec.model.name` |
+
+Continue with the [Model Deployment Runbook](runbooks/model-deployment.md) for
+operational troubleshooting.

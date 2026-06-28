@@ -34,16 +34,6 @@ spec:
   batchSize: 32
   replicas: 1
 
-  template:
-    spec:
-      resources:
-        requests:
-          cpu: "1"
-          memory: 2Gi
-        limits:
-          cpu: "2"
-          memory: 4Gi
-
 ---
 # BAAI/bge-reranker-v2-m3 — cross-encoder reranker via text-embeddings-inference runtime.
 # TEI is optimised for BERT-family models; use it for rerankers and bi-encoders.
@@ -66,13 +56,3 @@ spec:
   # runtimeImage: omitted — uses ghcr.io/huggingface/text-embeddings-inference:cpu-latest
 
   replicas: 1
-
-  template:
-    spec:
-      resources:
-        requests:
-          cpu: "1"
-          memory: 2Gi
-        limits:
-          cpu: "2"
-          memory: 4Gi

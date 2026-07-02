@@ -26357,7 +26357,7 @@ spec:
                 type: string
               kvCache:
                 description: |-
-                  KVCache configures KV cache dtype and CPU swap space (vLLM v0.23.0+).
+                  KVCache configures KV cache dtype and CPU offload for vLLM v0.24.0+.
                   Use Dtype:"fp8" for ~50% VRAM reduction on Hopper+ GPUs.
                 properties:
                   dtype:
@@ -26372,8 +26372,9 @@ spec:
                     - bf16
                     type: string
                   swapSpaceGB:
-                    description: SwapSpaceGB sets CPU RAM swap in GiB (--swap-space).
-                      Multi-tier KV offload.
+                    description: |-
+                      SwapSpaceGB sets CPU RAM offload in GiB (--cpu-offload-gb).
+                      The JSON name is retained for API compatibility with earlier releases.
                     format: int32
                     minimum: 0
                     type: integer
@@ -35123,8 +35124,8 @@ spec:
                 properties:
                   checkpointPath:
                     description: |-
-                      CheckpointPath is the path to GPTQ quantization checkpoint files.
-                      Only valid when Method is "gptq".
+                      CheckpointPath is retained for API compatibility. vLLM v0.24.0 loads
+                      GPTQ metadata from the model and does not accept --gptq-ckpt-path.
                     type: string
                   method:
                     description: |-
@@ -35448,7 +35449,7 @@ spec:
                 type: object
               speculativeDecoding:
                 description: |-
-                  SpeculativeDecoding configures speculative decoding for higher throughput (vLLM v0.23.0+).
+                  SpeculativeDecoding configures speculative decoding for vLLM v0.24.0+.
                   MTP (Multi-Token Prediction) provides ~2× throughput on Llama/Mistral without quality loss.
                 properties:
                   draftModel:
@@ -35466,7 +35467,7 @@ spec:
                     type: string
                   numTokens:
                     description: NumTokens is the number of speculative tokens per
-                      step (--num-speculative-tokens).
+                      step (--spec-tokens).
                     format: int32
                     maximum: 16
                     minimum: 1

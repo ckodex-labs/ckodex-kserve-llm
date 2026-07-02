@@ -774,12 +774,9 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 				"--port", "8000",
 			}
 		}
-		// Weight quantization (vLLM v0.23.0) — appended after any existing args.
+		// Weight quantization (vLLM v0.24.0) is appended after existing args.
 		if q := llmSvc.Spec.Quantization; q != nil {
 			c.Args = append(c.Args, "--quantization", q.Method)
-			if q.Method == "gptq" && q.CheckpointPath != "" {
-				c.Args = append(c.Args, "--gptq-ckpt-path", q.CheckpointPath)
-			}
 		}
 	}
 }

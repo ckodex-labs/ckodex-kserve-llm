@@ -45,6 +45,10 @@ type RerankerInferenceServiceReconciler struct {
 	LocalRegistry string
 }
 
+// +kubebuilder:rbac:groups=serving.ckodex.com,resources=rerankerinferenceservices,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=serving.ckodex.com,resources=rerankerinferenceservices/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=serving.ckodex.com,resources=rerankerinferenceservices/finalizers,verbs=update
+
 // Reconcile implements the main reconcile loop.
 func (r *RerankerInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -260,12 +264,9 @@ func (r *RerankerInferenceServiceReconciler) buildContainer(
 		"--port", fmt.Sprintf("%d", port),
 	}
 
-	// Weight quantization (vLLM v0.23.0) — GGUF not applicable for rerankers.
+	// Weight quantization (vLLM v0.24.0); GGUF is not applicable for rerankers.
 	if q := svc.Spec.Quantization; q != nil && q.Method != "gguf" {
 		args = append(args, "--quantization", q.Method)
-		if q.Method == "gptq" && q.CheckpointPath != "" {
-			args = append(args, "--gptq-ckpt-path", q.CheckpointPath)
-		}
 	}
 
 	res := corev1.ResourceRequirements{

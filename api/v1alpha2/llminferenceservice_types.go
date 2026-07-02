@@ -113,12 +113,12 @@ type LLMInferenceServiceSpec struct {
 	// +optional
 	Canary *CanarySpec `json:"canary,omitempty"`
 
-	// SpeculativeDecoding configures speculative decoding for higher throughput (vLLM v0.23.0+).
+	// SpeculativeDecoding configures speculative decoding for vLLM v0.24.0+.
 	// MTP (Multi-Token Prediction) provides ~2× throughput on Llama/Mistral without quality loss.
 	// +optional
 	SpeculativeDecoding *SpeculativeDecodingSpec `json:"speculativeDecoding,omitempty"`
 
-	// KVCache configures KV cache dtype and CPU swap space (vLLM v0.23.0+).
+	// KVCache configures KV cache dtype and CPU offload for vLLM v0.24.0+.
 	// Use Dtype:"fp8" for ~50% VRAM reduction on Hopper+ GPUs.
 	// +optional
 	KVCache *KVCacheSpec `json:"kvCache,omitempty"`
@@ -343,13 +343,13 @@ type ParallelismSpec struct {
 	EPLBEnabled bool `json:"eplbEnabled,omitempty"`
 }
 
-// SpeculativeDecodingSpec configures speculative decoding (vLLM v0.23.0+).
+// SpeculativeDecodingSpec configures speculative decoding (vLLM v0.24.0+).
 type SpeculativeDecodingSpec struct {
 	// Method selects the draft strategy: "mtp", "eagle", "medusa", "ngram".
 	// +kubebuilder:validation:Enum=mtp;eagle;medusa;ngram
 	Method string `json:"method"`
 
-	// NumTokens is the number of speculative tokens per step (--num-speculative-tokens).
+	// NumTokens is the number of speculative tokens per step (--spec-tokens).
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=16
 	// +optional
@@ -369,7 +369,8 @@ type KVCacheSpec struct {
 	// +optional
 	Dtype string `json:"dtype,omitempty"`
 
-	// SwapSpaceGB sets CPU RAM swap in GiB (--swap-space). Multi-tier KV offload.
+	// SwapSpaceGB sets CPU RAM offload in GiB (--cpu-offload-gb).
+	// The JSON name is retained for API compatibility with earlier releases.
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	SwapSpaceGB *int32 `json:"swapSpaceGB,omitempty"`
@@ -384,8 +385,8 @@ type QuantizationSpec struct {
 	// +kubebuilder:validation:Enum=awq;gptq;gguf;bitsandbytes;fp8
 	Method string `json:"method"`
 
-	// CheckpointPath is the path to GPTQ quantization checkpoint files.
-	// Only valid when Method is "gptq".
+	// CheckpointPath is retained for API compatibility. vLLM v0.24.0 loads
+	// GPTQ metadata from the model and does not accept --gptq-ckpt-path.
 	// +optional
 	CheckpointPath string `json:"checkpointPath,omitempty"`
 }

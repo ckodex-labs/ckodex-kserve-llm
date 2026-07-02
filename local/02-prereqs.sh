@@ -58,6 +58,7 @@ echo "MetalLB configured with address pool ${BASE}.200-${BASE}.250"
 # lazy byte-level loading. No full download needed.
 helm upgrade --install hf-csi oci://ghcr.io/huggingface/charts/hf-csi-driver \
   --namespace kube-system \
+  --version 0.11.1 \
   --set logVerbosity=2
 kubectl wait --for=condition=Ready pod -l app=hf-csi-node \
   -n kube-system --timeout=120s

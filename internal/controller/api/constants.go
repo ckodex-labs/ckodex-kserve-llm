@@ -3,7 +3,7 @@ package api
 const (
 	FinalizerName = "serving.ckodex.com/finalizer"
 
-	VLLMImage                     = "vllm/vllm-openai:v0.23.0"
+	VLLMImage                     = "vllm/vllm-openai:v0.24.0"
 	QuantCppImage                 = "ckodex/quant-cpp:v0.1.0"
 	StorageInitializerImage       = "kserve/storage-initializer:v0.19.0"
 	HFCSIPVStorageSize            = "500Gi" // Nominal; hf-csi-driver does not enforce capacity limits

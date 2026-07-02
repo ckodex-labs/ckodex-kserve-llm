@@ -77,8 +77,8 @@ func TestBuilder_Quantization_AWQ(t *testing.T) {
 	assertContainsArgPair(t, args, "--quantization", "awq")
 }
 
-// TestBuilder_Quantization_GPTQ_WithCheckpointPath verifies --quantization gptq
-// and --gptq-ckpt-path are both emitted when CheckpointPath is set.
+// TestBuilder_Quantization_GPTQ_WithCheckpointPath verifies the legacy API
+// field does not emit the removed vLLM v0.24 checkpoint-path flag.
 func TestBuilder_Quantization_GPTQ_WithCheckpointPath(t *testing.T) {
 	b := builderForQuantTest(t)
 	svc := baseQuantLLMSvc("gptq-test")
@@ -91,7 +91,7 @@ func TestBuilder_Quantization_GPTQ_WithCheckpointPath(t *testing.T) {
 	require.NotNil(t, dep)
 	args := dep.Spec.Template.Spec.Containers[0].Args
 	assertContainsArgPair(t, args, "--quantization", "gptq")
-	assertContainsArgPair(t, args, "--gptq-ckpt-path", "/mnt/models/gptq-ckpt")
+	assertNotContainsFlag(t, args, "--gptq-ckpt-path")
 }
 
 // TestBuilder_Quantization_BitsAndBytes verifies --quantization bitsandbytes.

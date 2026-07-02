@@ -228,8 +228,8 @@ spec:
                 properties:
                   checkpointPath:
                     description: |-
-                      CheckpointPath is the path to GPTQ quantization checkpoint files.
-                      Only valid when Method is "gptq".
+                      CheckpointPath is retained for API compatibility. vLLM v0.24.0 loads
+                      GPTQ metadata from the model and does not accept --gptq-ckpt-path.
                     type: string
                   method:
                     description: |-
@@ -266,7 +266,7 @@ spec:
               runtimeImage:
                 description: |-
                   RuntimeImage overrides the default container image for the selected runtime.
-                  When omitted, the operator uses the built-in default (vllm/vllm-openai:latest).
+                  When omitted, the operator uses vllm/vllm-openai:v0.24.0.
                 type: string
               scaling:
                 description: Scaling configures autoscaling behaviour (HPA / KEDA).

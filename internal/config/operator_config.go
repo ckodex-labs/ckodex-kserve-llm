@@ -319,13 +319,13 @@ func DefaultOperatorConfig() OperatorConfig {
 		Defaults: DefaultsConfig{
 			// CPU-optimized vLLM image for ARM64/x86 nodes (no GPU).
 			// Pinned to a specific version — :latest is a supply chain risk and air-gapped blocker.
-			RuntimeImage:            "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.23.0",
-			SchedulerImage:          "ghcr.io/llm-d/llm-d-inference-scheduler:v0.7.1", // TODO(ckodex): verify latest tag from ghcr.io/llm-d releases — v0.7.1 pinned pending network verification
-			StorageInitializerImage: "kserve/storage-initializer:v0.19.0-rc0",
+			RuntimeImage:            "vllm/vllm-openai-cpu:v0.24.0",
+			SchedulerImage:          "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0",
+			StorageInitializerImage: "kserve/storage-initializer:v0.19.0",
 			DefaultReplicas:         1,
 		},
 		Scheduler: SchedulerDefaults{
-			Image: "ghcr.io/llm-d/llm-d-inference-scheduler:v0.7.1", // TODO(ckodex): verify latest tag from ghcr.io/llm-d releases — v0.7.1 pinned pending network verification
+			Image: "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0",
 			DefaultPlugins: []string{
 				"prefix-cache-scorer",
 				"queue-scorer",

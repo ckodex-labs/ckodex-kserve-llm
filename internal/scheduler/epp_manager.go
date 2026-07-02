@@ -29,11 +29,13 @@ const (
 	// EPPImage is the Endpoint Picker Pod container image.
 	// Pinned — :latest is a supply chain risk and air-gapped deployment blocker.
 	// Must match OperatorConfig.Scheduler.Image default.
-	EPPImage = "ghcr.io/llm-d/llm-d-inference-scheduler:v0.7.1"
+	EPPImage = "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0"
 	// EPPPort is the EPP gRPC port (Gateway ExtensionRef).
 	EPPPort int32 = 9002
 	// EPPMetricsPort is the metrics/health port.
 	EPPMetricsPort int32 = 9090
+	// EPPHealthPort is the dedicated gRPC health port introduced by llm-d Router.
+	EPPHealthPort int32 = 9003
 )
 
 // EPPManager manages the Endpoint Picker Pod (EPP) deployment
@@ -91,17 +93,18 @@ func (m *EPPManager) reconcileDeployment(ctx context.Context, llmSvc *servingv1a
 								"--pool-namespace=" + llmSvc.Namespace,
 								fmt.Sprintf("--grpc-port=%d", EPPPort),
 								fmt.Sprintf("--metrics-port=%d", EPPMetricsPort),
+								fmt.Sprintf("--grpc-health-port=%d", EPPHealthPort),
+								"--secure-serving=false",
+								"--metrics-endpoint-auth=false",
 							},
 							Ports: []corev1.ContainerPort{
 								{Name: "grpc", ContainerPort: EPPPort, Protocol: corev1.ProtocolTCP},
 								{Name: "metrics", ContainerPort: EPPMetricsPort, Protocol: corev1.ProtocolTCP},
+								{Name: "health", ContainerPort: EPPHealthPort, Protocol: corev1.ProtocolTCP},
 							},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/healthz",
-										Port: intstr.FromInt32(EPPMetricsPort),
-									},
+									GRPC: &corev1.GRPCAction{Port: EPPHealthPort},
 								},
 								PeriodSeconds: 5,
 							},

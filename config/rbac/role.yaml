@@ -8,15 +8,19 @@ rules:
   - ""
   resources:
   - configmaps
-  - namespaces
-  - nodes
+  - limitranges
+  - persistentvolumeclaims
+  - persistentvolumes
+  - pods
+  - resourcequotas
+  - services
   verbs:
   - create
   - delete
-  - patch
-  - update
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - ""
@@ -33,18 +37,11 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - limitranges
-  - persistentvolumeclaims
-  - pods
-  - resourcequotas
-  - services
+  - namespaces
+  - nodes
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - ""
@@ -57,33 +54,21 @@ rules:
   - update
   - watch
 - apiGroups:
-  - autoscaling
-  resources:
-  - horizontalpodautoscalers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - persistentvolumes
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
   - apps
   resources:
   - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
   verbs:
   - create
   - delete

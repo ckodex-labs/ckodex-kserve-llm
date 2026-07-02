@@ -136,7 +136,7 @@ func BuildHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters []serv
 						BackendRefs: []gwapiv1.HTTPBackendRef{backendRef},
 						Timeouts:    timeouts,
 					},
-					// vLLM v0.23.0 Rust frontend: metadata endpoints
+					// vLLM v0.24.0 Rust frontend: metadata endpoints
 					{
 						Matches: []gwapiv1.HTTPRouteMatch{
 							{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/version")}},
@@ -151,7 +151,7 @@ func BuildHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters []serv
 						BackendRefs: []gwapiv1.HTTPBackendRef{backendRef},
 						Timeouts:    timeouts,
 					},
-					// vLLM v0.23.0 Responses API (Anthropic Messages-compatible endpoint)
+					// vLLM v0.24.0 Responses API (Anthropic Messages-compatible endpoint)
 					{
 						Matches: []gwapiv1.HTTPRouteMatch{
 							{Path: &gwapiv1.HTTPPathMatch{Type: &pathPrefix, Value: strPtr("/v1/responses")}},

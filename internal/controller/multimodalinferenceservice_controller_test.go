@@ -144,7 +144,7 @@ func TestBuildMultimodalContainer_VLLMDefaults(t *testing.T) {
 	c := r.buildMultimodalContainer(svc)
 
 	assert.Equal(t, multimodalContainerName, c.Name)
-	assert.Equal(t, "vllm/vllm-openai:latest", c.Image)
+	assert.Equal(t, "vllm/vllm-openai:v0.24.0", c.Image)
 	assert.Equal(t, int32(servingv1alpha2.MultimodalServerPort), c.Ports[0].ContainerPort)
 
 	// Model ID must be stripped of hf:// prefix.
@@ -231,7 +231,7 @@ func TestMultimodalEndpointURL(t *testing.T) {
 // TestDefaultMultimodalRuntimeImage verifies correct defaults per runtime.
 func TestDefaultMultimodalRuntimeImage(t *testing.T) {
 	assert.Equal(t,
-		"vllm/vllm-openai:latest",
+		"vllm/vllm-openai:v0.24.0",
 		servingv1alpha2.DefaultMultimodalRuntimeImage(servingv1alpha2.MultimodalRuntimeVLLM),
 	)
 }

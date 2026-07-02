@@ -19,7 +19,7 @@ import (
 
 const (
 	// defaultVLLMImage is the default vLLM container image.
-	defaultVLLMImage = "vllm/vllm-openai:v0.23.0"
+	defaultVLLMImage = "vllm/vllm-openai:v0.24.0"
 )
 
 // WebhookConfig carries runtime policy settings injected at manager startup.

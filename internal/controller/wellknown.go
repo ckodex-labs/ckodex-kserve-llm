@@ -156,7 +156,6 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Args: []string{
 					"--max-model-len", "32768",
 					"--trust-remote-code",
-					"--enable-v2-runner", // MRv2: default for Llama dense in vLLM v0.23.0
 				},
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -177,7 +176,6 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Args: []string{
 					"--max-model-len", "16384",
 					"--trust-remote-code",
-					"--enable-v2-runner",
 				},
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -194,7 +192,6 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Args: []string{
 					"--max-model-len", "32768",
 					"--tokenizer-mode", "mistral",
-					"--enable-v2-runner",
 				},
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -239,7 +236,7 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 		}
 
 	case isQwen3("72B"):
-		// Qwen3-72B dense; MRv2 default in v0.23.0. 4×A100/H100 with TP=4.
+		// Qwen3-72B dense; MRv2 is the v0.24.0 default. 4x A100/H100 with TP=4.
 		tp := int32(4)
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			Parallelism: &servingv1alpha2.ParallelismSpec{Tensor: &tp},
@@ -247,7 +244,6 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Args: []string{
 					"--max-model-len", "32768",
 					"--trust-remote-code",
-					"--enable-v2-runner",
 					"--gpu-memory-utilization", "0.90",
 				},
 				Resources: &corev1.ResourceRequirements{
@@ -261,13 +257,12 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 		}
 
 	case isQwen3("8B") || isQwen3("7B"):
-		// Qwen3-8B/7B dense; single GPU (16 GB VRAM), MRv2 default in v0.23.0.
+		// Qwen3-8B/7B dense; single GPU (16 GB VRAM), MRv2 is the v0.24.0 default.
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
 				Args: []string{
 					"--max-model-len", "32768",
 					"--trust-remote-code",
-					"--enable-v2-runner",
 					"--gpu-memory-utilization", "0.90",
 				},
 				Resources: &corev1.ResourceRequirements{
@@ -364,7 +359,7 @@ func (r *LLMInferenceServiceReconciler) ApplyConfigToSpec(spec *servingv1alpha2.
 					c.Env = append(c.Env, corev1.EnvVar{Name: "VLLM_TURBOQUANT", Value: "true"})
 				}
 			}
-			// Phase 5: Inject --enable-request-id-headers for distributed tracing (vLLM v0.23.0 Rust frontend)
+			// Inject request IDs for the vLLM v0.24.0 Rust frontend.
 			{
 				found := false
 				for _, a := range c.Args {

@@ -196,8 +196,8 @@ spec:
                 properties:
                   checkpointPath:
                     description: |-
-                      CheckpointPath is the path to GPTQ quantization checkpoint files.
-                      Only valid when Method is "gptq".
+                      CheckpointPath is retained for API compatibility. vLLM v0.24.0 loads
+                      GPTQ metadata from the model and does not accept --gptq-ckpt-path.
                     type: string
                   method:
                     description: |-

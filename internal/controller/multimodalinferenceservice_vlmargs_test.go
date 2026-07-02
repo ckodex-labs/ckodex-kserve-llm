@@ -40,8 +40,8 @@ func assertMMNotContainsFlag(t *testing.T, args []string, flag string) {
 	}
 }
 
-// TestMultimodal_ImageInputType_EmitsArg verifies --image-input-type is present.
-func TestMultimodal_ImageInputType_EmitsArg(t *testing.T) {
+// TestMultimodal_LegacyImageInputType_NotEmitted guards vLLM v0.24 compatibility.
+func TestMultimodal_LegacyImageInputType_NotEmitted(t *testing.T) {
 	svc := newMMSvc("vlm-imgtype", "default", func(s *servingv1alpha2.MultimodalInferenceService) {
 		s.Spec.ImageInputType = "pixel_values"
 	})
@@ -50,11 +50,11 @@ func TestMultimodal_ImageInputType_EmitsArg(t *testing.T) {
 	dep := r.buildMultimodalDeployment(svc)
 
 	args := dep.Spec.Template.Spec.Containers[0].Args
-	assertMMArgPair(t, args, "--image-input-type", "pixel_values")
+	assertMMNotContainsFlag(t, args, "--image-input-type")
 }
 
-// TestMultimodal_ImageProcessorModel_EmitsArg verifies --image-processor is present.
-func TestMultimodal_ImageProcessorModel_EmitsArg(t *testing.T) {
+// TestMultimodal_LegacyImageProcessor_NotEmitted guards vLLM v0.24 compatibility.
+func TestMultimodal_LegacyImageProcessor_NotEmitted(t *testing.T) {
 	svc := newMMSvc("vlm-imgproc", "default", func(s *servingv1alpha2.MultimodalInferenceService) {
 		s.Spec.ImageProcessorModel = "openai/clip-vit-large-patch14"
 	})
@@ -63,7 +63,7 @@ func TestMultimodal_ImageProcessorModel_EmitsArg(t *testing.T) {
 	dep := r.buildMultimodalDeployment(svc)
 
 	args := dep.Spec.Template.Spec.Containers[0].Args
-	assertMMArgPair(t, args, "--image-processor", "openai/clip-vit-large-patch14")
+	assertMMNotContainsFlag(t, args, "--image-processor")
 }
 
 // TestMultimodal_Quantization_AWQ_EmitsArg verifies --quantization awq is emitted.

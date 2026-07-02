@@ -92,7 +92,7 @@ type LLMInferenceServiceConfigSpec struct {
 // VLLMDefaultsSpec defines default vLLM container configurations.
 type VLLMDefaultsSpec struct {
 	// Image is the default vLLM container image.
-	// +kubebuilder:default="vllm/vllm-openai:latest"
+	// +kubebuilder:default="vllm/vllm-openai:v0.24.0"
 	// +optional
 	Image string `json:"image,omitempty"`
 

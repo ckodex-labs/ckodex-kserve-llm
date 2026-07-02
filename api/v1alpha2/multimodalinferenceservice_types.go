@@ -49,7 +49,7 @@ const (
 func DefaultMultimodalRuntimeImage(r MultimodalRuntime) string {
 	switch r {
 	case MultimodalRuntimeVLLM:
-		return "vllm/vllm-openai:latest"
+		return "vllm/vllm-openai:v0.24.0"
 	default:
 		return ""
 	}
@@ -115,7 +115,7 @@ type MultimodalInferenceServiceSpec struct {
 	Runtime MultimodalRuntime `json:"runtime,omitempty"`
 
 	// RuntimeImage overrides the default container image for the selected runtime.
-	// When omitted, the operator uses the built-in default (vllm/vllm-openai:latest).
+	// When omitted, the operator uses vllm/vllm-openai:v0.24.0.
 	// +optional
 	RuntimeImage string `json:"runtimeImage,omitempty"`
 

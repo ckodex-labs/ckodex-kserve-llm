@@ -129,6 +129,9 @@ func TestReconcileDeployment_ContainsPoolArgs(t *testing.T) {
 	args := dep.Spec.Template.Spec.Containers[0].Args
 	assert.Contains(t, args, "--pool-name=mistral")
 	assert.Contains(t, args, "--pool-namespace=prod")
+	assert.Contains(t, args, "--grpc-health-port=9003")
+	assert.Contains(t, args, "--secure-serving=false")
+	assert.Equal(t, EPPHealthPort, dep.Spec.Template.Spec.Containers[0].ReadinessProbe.GRPC.Port)
 }
 
 func TestReconcileDeployment_SecurityContextSet(t *testing.T) {

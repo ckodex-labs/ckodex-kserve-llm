@@ -8850,7 +8850,7 @@ spec:
                       Requires a vllm-turboquant compatible image.
                     type: boolean
                   image:
-                    default: vllm/vllm-openai:latest
+                    default: vllm/vllm-openai:v0.24.0
                     description: Image is the default vLLM container image.
                     type: string
                   resources:

@@ -318,12 +318,6 @@ func (r *MultimodalInferenceServiceReconciler) buildMultimodalContainer(
 	switch mmSvc.Spec.Task {
 	case servingv1alpha2.MultimodalTaskVisionLanguage:
 		args = append(args, "--limit-mm-per-prompt", fmt.Sprintf("image=%d", maxImages))
-		if mmSvc.Spec.ImageInputType != "" {
-			args = append(args, "--image-input-type", mmSvc.Spec.ImageInputType)
-		}
-		if mmSvc.Spec.ImageProcessorModel != "" {
-			args = append(args, "--image-processor", mmSvc.Spec.ImageProcessorModel)
-		}
 	case servingv1alpha2.MultimodalTaskTextToSpeech:
 		// LiquidAI Audio models often need trust-remote-code for specialized kernels.
 		if strings.Contains(strings.ToLower(modelID), "liquidai") {
@@ -333,12 +327,9 @@ func (r *MultimodalInferenceServiceReconciler) buildMultimodalContainer(
 		args = append(args, "--enforce-eager")
 	}
 
-	// Weight quantization (vLLM v0.23.0) — GGUF uses quant-cpp, unsupported for VLMs.
+	// Weight quantization (vLLM v0.24.0); GGUF is unsupported for VLMs.
 	if q := mmSvc.Spec.Quantization; q != nil && q.Method != "gguf" {
 		args = append(args, "--quantization", q.Method)
-		if q.Method == "gptq" && q.CheckpointPath != "" {
-			args = append(args, "--gptq-ckpt-path", q.CheckpointPath)
-		}
 	}
 
 	// Inject HF_TOKEN from canonical secret (optional — gated VLMs require it).

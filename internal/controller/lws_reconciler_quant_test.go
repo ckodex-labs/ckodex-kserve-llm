@@ -73,8 +73,8 @@ func TestLWSReconciler_Quantization_AWQ_PropagatedToArgs(t *testing.T) {
 	assertLWSArgPair(t, args, "--quantization", "awq")
 }
 
-// TestLWSReconciler_Quantization_GPTQ_WithPath_PropagatedToArgs verifies that
-// GPTQ + checkpoint path both appear in the multi-node vLLM args.
+// TestLWSReconciler_Quantization_GPTQ_IgnoresLegacyPath verifies vLLM v0.24
+// receives the quantization method without its removed checkpoint-path flag.
 func TestLWSReconciler_Quantization_GPTQ_WithPath_PropagatedToArgs(t *testing.T) {
 	r := &Reconciler{}
 	svc := baseLWSLLMSvc("lws-gptq")
@@ -85,7 +85,29 @@ func TestLWSReconciler_Quantization_GPTQ_WithPath_PropagatedToArgs(t *testing.T)
 
 	args := r.buildVLLMArgs(svc)
 	assertLWSArgPair(t, args, "--quantization", "gptq")
-	assertLWSArgPair(t, args, "--gptq-ckpt-path", "/mnt/gptq")
+	assertLWSNotContainsFlag(t, args, "--gptq-ckpt-path")
+}
+
+func TestLWSReconciler_VLLM024Flags(t *testing.T) {
+	r := &Reconciler{}
+	tokens := int32(4)
+	offload := int32(8)
+	svc := baseLWSLLMSvc("lws-vllm-024")
+	svc.Spec.SpeculativeDecoding = &servingv1alpha2.SpeculativeDecodingSpec{
+		Method:     "eagle",
+		NumTokens:  &tokens,
+		DraftModel: "hf://example/drafter",
+	}
+	svc.Spec.KVCache = &servingv1alpha2.KVCacheSpec{SwapSpaceGB: &offload}
+
+	args := r.buildVLLMArgs(svc)
+	assertLWSArgPair(t, args, "--spec-method", "eagle")
+	assertLWSArgPair(t, args, "--spec-tokens", "4")
+	assertLWSArgPair(t, args, "--spec-model", "hf://example/drafter")
+	assertLWSArgPair(t, args, "--cpu-offload-gb", "8")
+	assertLWSNotContainsFlag(t, args, "--num-speculative-tokens")
+	assertLWSNotContainsFlag(t, args, "--speculative-model")
+	assertLWSNotContainsFlag(t, args, "--swap-space")
 }
 
 // TestLWSReconciler_Quantization_GGUF_NotPropagatedToArgs verifies that GGUF

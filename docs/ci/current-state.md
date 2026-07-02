@@ -32,7 +32,7 @@ Checkout
 → Detect console (skipped: gitlink without .gitmodules)
 → Setup Helm
 → Install GoReleaser v2.15.4
-→ Pre-pull Dagger engine v0.21.4
+→ Pre-pull Dagger engine v0.21.7
 → Run CI Pipeline (dagger call all --source=. ; lint + non-release compile check)
    ├── lint (golangci-lint v2.4.0 fast-only)
    └── build-check (operator compile check, linux/amd64)
@@ -47,7 +47,7 @@ Checkout
 Tag push (v*)
 → verify (lint + go test ./... + make release-readiness)
 → image-release
-   ├── Install Dagger CLI v0.21.4
+   ├── Install Dagger CLI v0.21.7
    ├── Install Cosign v3.0.4
    ├── Log in to GHCR
    ├── Generate Dagger SDK (dagger develop)
@@ -69,7 +69,7 @@ Tag push (v*)
 |------|---------|--------|
 | Go | `go.mod` (1.25.0) | go.mod |
 | Dagger SDK | v0.20.2 | go.mod |
-| Dagger CLI | v0.21.4 | installed |
+| Dagger CLI | v0.21.7 | installed |
 | golangci-lint | v2.4.0 | `ci/pkg/core.go` |
 | Trivy | 0.69.3 | `ci/pkg/core.go` |
 | Syft | v1.42.4 | `ci/pkg/core.go` |

@@ -385,19 +385,23 @@ func TestLLMLoraAdapter_TargetServiceMissing(t *testing.T) {
 func TestRegisterWithTargetService_Success(t *testing.T) {
 	s := buildLoraScheme(t)
 
-	// Mock server to receive vLLM requests.
-	called := 0
+	// Mock server handles both the synchronous load and asynchronous warmup.
+	loadRequests := make(chan VLLMLoadLoraRequest, 2)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called++
-		assert.Equal(t, "POST", r.Method)
-		assert.Equal(t, "/v1/load_lora_adapter", r.URL.Path)
-
-		var body VLLMLoadLoraRequest
-		err := json.NewDecoder(r.Body).Decode(&body)
-		assert.NoError(t, err)
-		assert.Equal(t, "sql-helper", body.LoraName)
-
-		w.WriteHeader(http.StatusOK)
+		switch r.URL.Path {
+		case "/v1/load_lora_adapter":
+			var body VLLMLoadLoraRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			loadRequests <- body
+			w.WriteHeader(http.StatusOK)
+		case "/v1/completions":
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 
@@ -437,7 +441,14 @@ func TestRegisterWithTargetService_Success(t *testing.T) {
 
 	err := r.registerWithTargetService(context.Background(), lora, svc)
 	require.NoError(t, err)
-	assert.Equal(t, 1, called, "Should have called vLLM API once")
+
+	select {
+	case body := <-loadRequests:
+		assert.Equal(t, "sql-helper", body.LoraName)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for vLLM adapter-load request")
+	}
+	assert.Empty(t, loadRequests, "vLLM adapter-load API should be called once")
 }
 
 // TestRegisterWithTargetService_NoPods verifies error when no pods match.

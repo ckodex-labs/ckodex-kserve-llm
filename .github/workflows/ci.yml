@@ -75,7 +75,9 @@ jobs:
 
       - name: Run CI Pipeline (lint + compile)
         uses: dagger/dagger-for-github@v8.4.0
-        timeout-minutes: 5
+        # Dagger enforces its own five-minute function deadline. This extra
+        # minute covers action installation, session startup, and teardown.
+        timeout-minutes: 6
         env:
           DAGGER_NO_NAG: "1"
         with:

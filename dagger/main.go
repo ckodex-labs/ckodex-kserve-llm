@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"dagger/ckodex-operator/internal/dagger"
 	"golang.org/x/sync/errgroup"
@@ -335,7 +336,10 @@ func (m *CkodexOperator) All(
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
-	g, groupCtx := errgroup.WithContext(ctx)
+	deadlineCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	g, groupCtx := errgroup.WithContext(deadlineCtx)
 	g.Go(func() error {
 		if _, err := m.Lint(groupCtx, source); err != nil {
 			return fmt.Errorf("lint: %w", err)

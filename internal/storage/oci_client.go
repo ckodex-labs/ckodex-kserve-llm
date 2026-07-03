@@ -84,7 +84,7 @@ func (c *OCIClient) pullInternal(ctx context.Context, artifact *ModelArtifact, d
 	}
 
 	// Create an OCI file store as the local target.
-	fs, err := file.New(destPath)
+	fs, err := newOCIFileStore(destPath)
 	if err != nil {
 		return fmt.Errorf("failed to create file store at %s: %w", destPath, err)
 	}
@@ -104,6 +104,18 @@ func (c *OCIClient) pullInternal(ctx context.Context, artifact *ModelArtifact, d
 	c.logPulledLayers(destPath)
 
 	return nil
+}
+
+func newOCIFileStore(destPath string) (*file.Store, error) {
+	fs, err := file.New(destPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Auto-unpack reaches ORAS's tar extraction path. Keep registry-controlled
+	// archives opaque until oras-go/v2 ships a fix for GHSA-fxhp-mv3v-67qp.
+	fs.SkipUnpack = true
+	return fs, nil
 }
 
 // resolveCredentials returns auth credentials for the given registry host.

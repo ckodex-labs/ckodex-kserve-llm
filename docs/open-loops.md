@@ -132,6 +132,19 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
   as `sbom/sbom.cdx.json` artifact (90-day retention). Runs after `dagger call publish`
   and `cosign sign`. Depends on L-CI-001 (now done).
 
+### L-SC-003 — Upgrade ORAS after a patched v2 release
+
+- **Status:** blocked
+- **Priority:** P1
+- **Context:** `GHSA-fxhp-mv3v-67qp` affects `oras-go/v2 <= 2.6.1` and had no
+  patched v2 release when checked on 2026-07-01. OCI pulls set
+  `file.Store.SkipUnpack = true`, preventing registry-controlled archives from
+  reaching the vulnerable automatic tar extraction path. Upgrade and remove
+  the containment only after a compatible patched v2 version is published.
+- **Reference:** `internal/storage/oci_client.go`,
+  `internal/storage/storage_extra_test.go`,
+  `https://github.com/oras-project/oras-go/security/advisories/GHSA-fxhp-mv3v-67qp`
+
 ---
 
 ## Documentation

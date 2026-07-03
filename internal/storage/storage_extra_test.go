@@ -1213,6 +1213,14 @@ func TestOCIClient_PullInternal_EmptyRef_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "no OCI reference configured")
 }
 
+func TestNewOCIFileStore_DisablesAutomaticUnpack(t *testing.T) {
+	store, err := newOCIFileStore(t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+
+	assert.True(t, store.SkipUnpack, "automatic archive unpacking must remain disabled")
+}
+
 func TestOCIClient_Push_EmptyRef_Error(t *testing.T) {
 	c := &OCIClient{}
 	err := c.Push(context.Background(), &ModelArtifact{Reference: ""}, t.TempDir())

@@ -7,14 +7,14 @@ import (
 
 // Pinned base image digests — never use floating tags for reproducible builds.
 const (
-	GoBuilderImage  = "golang:1.25-bookworm"
+	GoBuilderImage  = "golang:1.26.4-bookworm"
 	DistrolessImage = "gcr.io/distroless/static:nonroot"
 
-	GoVersion         = "1.25"
-	GolangciLintVer   = "v2.4.0"
-	SyftVersion       = "v1.42.4"
-	CosignVersion     = "v3.0.4"
-	TrivyVersion      = "0.69.3"
+	GoVersion         = "1.26.4"
+	GolangciLintVer   = "v2.12.2"
+	SyftVersion       = "v1.46.0"
+	CosignVersion     = "v3.1.1"
+	TrivyVersion      = "0.72.0"
 	LulaVersion       = "v0.16.0"
 	LulaReleaseBase   = "https://github.com/defenseunicorns-labs/lula1/releases/download/" + LulaVersion
 	LulaBinaryName    = "lula_" + LulaVersion + "_Linux_amd64"

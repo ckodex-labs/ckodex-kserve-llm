@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	goBuilderImage    = "golang:1.25-bookworm"
-	golangciLintImage = "golangci/golangci-lint:v2.4.0"
-	trivyVersion      = "0.69.3"
-	cosignVersion     = "v3.0.4"
+	goBuilderImage    = "golang:1.26.4-bookworm"
+	golangciLintImage = "golangci/golangci-lint:v2.12.2"
+	trivyVersion      = "0.72.0"
+	cosignVersion     = "v3.1.1"
 	distrolessImage   = "gcr.io/distroless/static:nonroot"
 
 	// Coverage thresholds — mirror ci/pkg/core constants.

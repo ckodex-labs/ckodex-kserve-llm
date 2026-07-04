@@ -1,6 +1,6 @@
 # CI/CD Current State — ckodex-kserve-llm-operator
 
-Last updated: 2026-06-13
+Last updated: 2026-07-04
 
 ---
 
@@ -10,8 +10,8 @@ The CI/CD pipeline has two layers:
 
 | Layer | Entry | Pattern | Status |
 |-------|-------|---------|--------|
-| Standalone (current GHA) | `go run ./ci/main.go` | Dagger standalone SDK (`dagger.Connect`) | Active |
-| Module (dagger call) | `dagger call <func>` | Dagger Module SDK (`dag` global) | Added (ADR-008) |
+| Dagger module (current GHA) | `dagger call <func>` | Generated Dagger Module SDK (`dag` global) | Active |
+| Standalone | `go run ./ci/main.go` | Dagger standalone SDK (`dagger.Connect`) | Legacy debugging only |
 
 ---
 
@@ -34,7 +34,7 @@ Checkout
 → Install GoReleaser v2.15.4
 → Pre-pull Dagger engine v0.21.7
 → Run CI Pipeline (dagger call all --source=. ; lint + non-release compile check)
-   ├── lint (golangci-lint v2.4.0 fast-only)
+   ├── lint (golangci-lint v2.12.2 fast-only)
    └── build-check (operator compile check, linux/amd64)
 → Run vulnerability scan (dagger call scan --source=. ; full image rootfs + Trivy)
 → Rehearse release (make release-readiness → bin/release-readiness.json)
@@ -48,7 +48,7 @@ Tag push (v*)
 → verify (lint + go test ./... + make release-readiness)
 → image-release
    ├── Install Dagger CLI v0.21.7
-   ├── Install Cosign v3.0.4
+   ├── Install Cosign v3.1.1
    ├── Log in to GHCR
    ├── Generate Dagger SDK (dagger develop)
    ├── Build, scan, and publish image (dagger call publish → digest)
@@ -67,13 +67,13 @@ Tag push (v*)
 
 | Tool | Version | Source |
 |------|---------|--------|
-| Go | `go.mod` (1.25.0) | go.mod |
-| Dagger SDK | v0.20.2 | go.mod |
+| Go | `go.mod` (1.26.4) | go.mod |
+| Dagger standalone SDK | v0.21.7 | go.mod |
 | Dagger CLI | v0.21.7 | installed |
-| golangci-lint | v2.4.0 | `ci/pkg/core.go` |
-| Trivy | 0.69.3 | `ci/pkg/core.go` |
-| Syft | v1.42.4 | `ci/pkg/core.go` |
-| Cosign | v3.0.4 | `ci/pkg/core.go` |
+| golangci-lint | v2.12.2 | `ci/pkg/core.go` |
+| Trivy | 0.72.0 | `ci/pkg/core.go` |
+| Syft | v1.46.0 | `ci/pkg/core.go` |
+| Cosign | v3.1.1 | `ci/pkg/core.go` |
 | Lula | v0.16.0 | `ci/pkg/core.go` |
 | GoReleaser | v2.15.4 | `.github/workflows/ci.yml:53` |
 | Helm | latest (azure/setup-helm@v4) | workflows |

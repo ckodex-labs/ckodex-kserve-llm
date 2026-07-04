@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25-bookworm AS builder
+FROM golang:1.26.4-bookworm AS builder
 
 ARG TARGETOS=linux
 ARG TARGETARCH
@@ -24,7 +24,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w" -o storage-initializer cmd/storage-initializer/main.go
 
-FROM gcr.io/projectsigstore/cosign:v3.0.4 AS cosign
+FROM gcr.io/projectsigstore/cosign:v3.1.1 AS cosign
 
 # Runtime stage — distroless for minimal attack surface
 FROM gcr.io/distroless/static:nonroot AS manager

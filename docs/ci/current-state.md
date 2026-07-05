@@ -6,12 +6,11 @@ Last updated: 2026-07-04
 
 ## Pipeline Overview
 
-The CI/CD pipeline has two layers:
+The CI/CD pipeline has one implementation:
 
 | Layer | Entry | Pattern | Status |
 |-------|-------|---------|--------|
 | Dagger module (current GHA) | `dagger call <func>` | Generated Dagger Module SDK (`dag` global) | Active |
-| Standalone | `go run ./ci/main.go` | Dagger standalone SDK (`dagger.Connect`) | Legacy debugging only |
 
 ---
 
@@ -68,13 +67,11 @@ Tag push (v*)
 | Tool | Version | Source |
 |------|---------|--------|
 | Go | `go.mod` (1.26.4) | go.mod |
-| Dagger standalone SDK | v0.21.7 | go.mod |
 | Dagger CLI | v0.21.7 | installed |
-| golangci-lint | v2.12.2 | `ci/pkg/core.go` |
-| Trivy | 0.72.0 | `ci/pkg/core.go` |
-| Syft | v1.46.0 | `ci/pkg/core.go` |
-| Cosign | v3.1.1 | `ci/pkg/core.go` |
-| Lula | v0.16.0 | `ci/pkg/core.go` |
+| golangci-lint | v2.12.2 | `dagger/main.go` |
+| Trivy | 0.72.0 | `dagger/main.go` |
+| Cosign | v3.1.1 | `dagger/main.go` |
+| Lula | v0.16.0 | `dagger/main.go` |
 | GoReleaser | v2.15.4 | `.github/workflows/ci.yml:53` |
 | Helm | latest (azure/setup-helm@v4) | workflows |
 
@@ -130,20 +127,11 @@ CI (linux/amd64) has always been clean.
 
 See `docs/open-loops.md` for tracked deferrals. All CI/supply-chain loops are closed.
 
-Next: **L-CI-002** (P3) — retire `ci/main.go` after one stable release cycle.
-
-Done (2026-06-13/14): L-CI-001, L-CI-003, L-CI-004, L-SC-001, L-SC-002, L-OP-001..004
+Done: L-CI-001..004, L-SC-001..002, L-OP-001..005.
 
 ---
 
 ## Architecture Reference
 
-- `ci/main.go` — standalone pipeline entrypoint (flags → Dagger stages)
-- `ci/pkg/core/core.go` — Pipeline struct, base containers, tool version constants
-- `ci/pkg/lint/lint.go` — go vet + golangci-lint
-- `ci/pkg/test/test.go` — go test + coverage gate
-- `ci/pkg/build/build.go` — multi-arch image build + export/publish
-- `ci/pkg/security/security.go` — Trivy scan + Lula OSCAL
-- `ci/pkg/supplychain/supplychain.go` — SBOM, sign (cosign), attest, verify
 - `dagger/main.go` — Dagger Module functions (ADR-008)
 - `dagger.json` — Dagger Module manifest

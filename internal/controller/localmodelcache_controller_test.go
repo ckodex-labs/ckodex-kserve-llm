@@ -47,6 +47,14 @@ func makeLocalModelCache(name string) *servingv1alpha2.LocalModelCache {
 	}
 }
 
+func TestCacheWorkloadNamespace(t *testing.T) {
+	lmc := makeLocalModelCache("my-cache")
+	assert.Equal(t, defaultCacheNamespace, cacheWorkloadNamespace(lmc))
+
+	lmc.Annotations = map[string]string{cacheWorkloadNamespaceAnnotation: "tenant-a"}
+	assert.Equal(t, "tenant-a", cacheWorkloadNamespace(lmc))
+}
+
 // ---- Unit Tests (Hashing & Naming) -------------------------------------------
 
 func TestModelURIHash_Deterministic(t *testing.T) {

@@ -21,11 +21,13 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -98,7 +100,49 @@ func TestLLMLoraAdapter_CreatesLocalModelCache(t *testing.T) {
 	var lmcList servingv1alpha2.LocalModelCacheList
 	require.NoError(t, cl.List(context.Background(), &lmcList))
 	require.Len(t, lmcList.Items, 1)
-	assert.Equal(t, "lora-my-lora", lmcList.Items[0].Name)
+	cache := lmcList.Items[0]
+	assert.Equal(t, loraCacheName("default", "my-lora"), cache.Name)
+	assert.Empty(t, cache.Namespace)
+	assert.Empty(t, cache.OwnerReferences)
+	assert.Equal(t, "default", cache.Annotations[loraCacheOwnerNamespace])
+	assert.Equal(t, "my-lora", cache.Annotations[loraCacheOwnerName])
+	assert.Equal(t, "lora-uid", cache.Annotations[loraCacheOwnerUID])
+	assert.Equal(t, "default", cache.Annotations[cacheWorkloadNamespaceAnnotation])
+}
+
+func TestLLMLoraAdapter_DeletionRemovesClusterCache(t *testing.T) {
+	s := buildLoraScheme(t)
+	now := metav1.Now()
+	lora := &servingv1alpha2.LLMLoraAdapter{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "my-lora",
+			Namespace:         "tenant-a",
+			UID:               k8stypes.UID("lora-uid"),
+			Finalizers:        []string{loraFinalizer},
+			DeletionTimestamp: &now,
+		},
+		Spec: servingv1alpha2.LLMLoraAdapterSpec{
+			TargetService: "missing",
+			Model:         servingv1alpha2.ModelSpec{URI: "hf://org/lora-weights"},
+		},
+	}
+	cache := newLoraCache(lora)
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(lora, cache).Build()
+	r := &LLMLoraAdapterReconciler{Client: cl, Scheme: s, Recorder: record.NewFakeRecorder(10)}
+
+	_, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: k8stypes.NamespacedName{Name: lora.Name, Namespace: lora.Namespace},
+	})
+	require.NoError(t, err)
+
+	var deletedCache servingv1alpha2.LocalModelCache
+	err = cl.Get(context.Background(), client.ObjectKey{Name: cache.Name}, &deletedCache)
+	assert.True(t, apierrors.IsNotFound(err), "cluster cache must be deleted before finalizer removal")
+}
+
+func TestLoraCacheNameSeparatesNamespaces(t *testing.T) {
+	assert.NotEqual(t, loraCacheName("tenant-a", "adapter"), loraCacheName("tenant-b", "adapter"))
+	assert.Len(t, loraCacheName("tenant-a", "adapter"), 25)
 }
 
 // TestLLMLoraAdapter_WaitsForCache when cache is not yet ready.
@@ -121,15 +165,7 @@ func TestLLMLoraAdapter_WaitsForCache(t *testing.T) {
 	}
 
 	// Pre-create cache that's not ready (no conditions).
-	cache := &servingv1alpha2.LocalModelCache{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "lora-my-lora",
-			Namespace: "default",
-		},
-		Spec: servingv1alpha2.LocalModelCacheSpec{
-			SourceModelURI: "hf://org/lora-weights",
-		},
-	}
+	cache := newLoraCache(lora)
 
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
@@ -180,18 +216,10 @@ func TestLLMLoraAdapter_TargetServiceNotReady(t *testing.T) {
 	}
 
 	// Cache is ready.
-	cache := &servingv1alpha2.LocalModelCache{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "lora-my-lora",
-			Namespace: "default",
-		},
-		Spec: servingv1alpha2.LocalModelCacheSpec{
-			SourceModelURI: "hf://org/lora-weights",
-		},
-		Status: servingv1alpha2.LocalModelCacheStatus{
-			Conditions: []metav1.Condition{
-				{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: "Downloaded", LastTransitionTime: metav1.Now()},
-			},
+	cache := newLoraCache(lora)
+	cache.Status = servingv1alpha2.LocalModelCacheStatus{
+		Conditions: []metav1.Condition{
+			{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: "Downloaded", LastTransitionTime: metav1.Now()},
 		},
 	}
 
@@ -259,21 +287,16 @@ func TestLLMLoraAdapter_HydratesVerifiedEvidenceFromWarmupPod(t *testing.T) {
 		},
 	}
 
-	cache := &servingv1alpha2.LocalModelCache{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "lora-verified-lora",
-			Namespace: "default",
+	cache := newLoraCache(lora)
+	cache.Status = servingv1alpha2.LocalModelCacheStatus{
+		Conditions: []metav1.Condition{
+			{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: "Downloaded", LastTransitionTime: metav1.Now()},
 		},
-		Status: servingv1alpha2.LocalModelCacheStatus{
-			Conditions: []metav1.Condition{
-				{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: "Downloaded", LastTransitionTime: metav1.Now()},
-			},
-			NodeStatuses: []servingv1alpha2.NodeCacheStatus{
-				{
-					NodeName:     "node-a",
-					Phase:        "Ready",
-					ModelURIHash: modelHash,
-				},
+		NodeStatuses: []servingv1alpha2.NodeCacheStatus{
+			{
+				NodeName:     "node-a",
+				Phase:        "Ready",
+				ModelURIHash: modelHash,
 			},
 		},
 	}
@@ -350,15 +373,10 @@ func TestLLMLoraAdapter_TargetServiceMissing(t *testing.T) {
 	}
 
 	// Cache is ready.
-	cache := &servingv1alpha2.LocalModelCache{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "lora-my-lora",
-			Namespace: "default",
-		},
-		Status: servingv1alpha2.LocalModelCacheStatus{
-			Conditions: []metav1.Condition{
-				{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: "Downloaded", LastTransitionTime: metav1.Now()},
-			},
+	cache := newLoraCache(lora)
+	cache.Status = servingv1alpha2.LocalModelCacheStatus{
+		Conditions: []metav1.Condition{
+			{Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionTrue, Reason: "Downloaded", LastTransitionTime: metav1.Now()},
 		},
 	}
 

@@ -22,12 +22,12 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-CI-002 — Retire `ci/main.go` standalone path
 
-- **Status:** deferred
+- **Status:** done
 - **Priority:** P3
-- **Context:** After L-CI-001 lands, the `ci/main.go` standalone path becomes
-  redundant. Keep it for one full release cycle to confirm no regressions, then
-  remove `ci/main.go` + `ci/pkg/`.
-- **Blockers:** Depends on L-CI-001 being done and stable.
+- **Context:** Removed `ci/main.go`, `ci/pkg/`, and the root standalone Dagger
+  SDK dependency on 2026-07-04. The typed Dagger Module is now the only CI
+  implementation, eliminating duplicate tool pins and policy logic.
+- **Reference:** `dagger/main.go`, `dagger.json`, ADR-008
 
 ### L-CI-003 — Add `dagger call lula` for OSCAL validation
 
@@ -35,17 +35,15 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Priority:** P2
 - **Context:** `dagger/main.go:Lula` added (2026-06-13). Downloads binary,
   verifies checksum via sha256sum, runs `lula validate`, returns assessment file.
-  Mirrors `ci/pkg/security.Lula()` exactly.
-- **Reference:** `dagger/main.go:223`, `ci/pkg/security/security.go:33`
+- **Reference:** `dagger/main.go`
 
 ### L-CI-004 — Coverage gate in module `Test` function
 
 - **Status:** done
 - **Priority:** P1
 - **Context:** `coverageGateScript()` added to `dagger/main.go` (2026-06-13).
-  Enforces the same per-package thresholds as `ci/pkg/test/test.go`.
-  Both files use the same constants (27% controller, 80% others).
-- **Reference:** `dagger/main.go:85`, `ci/pkg/test/test.go:23`
+  Enforces the package thresholds directly (27% controller, 80% others).
+- **Reference:** `dagger/main.go`
 
 ---
 
@@ -53,13 +51,13 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-OP-005 — Align LoRA cache ownership with cluster-scoped LocalModelCache
 
-- **Status:** open
+- **Status:** done
 - **Priority:** P1
-- **Context:** `LocalModelCache` is cluster-scoped, but
-  `LLMLoraAdapterReconciler` constructs the generated cache with the adapter
-  namespace and a namespaced adapter owner reference. Confirm the intended
-  lifecycle contract and replace it with a valid cluster-scoped ownership and
-  cleanup mechanism.
+- **Context:** LoRA caches now use collision-resistant cluster names and
+  explicit owner annotations instead of invalid namespaced owner references.
+  The adapter finalizer deletes its cache before completing deletion, cache
+  events map back through owner annotations, and the workload namespace is
+  shared by PVC/Job creation and evidence lookup.
 - **Reference:** `internal/controller/llmloraadapter_controller.go`,
   `api/v1alpha2/localmodelcache_types.go`
 
@@ -134,13 +132,14 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-SC-003 — Upgrade ORAS after a patched v2 release
 
-- **Status:** blocked
+- **Status:** done
 - **Priority:** P1
-- **Context:** `GHSA-fxhp-mv3v-67qp` affects `oras-go/v2 <= 2.6.1` and had no
-  patched v2 release when checked on 2026-07-01. OCI pulls set
-  `file.Store.SkipUnpack = true`, preventing registry-controlled archives from
-  reaching the vulnerable automatic tar extraction path. Upgrade and remove
-  the containment only after a compatible patched v2 version is published.
+- **Context:** `GHSA-fxhp-mv3v-67qp` affects the current `oras-go/v2` line and
+  has no published patched release as of 2026-07-04. OCI pulls set
+  `file.Store.SkipUnpack = true`, so registry-controlled archives cannot reach
+  the vulnerable automatic tar extraction path. A module-file test binds this
+  containment to `v2.6.1`; changing the dependency fails CI until the security
+  posture is reviewed.
 - **Reference:** `internal/storage/oci_client.go`,
   `internal/storage/storage_extra_test.go`,
   `https://github.com/oras-project/oras-go/security/advisories/GHSA-fxhp-mv3v-67qp`

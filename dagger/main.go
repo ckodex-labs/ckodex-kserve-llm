@@ -21,7 +21,7 @@ const (
 	cosignVersion     = "v3.1.1"
 	distrolessImage   = "gcr.io/distroless/static:nonroot"
 
-	// Coverage thresholds — mirror ci/pkg/core constants.
+	// Coverage thresholds enforced by the Dagger test gate.
 	coverageController = 27 // envtest required for full coverage; see ADR-008
 	coverageGateway    = 80
 	coverageStorage    = 80
@@ -83,7 +83,7 @@ func (m *CkodexOperator) Test(
 }
 
 // coverageGateScript returns the shell script that enforces per-package coverage
-// thresholds from coverage.out. Mirrors ci/pkg/test/test.go:coverageGateScript.
+// thresholds from coverage.out.
 func coverageGateScript() string {
 	return fmt.Sprintf(`
 set -e

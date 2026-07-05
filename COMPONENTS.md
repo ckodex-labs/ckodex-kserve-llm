@@ -60,7 +60,7 @@ Zero-trust infrastructure injected into every governed workload.
 - hf-csi `v0.11.1` fixes termination-grace propagation and a CI workflow
   vulnerability. The chart version is pinned in the local installer.
 - KServe `v0.19.0`, Gateway API `v1.6.0`, SPIRE `v1.15.1`, SPIFFE Helper
-  `v0.11.0`, Gatekeeper `v3.22.2`, Istio `1.30.2`, Trivy `v0.72.0`, Syft
-  `v1.46.0`, Cosign `v3.1.1`, Dagger `v0.21.7`, and Go `v1.26.4` were
+  `v0.11.0`, Gatekeeper `v3.22.2`, Istio `1.30.2`, Trivy `v0.72.0`,
+  Cosign `v3.1.1`, Dagger `v0.21.7`, and Go `v1.26.4` were
   checked on 2026-07-04. The CI, release, and image-build pins use these
   versions.

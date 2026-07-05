@@ -56,7 +56,12 @@ type LLMLoraAdapterReconciler struct {
 }
 
 const (
-// ModelMountPath is now imported from constants.go inside the same package.
+	loraFinalizer             = "serving.ckodex.com/lora-finalizer"
+	loraCacheManagedByLabel   = "serving.ckodex.com/managed-by"
+	loraCacheOwnerNamespace   = "serving.ckodex.com/owner-namespace"
+	loraCacheOwnerName        = "serving.ckodex.com/owner-name"
+	loraCacheOwnerUID         = "serving.ckodex.com/owner-uid"
+	loraCacheManagedByAdapter = "llmloraadapter"
 )
 
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=llmloraadapters,verbs=get;list;watch;create;update;patch;delete
@@ -79,6 +84,10 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 	originalLora := lora.DeepCopy()
 
+	if lora.DeletionTimestamp != nil {
+		return r.finalizeLora(ctx, &lora, originalLora)
+	}
+
 	// 0. Governed Unit: Initialization of State Planes
 	if lora.Status.StatePlanes.Lifecycle == "" {
 		lora.Status.StatePlanes.Lifecycle = "proposed"
@@ -99,22 +108,6 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		observability.QuarantineIncidents.WithLabelValues(lora.Name, "manual_quarantine").Inc()
 		observability.GovernanceState.WithLabelValues("quarantined", lora.Status.StatePlanes.Trust).Set(1)
 
-		return ctrl.Result{}, nil
-	}
-
-	// 0. Handle Deletion
-	const loraFinalizer = "serving.ckodex.com/lora-finalizer"
-	if lora.DeletionTimestamp != nil {
-		if containsString(lora.Finalizers, loraFinalizer) {
-			logger.Info("Deleting LoRA adapter, triggering unload", "Adapter", lora.Name)
-			if err := r.unloadFromTargetService(ctx, &lora); err != nil {
-				logger.Error(err, "Failed to unload LoRA from target service")
-			}
-			lora.Finalizers = removeString(lora.Finalizers, loraFinalizer)
-			if err := r.Patch(ctx, &lora, client.MergeFrom(originalLora)); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
 		return ctrl.Result{}, nil
 	}
 
@@ -149,22 +142,11 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// 1. Create or ensure LocalModelCache for the LoRA
-	cacheName := fmt.Sprintf("lora-%s", lora.Name)
-	expectedCache := &servingv1alpha2.LocalModelCache{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cacheName,
-			Namespace: lora.Namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(&lora, servingv1alpha2.SchemeGroupVersion.WithKind("LLMLoraAdapter")),
-			},
-		},
-		Spec: servingv1alpha2.LocalModelCacheSpec{
-			SourceModelURI: lora.Spec.Model.URI,
-		},
-	}
+	expectedCache := newLoraCache(&lora)
+	cacheName := expectedCache.Name
 
 	var existingCache servingv1alpha2.LocalModelCache
-	err := r.Get(ctx, client.ObjectKey{Name: cacheName, Namespace: lora.Namespace}, &existingCache)
+	err := r.Get(ctx, client.ObjectKey{Name: cacheName}, &existingCache)
 	if err != nil && apierrors.IsNotFound(err) {
 		logger.Info("Creating LocalModelCache for LoRA adapter", "Name", cacheName)
 		if err := r.Create(ctx, expectedCache); err != nil {
@@ -172,6 +154,9 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	} else if err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := validateLoraCacheOwner(&existingCache, &lora); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -264,6 +249,77 @@ func (r *LLMLoraAdapterReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	return ctrl.Result{}, nil
 }
 
+func (r *LLMLoraAdapterReconciler) finalizeLora(
+	ctx context.Context,
+	lora *servingv1alpha2.LLMLoraAdapter,
+	original *servingv1alpha2.LLMLoraAdapter,
+) (ctrl.Result, error) {
+	if !containsString(lora.Finalizers, loraFinalizer) {
+		return ctrl.Result{}, nil
+	}
+	if err := r.unloadFromTargetService(ctx, lora); err != nil {
+		return ctrl.Result{}, fmt.Errorf("unload LoRA adapter: %w", err)
+	}
+	if err := r.deleteLoraCache(ctx, lora); err != nil {
+		return ctrl.Result{}, fmt.Errorf("delete LoRA cache: %w", err)
+	}
+	lora.Finalizers = removeString(lora.Finalizers, loraFinalizer)
+	if err := r.Patch(ctx, lora, client.MergeFrom(original)); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func newLoraCache(lora *servingv1alpha2.LLMLoraAdapter) *servingv1alpha2.LocalModelCache {
+	return &servingv1alpha2.LocalModelCache{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: loraCacheName(lora.Namespace, lora.Name),
+			Labels: map[string]string{
+				loraCacheManagedByLabel: loraCacheManagedByAdapter,
+			},
+			Annotations: map[string]string{
+				loraCacheOwnerNamespace:          lora.Namespace,
+				loraCacheOwnerName:               lora.Name,
+				loraCacheOwnerUID:                string(lora.UID),
+				cacheWorkloadNamespaceAnnotation: lora.Namespace,
+			},
+		},
+		Spec: servingv1alpha2.LocalModelCacheSpec{SourceModelURI: lora.Spec.Model.URI},
+	}
+}
+
+func loraCacheName(namespace, name string) string {
+	sum := sha256.Sum256([]byte(namespace + "/" + name))
+	return fmt.Sprintf("lora-%x", sum[:10])
+}
+
+func validateLoraCacheOwner(cache *servingv1alpha2.LocalModelCache, lora *servingv1alpha2.LLMLoraAdapter) error {
+	if cache.Labels[loraCacheManagedByLabel] != loraCacheManagedByAdapter ||
+		cache.Annotations[loraCacheOwnerNamespace] != lora.Namespace ||
+		cache.Annotations[loraCacheOwnerName] != lora.Name ||
+		cache.Annotations[loraCacheOwnerUID] != string(lora.UID) {
+		return fmt.Errorf("LocalModelCache %s is not owned by LLMLoraAdapter %s/%s", cache.Name, lora.Namespace, lora.Name)
+	}
+	if cache.Spec.SourceModelURI != lora.Spec.Model.URI {
+		return fmt.Errorf("LocalModelCache %s source URI does not match LLMLoraAdapter", cache.Name)
+	}
+	return nil
+}
+
+func (r *LLMLoraAdapterReconciler) deleteLoraCache(ctx context.Context, lora *servingv1alpha2.LLMLoraAdapter) error {
+	var cache servingv1alpha2.LocalModelCache
+	if err := r.Get(ctx, client.ObjectKey{Name: loraCacheName(lora.Namespace, lora.Name)}, &cache); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if err := validateLoraCacheOwner(&cache, lora); err != nil {
+		return err
+	}
+	return client.IgnoreNotFound(r.Delete(ctx, &cache))
+}
+
 func (r *LLMLoraAdapterReconciler) hydrateVerificationEvidence(ctx context.Context, lora *servingv1alpha2.LLMLoraAdapter, cache *servingv1alpha2.LocalModelCache) (bool, error) {
 	if !storage.HasOCIScheme(lora.Spec.Model.URI) {
 		return false, nil
@@ -280,7 +336,7 @@ func (r *LLMLoraAdapterReconciler) hydrateVerificationEvidence(ctx context.Conte
 		}
 		jobName := fmt.Sprintf("%s-%s-%s", warmupJobPrefix, nodeStatus.ModelURIHash,
 			fmt.Sprintf("%x", sha256.Sum256([]byte(nodeStatus.NodeName)))[:8])
-		record, err := readJobVerificationRecord(ctx, r.Client, cache.Namespace, jobName)
+		record, err := readJobVerificationRecord(ctx, r.Client, cacheWorkloadNamespace(cache), jobName)
 		if err != nil {
 			return false, err
 		}
@@ -543,7 +599,23 @@ func (r *LLMLoraAdapterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Named("llmloraadapter").
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		For(&servingv1alpha2.LLMLoraAdapter{}).
-		Owns(&servingv1alpha2.LocalModelCache{}).
+		Watches(
+			&servingv1alpha2.LocalModelCache{},
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+				annotations := obj.GetAnnotations()
+				if obj.GetLabels()[loraCacheManagedByLabel] != loraCacheManagedByAdapter {
+					return nil
+				}
+				namespace := annotations[loraCacheOwnerNamespace]
+				name := annotations[loraCacheOwnerName]
+				if namespace == "" || name == "" {
+					return nil
+				}
+				return []reconcile.Request{{
+					NamespacedName: types.NamespacedName{Namespace: namespace, Name: name},
+				}}
+			}),
+		).
 		Watches(
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {

@@ -43,6 +43,8 @@ const (
 	labelModelHash = "serving.ckodex.com/model-hash"
 	// defaultCacheNamespace is where cache PVCs are created for cluster-scoped resources.
 	defaultCacheNamespace = "default"
+	// cacheWorkloadNamespaceAnnotation selects the namespace for cache PVCs and Jobs.
+	cacheWorkloadNamespaceAnnotation = "serving.ckodex.com/cache-namespace"
 	// warmupJobPrefix is the prefix for cache-warming Jobs.
 	warmupJobPrefix = "lmc-warmup"
 )
@@ -267,6 +269,13 @@ func PVCNameForNode(modelHash, nodeName string) string {
 	return fmt.Sprintf("lmc-%s-%s", modelHash, nodeHash)
 }
 
+func cacheWorkloadNamespace(lmc *servingv1alpha2.LocalModelCache) string {
+	if namespace := lmc.Annotations[cacheWorkloadNamespaceAnnotation]; namespace != "" {
+		return namespace
+	}
+	return defaultCacheNamespace
+}
+
 // reconcileNodeCache ensures a PVC and warm-up Job exist for one node.
 func (r *LocalModelCacheReconciler) reconcileNodeCache(
 	ctx context.Context,
@@ -276,10 +285,7 @@ func (r *LocalModelCacheReconciler) reconcileNodeCache(
 	now metav1.Time,
 ) (servingv1alpha2.NodeCacheStatus, error) {
 	pvcName := PVCNameForNode(modelHash, nodeName)
-	targetNamespace := lmc.Namespace
-	if targetNamespace == "" {
-		targetNamespace = defaultCacheNamespace
-	}
+	targetNamespace := cacheWorkloadNamespace(lmc)
 
 	reader := r.APIReader
 	if reader == nil {
@@ -570,10 +576,7 @@ func (r *LocalModelCacheReconciler) evictLRU(
 	}
 
 	logger := log.FromContext(ctx)
-	targetNamespace := lmc.Namespace
-	if targetNamespace == "" {
-		targetNamespace = defaultCacheNamespace
-	}
+	targetNamespace := cacheWorkloadNamespace(lmc)
 
 	for _, e := range entries {
 		if total.Cmp(maxQ) <= 0 {

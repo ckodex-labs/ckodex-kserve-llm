@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -23,6 +24,7 @@ import (
 	"github.com/google/go-github/v62/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/modfile"
 )
 
 // ============================================================================
@@ -1219,6 +1221,26 @@ func TestNewOCIFileStore_DisablesAutomaticUnpack(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 
 	assert.True(t, store.SkipUnpack, "automatic archive unpacking must remain disabled")
+}
+
+func TestORASContainmentMatchesDependencyVersion(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	goModPath := filepath.Join(filepath.Dir(filename), "..", "..", "go.mod")
+	data, err := os.ReadFile(goModPath)
+	require.NoError(t, err)
+	module, err := modfile.Parse(goModPath, data, nil)
+	require.NoError(t, err)
+
+	var version string
+	for _, dep := range module.Require {
+		if dep.Mod.Path == "oras.land/oras-go/v2" {
+			version = dep.Mod.Version
+			break
+		}
+	}
+	assert.Equal(t, orasContainmentVersion, version,
+		"review GHSA-fxhp-mv3v-67qp containment before changing oras-go")
 }
 
 func TestOCIClient_Push_EmptyRef_Error(t *testing.T) {

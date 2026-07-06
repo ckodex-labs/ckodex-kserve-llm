@@ -27,8 +27,6 @@ type OCIClient struct {
 	RegistryAuth map[string]RegistryAuthConfig
 }
 
-const orasContainmentVersion = "v2.6.1"
-
 // RegistryAuthConfig holds credentials for an OCI registry.
 type RegistryAuthConfig struct {
 	SecretRef string // K8s Secret name with .dockerconfigjson
@@ -115,7 +113,8 @@ func newOCIFileStore(destPath string) (*file.Store, error) {
 	}
 
 	// Auto-unpack reaches ORAS's tar extraction path. Keep registry-controlled
-	// archives opaque while orasContainmentVersion is in use.
+	// archives opaque while the ORAS dependency remains pinned to a
+	// containment-safe version.
 	fs.SkipUnpack = true
 	return fs, nil
 }

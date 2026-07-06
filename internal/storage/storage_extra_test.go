@@ -1223,6 +1223,8 @@ func TestNewOCIFileStore_DisablesAutomaticUnpack(t *testing.T) {
 	assert.True(t, store.SkipUnpack, "automatic archive unpacking must remain disabled")
 }
 
+const orasContainmentVersion = "v2.6.1"
+
 func TestORASContainmentMatchesDependencyVersion(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	require.True(t, ok)

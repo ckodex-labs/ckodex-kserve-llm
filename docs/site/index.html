@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="CKodex KServe LLM Operator documentation and deployment landing page."
+    />
+    <title>CKodex KServe LLM Operator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero__content">
+        <p class="eyebrow">Kubernetes operator • LLM inference • KServe</p>
+        <h1>CKodex KServe LLM Operator</h1>
+        <p class="lead">
+          Turn model-serving intent into observable KServe workloads with routing,
+          autoscaling, identity, and evidence-backed status.
+        </p>
+        <div class="actions">
+          <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm">
+            View repository
+          </a>
+          <a class="button button--secondary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/overview.md">
+            Read the overview
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="cards" aria-label="Highlights">
+        <article class="card">
+          <h2>What it does</h2>
+          <p>
+            The operator reconciles LLM inference intent into Kubernetes resources,
+            gateways, and status conditions for platform teams and model operators.
+          </p>
+        </article>
+        <article class="card">
+          <h2>Where to start</h2>
+          <p>
+            Follow the getting-started guide for local deployment, then use the
+            sample manifests to test a real inference flow.
+          </p>
+        </article>
+        <article class="card">
+          <h2>Verification</h2>
+          <p>
+            Run the repo’s Dagger-based verification pipeline locally before release
+            or promotion to ensure the operator remains healthy.
+          </p>
+        </article>
+      </section>
+
+      <section class="docs">
+        <h2>Documentation</h2>
+        <ul>
+          <li><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/getting-started.md">Getting started</a></li>
+          <li><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/overview.md">Big picture</a></li>
+          <li><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/release-verification.md">Release verification</a></li>
+          <li><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/SECURITY.md">Security</a></li>
+        </ul>
+      </section>
+
+      <section class="code-block">
+        <h2>Quick proof commands</h2>
+        <pre><code>dagger call all --source=.
+dagger call test --source=.
+dagger call scan --source=.</code></pre>
+      </section>
+    </main>
+  </body>
+</html>

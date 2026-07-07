@@ -1,0 +1,134 @@
+:root {
+  color-scheme: dark;
+  --bg: #07111f;
+  --panel: #111c2d;
+  --panel-strong: #17253a;
+  --text: #f4f7fb;
+  --muted: #9db0c8;
+  --accent: #65b8ff;
+  --accent-strong: #2d8cff;
+  --border: rgba(255, 255, 255, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(135deg, var(--bg) 0%, #0e1a2b 100%);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.hero {
+  padding: 5rem 1.5rem 3rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.hero__content {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+
+h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  margin: 0 0 1rem;
+}
+
+.lead {
+  font-size: 1.1rem;
+  color: var(--muted);
+  max-width: 700px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.button {
+  display: inline-block;
+  padding: 0.8rem 1.2rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button--primary {
+  background: var(--accent);
+  color: #03111e;
+}
+
+.button--secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+.cards,
+.docs,
+.code-block {
+  background: rgba(17, 28, 45, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
+}
+
+.cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.card h2,
+.docs h2,
+.code-block h2 {
+  margin-top: 0;
+}
+
+.docs ul {
+  padding-left: 1.1rem;
+  color: var(--muted);
+}
+
+.docs a,
+.code-block a {
+  color: var(--accent);
+}
+
+pre {
+  padding: 1rem;
+  border-radius: 14px;
+  overflow-x: auto;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas, monospace;
+}

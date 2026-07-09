@@ -89,6 +89,7 @@ main {
 }
 
 .cards,
+.release,
 .docs,
 .code-block {
   background: rgba(17, 28, 45, 0.9);
@@ -105,7 +106,49 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.release {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);
+}
+
+.release h2 {
+  margin: 0 0 0.75rem;
+}
+
+.release p {
+  color: var(--muted);
+  margin-bottom: 0;
+}
+
+.release__facts {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.release__facts div {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.release__facts div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.release__facts dt {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.release__facts dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
 .card h2,
+.release h2,
 .docs h2,
 .code-block h2 {
   margin-top: 0;
@@ -116,6 +159,7 @@ main {
   color: var(--muted);
 }
 
+.release a,
 .docs a,
 .code-block a {
   color: var(--accent);
@@ -131,4 +175,10 @@ pre {
 
 code {
   font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (max-width: 720px) {
+  .release {
+    grid-template-columns: 1fr;
+  }
 }

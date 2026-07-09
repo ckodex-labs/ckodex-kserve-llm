@@ -1,6 +1,6 @@
 # CI/CD Current State — ckodex-kserve-llm-operator
 
-Last updated: 2026-07-04
+Last updated: 2026-07-09
 
 ---
 
@@ -54,7 +54,7 @@ Tag push (v*)
    ├── Sign image with cosign OIDC (cosign sign --yes <ref>@<digest>)
    ├── Generate SBOM (dagger call sbom → sbom/sbom.cdx.json)
    └── Upload SBOM artifact (90d retention)
-→ binary-release (GoReleaser v2.15.4 → GitHub Release draft)
+→ binary-release (GoReleaser v2.15.4 → GitHub release assets and checksums)
 → image-provenance (slsa-framework/slsa-github-generator container@v2.0.0)
 → binary-provenance (slsa-framework/slsa-github-generator generic@v2.0.0)
 → helm-release (helm push oci://ghcr.io/<owner>/charts)

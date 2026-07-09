@@ -23,6 +23,9 @@
           <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm">
             View repository
           </a>
+          <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.5">
+            Latest release
+          </a>
           <a class="button button--secondary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/overview.md">
             Read the overview
           </a>
@@ -55,6 +58,36 @@
         </article>
       </section>
 
+      <section class="release" aria-label="Current release">
+        <div>
+          <p class="eyebrow">Current public release</p>
+          <h2>v0.18.0-beta.5</h2>
+          <p>
+            The current GitHub release is marked Latest and publishes binaries,
+            checksums, Sigstore metadata, container image provenance, binary
+            provenance, SBOM output, and the Helm chart package.
+          </p>
+        </div>
+        <dl class="release__facts">
+          <div>
+            <dt>Published</dt>
+            <dd>2026-07-09</dd>
+          </div>
+          <div>
+            <dt>Source</dt>
+            <dd><code>634a79b</code></dd>
+          </div>
+          <div>
+            <dt>Hosted release run</dt>
+            <dd><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/28995564785">passed</a></dd>
+          </div>
+          <div>
+            <dt>Release page</dt>
+            <dd><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.5">open</a></dd>
+          </div>
+        </dl>
+      </section>
+
       <section class="docs">
         <h2>Documentation</h2>
         <ul>
@@ -67,9 +100,10 @@
 
       <section class="code-block">
         <h2>Quick proof commands</h2>
-        <pre><code>dagger call all --source=.
-dagger call test --source=.
-dagger call scan --source=.</code></pre>
+        <pre><code>TAG=v0.18.0-beta.5
+helm pull oci://ghcr.io/ckodex-labs/charts/ckodex-kserve-llm-operator --version "${TAG#v}"
+gh release download "$TAG" --repo ckodex-labs/ckodex-kserve-llm --dir release-assets
+(cd release-assets && sha256sum -c checksums.txt)</code></pre>
       </section>
     </main>
   </body>

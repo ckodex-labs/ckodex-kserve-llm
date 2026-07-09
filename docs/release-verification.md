@@ -3,7 +3,7 @@
 This repo has two distinct release checks:
 
 - `make release-readiness` is the local snapshot rehearsal. It proves the repo can generate binary archives, checksums, and a Helm chart package without mutating tracked files.
-- The tag-driven GitHub Actions workflow is the hosted release path. It is the only path that should be treated as authoritative for published images, draft GitHub release assets, and OIDC-backed provenance.
+- The tag-driven GitHub Actions workflow is the hosted release path. It is the only path that should be treated as authoritative for published images, GitHub release assets, and OIDC-backed provenance.
 
 ## Local Snapshot Rehearsal
 
@@ -28,7 +28,7 @@ The summary artifact is written to `bin/release-readiness.json`.
 On a real tag such as `v0.2.0`, GitHub Actions is expected to:
 
 1. build and push container images through the Dagger release pipeline,
-2. build draft GitHub release binaries and checksums through GoReleaser,
+2. build GitHub release binaries and checksums through GoReleaser,
 3. generate image and binary provenance through the SLSA GitHub generator workflows,
 4. package and push the Helm chart to GHCR with the tag version.
 

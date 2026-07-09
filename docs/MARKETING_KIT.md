@@ -30,7 +30,7 @@ CKodex KServe LLM Operator is a hardened control plane for serving LLMs in envir
 
 ## Proof Points
 
-- The tag-driven release workflow is configured to draft GitHub release artifacts.
+- The tag-driven release workflow publishes GitHub release artifacts.
 - The tag-driven release workflow is configured to publish container images and provenance artifacts.
 - SBOM export and Lula/OSCAL validation are part of the CI path.
 - Lula validation generates OSCAL assessment results.

@@ -152,7 +152,7 @@ hosted path for published artifacts and provenance.
 
 ## Project Status
 
-- Chart metadata: `v0.18.0-beta.2`
+- Chart metadata: `v0.18.0-beta.4`
 - Core LLM API: stable `serving.ckodex.com/v1`
 - Specialized APIs: `serving.ckodex.com/v1alpha2` where no v1 CRD exists
 - Core model-serving path: enabled

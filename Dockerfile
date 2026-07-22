@@ -35,6 +35,7 @@ RUN python -m pip install \
       --no-cache-dir \
       --no-compile \
       --root-user-action=ignore \
+      --require-hashes \
       --requirement /tmp/requirements.txt \
     && rm /tmp/requirements.txt \
     && python -m pip check \

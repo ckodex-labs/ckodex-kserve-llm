@@ -197,6 +197,24 @@ func TestBuilder_Build_RuntimeImageAndMountedModelOverride(t *testing.T) {
 	assert.Contains(t, c.Args, "--max-model-len")
 }
 
+func TestBuilder_Build_RuntimeImageOverridePrecedesCPUFallback(t *testing.T) {
+	builder := &Builder{
+		Client:       fake.NewClientBuilder().Build(),
+		RuntimeImage: "registry.example/vllm-cpu:v0.25.1",
+	}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{URI: "pvc://weights"},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "vllm"}},
+			}},
+		},
+	}
+
+	dep := builder.Build(context.Background(), llmSvc, 1, HardwareGenericX86, nil)
+	assert.Equal(t, builder.RuntimeImage, dep.Spec.Template.Spec.Containers[0].Image)
+}
+
 func TestBuilder_Build_PreservesPersistentKernelCacheConfiguration(t *testing.T) {
 	builder := &Builder{Client: fake.NewClientBuilder().Build()}
 	llmSvc := &servingv1alpha2.LLMInferenceService{

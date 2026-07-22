@@ -54,6 +54,9 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 	}
 
 	podSpec := llmSvc.Spec.Template.Spec.DeepCopy()
+	if len(podSpec.Containers) > 0 && podSpec.Containers[0].Image == "" && b.RuntimeImage != "" {
+		podSpec.Containers[0].Image = b.RuntimeImage
+	}
 
 	// Apply Hardware Optimizations
 	ApplyHardwareOptimizations(ctx, hwType, podSpec)

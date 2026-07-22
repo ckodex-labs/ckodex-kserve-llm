@@ -231,6 +231,10 @@ func InjectVectorSidecar(podSpec *corev1.PodSpec, configMapName string) {
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
+						// Match the API server's default so the desired volume equals the
+						// persisted (defaulted) one — otherwise the Deployment reconciler
+						// loops forever ("volumes changed" every pass).
+						DefaultMode: ptr.To[int32](420),
 					},
 				},
 			},

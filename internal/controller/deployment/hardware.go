@@ -23,7 +23,7 @@ const (
 	VLLMGenericImage  = "vllm/vllm-openai-cpu:v0.25.1"
 	VLLMCPUArm64Image = "vllm/vllm-openai:v0.25.1-aarch64"
 	VLLMMPSImage      = "vllm/vllm-openai:v0.25.1-aarch64"
-	// vLLM does not publish a v0.24.0-rocm tag in the vllm-openai repository.
+	// vLLM does not publish a v0.25.1-rocm tag in the vllm-openai repository.
 	// Keep ROCm explicit so clusters can provide a validated hardware image.
 	VLLMROCmImage = ""
 )

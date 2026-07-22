@@ -1,5 +1,5 @@
-{{- if ne .Values.webhook.enabled .Values.certManager.enabled }}
-{{- fail "webhook.enabled and certManager.enabled must have the same value; this chart provisions webhook TLS through cert-manager" }}
+{{- if and .Values.webhook.enabled (not .Values.certManager.enabled) }}
+{{- fail "certManager.enabled must be true when webhook.enabled is true; this chart provisions webhook TLS through cert-manager" }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment

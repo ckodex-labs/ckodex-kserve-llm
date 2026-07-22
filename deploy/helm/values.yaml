@@ -73,8 +73,8 @@ leaderElection:
 vllm:
   # v0.25.1 includes the mixed-dtype NVFP4 correctness fix used by Gemma/Qwen.
   defaultImage: "vllm/vllm-openai:v0.25.1"
-  cpuImage: "vllm/vllm-openai-cpu:v0.24.0"
-  # vLLM does not publish v0.24.0-rocm in vllm/vllm-openai.
+  cpuImage: "vllm/vllm-openai-cpu:v0.25.1"
+  # vLLM does not publish v0.25.1-rocm in vllm/vllm-openai.
   # Set this to a cluster-validated ROCm image before enabling AMD selection.
   rocmImage: ""
   storageInitializerImage: "kserve/storage-initializer:v0.19.0"

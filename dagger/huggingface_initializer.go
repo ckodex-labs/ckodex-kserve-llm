@@ -27,10 +27,16 @@ func (m *CkodexOperator) ScanHuggingFaceInitializer(
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
-	if _, err := buildHuggingFaceInitializerVariant(source, "arm64").Sync(ctx); err != nil {
-		return "", fmt.Errorf("build arm64 Hugging Face initializer: %w", err)
+	platforms := []string{"amd64", "arm64"}
+	result := ""
+	for _, arch := range platforms {
+		output, err := scanRootfs(buildHuggingFaceInitializerVariant(source, arch).Rootfs()).Stdout(ctx)
+		if err != nil {
+			return result, fmt.Errorf("scan %s Hugging Face initializer: %w", arch, err)
+		}
+		result += fmt.Sprintf("%s:\n%s", arch, output)
 	}
-	return scanRootfs(m.BuildHuggingFaceInitializer(source).Rootfs()).Stdout(ctx)
+	return result, nil
 }
 
 // PublishHuggingFaceInitializer builds and publishes amd64 and arm64 images.

@@ -103,8 +103,8 @@ spec:
                   uri:
                     description: |-
                       URI is the model artifact location.
-                      Supported schemes: hf://, hf-mirror://, s3://, gs://, pvc://, oci://, ocis://, seaweedfs://.
-                    pattern: ^(hf|hf-mirror|s3|swfs|gs|pvc|oci|ocis|modelpack|https?)://.*$
+                      Supported schemes: hf://, hf-mount://, hf-mirror://, s3://, gs://, pvc://, oci://, ocis://, seaweedfs://.
+                    pattern: ^(hf|hf-mount|hf-mirror|s3|swfs|gs|pvc|oci|ocis|modelpack|https?)://.*$
                     type: string
                 required:
                 - name

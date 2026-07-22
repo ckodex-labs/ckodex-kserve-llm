@@ -36,6 +36,11 @@ The local KIND environment is not a capacity test for large models.
 Use `spec.model.storage` references for credentials. Do not put tokens in the
 manifest.
 
+Start with the download-based `hf://` path. The optional `hf-mount://` path
+requires privileged cluster-wide CSI/FUSE prerequisites. See
+[Hugging Face: First Model](huggingface.md) for a public CPU smoke test and the
+single `HF_TOKEN` Secret shape used by both paths.
+
 ## 3. Declare the Service
 
 Start from a maintained sample. Use the stable

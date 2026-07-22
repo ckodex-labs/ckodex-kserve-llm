@@ -5,6 +5,15 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{/* ServiceAccount used by the manager. */}}
+{{- define "ckodex-kserve-llm-operator.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "ckodex-kserve-llm-operator.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
 {{/*
 Create a default fully qualified app name.
 */}}

@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: console
-        image: "{{ .Values.console.image.repository }}:{{ .Values.console.image.tag | default .Chart.AppVersion }}"
+        image: "{{ required "console.image.repository is required when console.enabled=true" .Values.console.image.repository }}:{{ .Values.console.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.console.image.pullPolicy }}
         ports:
         - name: http

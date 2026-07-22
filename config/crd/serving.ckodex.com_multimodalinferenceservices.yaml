@@ -266,7 +266,7 @@ spec:
               runtimeImage:
                 description: |-
                   RuntimeImage overrides the default container image for the selected runtime.
-                  When omitted, the operator uses vllm/vllm-openai:v0.24.0.
+                  When omitted, the operator uses vllm/vllm-openai:v0.25.1.
                 type: string
               scaling:
                 description: Scaling configures autoscaling behaviour (HPA / KEDA).

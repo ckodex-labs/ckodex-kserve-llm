@@ -671,10 +671,61 @@ func TestReconcileNetworkPolicies_AllowGatewayCreated(t *testing.T) {
 		types.NamespacedName{Name: "llama3-allow-gateway", Namespace: "default"}, &policy))
 
 	require.Len(t, policy.Spec.Ingress, 1)
+	require.Len(t, policy.Spec.Ingress[0].From, 2,
+		"gateway ingress must allow both the workload-local scheduler and cross-namespace Envoy data plane")
+
+	schedulerPeer := policy.Spec.Ingress[0].From[0]
+	require.NotNil(t, schedulerPeer.PodSelector)
+	assert.Nil(t, schedulerPeer.NamespaceSelector, "scheduler peer must remain namespace-local")
+	assert.Equal(t, "scheduler", schedulerPeer.PodSelector.MatchLabels["serving.ckodex.com/role"])
+
+	envoyPeer := policy.Spec.Ingress[0].From[1]
+	require.NotNil(t, envoyPeer.NamespaceSelector,
+		"Envoy Gateway runs outside the workload namespace, so an explicit namespace selector is mandatory")
+	require.NotNil(t, envoyPeer.PodSelector)
+	assert.Equal(t, map[string]string{
+		"kubernetes.io/metadata.name": "envoy-gateway-system",
+	}, envoyPeer.NamespaceSelector.MatchLabels)
+	assert.Equal(t, map[string]string{
+		"app.kubernetes.io/component":                    "proxy",
+		"app.kubernetes.io/managed-by":                   "envoy-gateway",
+		"gateway.envoyproxy.io/owning-gateway-name":      "llama3-gateway",
+		"gateway.envoyproxy.io/owning-gateway-namespace": "default",
+	}, envoyPeer.PodSelector.MatchLabels)
+
 	ports := policy.Spec.Ingress[0].Ports
 	require.Len(t, ports, 2)
 	assert.Equal(t, int32(8000), ports[0].Port.IntVal)
 	assert.Equal(t, int32(8001), ports[1].Port.IntVal)
+}
+
+func TestReconcileNetworkPolicies_ExistingGatewayIdentityScopesEnvoyPeer(t *testing.T) {
+	scheme := secScheme(t)
+	svc := minimalLLMSvc("llama3", "tenant-a")
+	svc.Spec.Router.Gateway.Managed = nil
+	svc.Spec.Router.Gateway.ExistingRef = &servingv1alpha2.GatewayRef{
+		Name:      "shared-ingress",
+		Namespace: "gateway-infra",
+	}
+
+	np := &NetworkPolicyReconciler{
+		Client:                    fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme:                    scheme,
+		GatewayDataPlaneNamespace: "custom-envoy-system",
+	}
+	require.NoError(t, np.ReconcileNetworkPolicy(context.Background(), svc))
+
+	var policy networkingv1.NetworkPolicy
+	require.NoError(t, np.Get(context.Background(),
+		types.NamespacedName{Name: "llama3-allow-gateway", Namespace: "tenant-a"}, &policy))
+
+	require.Len(t, policy.Spec.Ingress, 1)
+	require.Len(t, policy.Spec.Ingress[0].From, 2)
+	envoyPeer := policy.Spec.Ingress[0].From[1]
+	assert.Equal(t, "custom-envoy-system", envoyPeer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"])
+	labels := envoyPeer.PodSelector.MatchLabels
+	assert.Equal(t, "shared-ingress", labels["gateway.envoyproxy.io/owning-gateway-name"])
+	assert.Equal(t, "gateway-infra", labels["gateway.envoyproxy.io/owning-gateway-namespace"])
 }
 
 // CRITICAL: Egress policy must permit DNS (53) so vLLM can resolve hostnames,

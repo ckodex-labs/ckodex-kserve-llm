@@ -1,4 +1,4 @@
-{{- if .Values.certManager.enabled -}}
+{{- if and .Values.webhook.enabled .Values.certManager.enabled -}}
 ---
 # cert-manager Certificate — provisions the TLS secret for the webhook server.
 # The cainjector sidecar (part of cert-manager) watches for the

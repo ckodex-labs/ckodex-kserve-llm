@@ -1,0 +1,118 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-manager
+  labels:
+    {{- include "ckodex-kserve-llm-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: [configmaps, limitranges, persistentvolumeclaims, persistentvolumes, pods, resourcequotas, services]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [""]
+  resources: [events, secrets]
+  verbs: [create, get, list, patch, update, watch]
+- apiGroups: [""]
+  resources: [namespaces, nodes]
+  verbs: [get, list, watch]
+- apiGroups: [""]
+  resources: [serviceaccounts]
+  verbs: [get, list, patch, update, watch]
+- apiGroups: [apps]
+  resources: [deployments]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [autoscaling]
+  resources: [horizontalpodautoscalers]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [batch]
+  resources: [jobs]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [discovery.k8s.io]
+  resources: [endpointslices]
+  verbs: [get, list, watch]
+- apiGroups: [networking.k8s.io]
+  resources: [networkpolicies]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [policy]
+  resources: [poddisruptionbudgets]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [gateway.networking.k8s.io]
+  resources: [gateways, grpcroutes, httproutes]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [serving.ckodex.com]
+  resources:
+    - agents
+    - agents/finalizers
+    - agents/status
+    - aipacks
+    - aipacks/status
+    - asrinferenceservices
+    - asrinferenceservices/finalizers
+    - asrinferenceservices/status
+    - coactorgroups
+    - coactorgroups/status
+    - embeddinginferenceservices
+    - embeddinginferenceservices/finalizers
+    - embeddinginferenceservices/status
+    - inferenceactors
+    - inferenceactors/status
+    - inferencesessions
+    - inferencesessions/status
+    - llminferenceservices
+    - llminferenceservices/finalizers
+    - llminferenceservices/status
+    - llmloraadapters
+    - llmloraadapters/status
+    - localmodelcaches
+    - localmodelcaches/status
+    - modelonboardings
+    - modelonboardings/finalizers
+    - modelonboardings/status
+    - multimodalinferenceservices
+    - multimodalinferenceservices/finalizers
+    - multimodalinferenceservices/status
+    - rerankerinferenceservices
+    - rerankerinferenceservices/finalizers
+    - rerankerinferenceservices/status
+    - skillregistries
+    - skillregistries/finalizers
+    - skillregistries/status
+  verbs: [create, delete, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-manager
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ckodex-kserve-llm-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+rules:
+- apiGroups: [coordination.k8s.io]
+  resources: [leases]
+  verbs: [create, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-leader-election
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ckodex-kserve-llm-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

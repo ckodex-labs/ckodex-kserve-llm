@@ -4,8 +4,9 @@
 replicaCount: 2
 
 image:
-  repository: ghcr.io/ckodex/kserve-llm-operator
-  tag: "0.17.0"
+  repository: ghcr.io/ckodex-labs/ckodex-kserve-llm
+  # Release images retain the leading "v" from the Git tag.
+  tag: "v0.18.0-beta.5"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -32,15 +33,16 @@ controller:
     readOnlyRootFilesystem: true
 
 webhook:
+  # Admission webhooks are opt-in. When false the Deployment does not mount a
+  # serving certificate or expose the webhook port.
+  enabled: false
   port: 9443
   certDir: /tmp/k8s-webhook-server/serving-certs
 
 # cert-manager integration — provisions TLS certificates for the webhook server.
 # Requires cert-manager v1.14+ installed in the cluster before enabling.
-# When enabled: Helm creates Certificate, Issuer, and webhook configurations.
-#               cert-manager cainjector automatically populates caBundle fields.
-# When disabled: the Deployment still mounts a cert volume but no Certificate CR is created.
-#               Set CKODEX_FEATURE_ENABLE_WEBHOOKS=false (default) to disable webhooks entirely.
+# Enable this together with webhook.enabled. Helm then creates the Certificate,
+# Issuer, Service, and webhook configurations; cainjector populates caBundle.
 certManager:
   enabled: false
   # issuerRef: reference an existing Issuer or ClusterIssuer.
@@ -66,13 +68,11 @@ leaderElection:
   id: "ckodex-kserve-llm.ckodex.com"
 
 # Default vLLM settings
-# Images are pinned to digests for reproducibility and supply chain security.
-# Update digests by running: crane digest <image>:<tag>
-# Verify signatures: cosign verify <image>@<digest> --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+# Release tags are explicit here. Production registries should mirror and pin
+# the resolved digest after policy/signature verification.
 vllm:
-  # vLLM v0.24.0 is the verified CUDA default.
-  defaultImage: "vllm/vllm-openai:v0.24.0"
-  gemma4Image: "vllm/vllm-openai:gemma4"
+  # v0.25.1 includes the mixed-dtype NVFP4 correctness fix used by Gemma/Qwen.
+  defaultImage: "vllm/vllm-openai:v0.25.1"
   cpuImage: "vllm/vllm-openai-cpu:v0.24.0"
   # vLLM does not publish v0.24.0-rocm in vllm/vllm-openai.
   # Set this to a cluster-validated ROCm image before enabling AMD selection.
@@ -85,12 +85,9 @@ vllm:
   dbo:
     enabled: false     # Dual-Batch Overlap for throughput
 
-# HuggingFace CSI Driver integration
-# Install prerequisite: helm install hf-csi oci://ghcr.io/huggingface/charts/hf-csi-driver --version 0.11.1 -n kube-system
-# The operator manages static PV+PVC provisioning for hf-mount:// URIs using this driver.
-hfCsiDriver:
-  enabled: true
-  driverName: "hf.csi.huggingface.co"
+# hf-mount:// is an explicit opt-in path. Install hf-csi-driver v0.12.1
+# separately before using it; the chart does not install privileged node software.
+# Plain hf:// downloads do not require the CSI driver.
 
 # Gemma 4 Model Profiles
 # Pre-configured resource profiles for each model variant.
@@ -143,6 +140,8 @@ spire:
 # Gateway API
 gateway:
   className: "envoy"
+  # Namespace where Envoy Gateway creates its data-plane proxy pods.
+  dataPlaneNamespace: "envoy-gateway-system"
 
 # Resilience defaults
 resilience:

@@ -317,9 +317,8 @@ func DefaultOperatorConfig() OperatorConfig {
 	return OperatorConfig{
 		Features: DefaultFeatureGates(),
 		Defaults: DefaultsConfig{
-			// CPU-optimized vLLM image for ARM64/x86 nodes (no GPU).
 			// Pinned to a specific version — :latest is a supply chain risk and air-gapped blocker.
-			RuntimeImage:            "vllm/vllm-openai-cpu:v0.24.0",
+			RuntimeImage:            "vllm/vllm-openai:v0.25.1",
 			SchedulerImage:          "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0",
 			StorageInitializerImage: "kserve/storage-initializer:v0.19.0",
 			DefaultReplicas:         1,

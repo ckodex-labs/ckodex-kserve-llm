@@ -81,6 +81,7 @@ type LLMInferenceServiceReconciler struct {
 	AirGappedMode      bool
 	LocalRegistry      string
 	LocalCosignKeyPath string
+	RuntimeImage       string
 
 	// Modular sub-reconcilers
 	DeploymentBuilder    *deployment.Builder
@@ -449,6 +450,7 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		AirGappedMode:           r.AirGappedMode,
 		LocalRegistry:           r.LocalRegistry,
 		LocalCosignKeyPath:      r.LocalCosignKeyPath,
+		RuntimeImage:            r.RuntimeImage,
 	}
 	r.StatusReconciler = &status.Reconciler{
 		Client:          mgr.GetClient(),

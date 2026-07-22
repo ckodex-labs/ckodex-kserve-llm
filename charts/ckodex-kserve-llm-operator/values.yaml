@@ -3,7 +3,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/ckodex-labs/kserve-llm-operator
+  repository: ghcr.io/ckodex-labs/ckodex-kserve-llm
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
@@ -12,6 +12,14 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+
 crds:
   install: false
 
@@ -19,14 +27,16 @@ featureGates:
   enableScheduler: true
   enableGateway: true
   enableAutoscaler: true
-  enableSecurity: true
-  enableLocalModelCache: true
+  enableSecurity: false
+  enableLocalModelCache: false
 
 runtime:
-  # Default vLLM image
-  defaultImage: "vllm/vllm-openai-cpu:v0.24.0"
-  # Gemma-specific image
-  gemma4Image: "vllm/vllm-openai:gemma4"
+  # v0.25.1 includes the mixed-dtype NVFP4 correctness fix used by Gemma/Qwen.
+  defaultImage: "vllm/vllm-openai:v0.25.1"
+
+gateway:
+  # Namespace where Envoy Gateway creates its data-plane proxy pods.
+  dataPlaneNamespace: "envoy-gateway-system"
 
 config:
   # HuggingFace Mirror for air-gapped environments
@@ -40,7 +50,7 @@ config:
 
 audit:
   persistence:
-    enabled: true
+    enabled: false
     storageClass: ""
     size: 1Gi
     accessModes:
@@ -49,15 +59,17 @@ audit:
 metrics:
   enabled: true
   serviceMonitor:
-    enabled: true
+    enabled: false
     interval: 30s
     scrapeTimeout: 10s
 
 console:
-  enabled: true
+  # No public console image is published with the operator release yet.
+  enabled: false
   replicas: 1
   image:
-    repository: ghcr.io/ckodex-labs/kserve-llm-console
+    # Required when console.enabled=true; no console image ships by default.
+    repository: ""
     pullPolicy: IfNotPresent
     tag: ""
   service:

@@ -1,0 +1,24 @@
+# Public, CPU-sized Hugging Face smoke test. No HF token or CSI driver required.
+apiVersion: serving.ckodex.com/v1
+kind: LLMInferenceService
+metadata:
+  name: hf-gpt2
+  namespace: ckodex-inference
+spec:
+  model:
+    name: gpt2
+    uri: hf://openai-community/gpt2
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.17.1
+        resources:
+          requests:
+            cpu: "2"
+            memory: 4Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi
+  router: {}

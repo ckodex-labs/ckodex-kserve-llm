@@ -49,6 +49,13 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ## Operator
 
+### L-OP-006 — Integrate LMCache without conflating it with vLLM prefix caching
+
+- **Status:** open
+- **Priority:** P1
+- **Context:** EPP routing is present, but no LMCache service, connector, or lifecycle is reconciled. vLLM in-process prefix caching is not evidence of LMCache integration. Implement against the KServe 0.19 and llm-d 0.8.1 contracts selected in ADR-009, with live cache-hit and failover evidence.
+- **Reference:** ADR-009, `internal/scheduler/epp_manager.go`
+
 ### L-OP-005 — Align LoRA cache ownership with cluster-scoped LocalModelCache
 
 - **Status:** done

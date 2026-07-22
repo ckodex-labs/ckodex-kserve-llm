@@ -1,3 +1,6 @@
+{{- if ne .Values.webhook.enabled .Values.certManager.enabled }}
+{{- fail "webhook.enabled and certManager.enabled must have the same value; this chart provisions webhook TLS through cert-manager" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -38,11 +41,15 @@ spec:
             - --metrics-bind-address={{ .Values.metrics.bindAddress }}
             - --health-probe-bind-address={{ .Values.probes.healthz.bindAddress }}
             - --leader-elect={{ .Values.leaderElection.enabled }}
+            {{- if .Values.webhook.enabled }}
             - --webhook-port={{ .Values.webhook.port }}
+            {{- end }}
           ports:
+            {{- if .Values.webhook.enabled }}
             - containerPort: {{ .Values.webhook.port }}
               name: webhook-server
               protocol: TCP
+            {{- end }}
             - containerPort: 8091
               name: metrics
               protocol: TCP
@@ -83,6 +90,8 @@ spec:
             # Feature Gates
             - name: CKODEX_FEATURE_ENABLE_SECURITY
               value: {{ .Values.features.enableSecurity | quote }}
+            - name: CKODEX_FEATURE_ENABLE_WEBHOOKS
+              value: {{ .Values.webhook.enabled | quote }}
             - name: CKODEX_FEATURE_ENABLE_AUTOSCALER
               value: {{ .Values.features.enableAutoscaler | quote }}
             - name: CKODEX_FEATURE_ENABLE_GATEWAY
@@ -95,17 +104,25 @@ spec:
               value: {{ .Values.features.enableExperimentalHardwareSelection | quote }}
             - name: CKODEX_FEATURE_ENABLE_EXPERIMENTAL_STATUS_HARDENING
               value: {{ .Values.features.enableExperimentalStatusHardening | quote }}
+            - name: CKODEX_RUNTIME_IMAGE
+              value: {{ .Values.vllm.defaultImage | quote }}
+            - name: CKODEX_ENVOY_GATEWAY_NAMESPACE
+              value: {{ .Values.gateway.dataPlaneNamespace | quote }}
           resources: {{ toYaml .Values.controller.resources | nindent 12 }}
           securityContext: {{ toYaml .Values.controller.securityContext | nindent 12 }}
+          {{- if .Values.webhook.enabled }}
           volumeMounts:
             - mountPath: {{ .Values.webhook.certDir }}
               name: cert
               readOnly: true
+          {{- end }}
+      {{- if .Values.webhook.enabled }}
       volumes:
         - name: cert
           secret:
             defaultMode: 420
             secretName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-cert
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{ toYaml . | nindent 8 }}
       {{- end }}

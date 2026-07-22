@@ -113,6 +113,10 @@ func (r *HFCSIReconciler) buildPV(llmSvc *servingv1alpha2.LLMInferenceService, p
 		ReadOnly:         true,
 	}
 	if llmSvc.Spec.Model.Storage != nil && llmSvc.Spec.Model.Storage.SecretRef != nil {
+		// The operator uses HF_TOKEN consistently for hf:// downloads. Tell the
+		// CSI driver to read that same key instead of its default "token" key so
+		// users do not need two differently shaped credentials.
+		attrs["tokenKey"] = "HF_TOKEN"
 		csi.NodePublishSecretRef = &corev1.SecretReference{
 			Name:      llmSvc.Spec.Model.Storage.SecretRef.Name,
 			Namespace: llmSvc.Namespace,

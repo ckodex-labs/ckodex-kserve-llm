@@ -39,6 +39,7 @@ type Builder struct {
 	AirGappedMode      bool
 	LocalRegistry      string // e.g. "local-registry.corp.internal"
 	LocalCosignKeyPath string
+	RuntimeImage       string
 }
 
 // Build constructs the desired Deployment spec.
@@ -77,7 +78,7 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 	}
 
 	b.ensureModelVolume(llmSvc, podSpec)
-	b.ensureModelVolumeMount(podSpec)
+	b.ensureModelVolumeMount(llmSvc, podSpec)
 	b.ensureHealthProbes(podSpec)
 	b.ensureSecurityContext(podSpec)
 	b.ensureTopologySpreadConstraints(podSpec, labels)
@@ -190,21 +191,23 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 		uri = b.transformModelURI(uri, hwType)
 	}
 
+	if b.AirGappedMode && b.LocalRegistry != "" {
+		// Storage initialized in air-gap expects converted URIs (hf:// -> oci://)
+		uri = b.storageResolveAirGap(uri)
+	}
+
 	parts := strings.SplitN(uri, "://", 2)
 	scheme := ""
 	if len(parts) > 1 {
 		scheme = parts[0]
 	}
 
-	initializerImage := api.StorageInitializerImage
+	initializerImage := api.HuggingFaceInitializerImage
 	if scheme != "hf" && scheme != "huggingface" {
 		initializerImage = api.CKodexStorageInitializerImage
 	}
-
 	if b.AirGappedMode && b.LocalRegistry != "" {
 		initializerImage = b.rewriteImage(initializerImage)
-		// Storage initialized in air-gap expects converted URIs (hf:// -> oci://)
-		uri = b.storageResolveAirGap(uri)
 	}
 
 	if hwType == HardwareAppleSilicon {
@@ -229,6 +232,19 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 				MountPath: "/tmp",
 			},
 		},
+	}
+	if scheme == "hf" || scheme == "huggingface" {
+		repo, revision := parseHuggingFaceURI(uri)
+		container.Command = []string{"/bin/sh", "-ec"}
+		container.Args = []string{
+			fmt.Sprintf("python -m venv /tmp/hf-venv && /tmp/hf-venv/bin/pip install --disable-pip-version-check --no-cache-dir huggingface_hub==%s hf-xet==%s && exec /tmp/hf-venv/bin/hf download \"$1\" --revision \"$2\" --local-dir \"$3\"", api.HuggingFaceHubVersion, api.HuggingFaceXetVersion),
+			"--", repo, revision, api.ModelMountPath,
+		}
+		container.Env = append(container.Env,
+			corev1.EnvVar{Name: "HOME", Value: "/tmp"},
+			corev1.EnvVar{Name: "HF_HOME", Value: "/tmp/huggingface"},
+			corev1.EnvVar{Name: "HF_HUB_DISABLE_UPDATE_CHECK", Value: "1"},
+		)
 	}
 
 	if llmSvc.Spec.Model.Storage != nil {
@@ -438,6 +454,25 @@ func (b *Builder) isLocalModelCacheReady(ctx context.Context, modelURI string) b
 	return b.getReadyLMC(ctx, modelURI) != nil
 }
 
+func parseHuggingFaceURI(uri string) (repo, revision string) {
+	repo = strings.TrimPrefix(strings.TrimPrefix(uri, "hf://"), "huggingface://")
+	revision = "main"
+	if idx := strings.LastIndex(repo, "@"); idx >= 0 {
+		repo, revision = repo[:idx], repo[idx+1:]
+	}
+	return repo, revision
+}
+
+func parsePVCURI(uri string) (claim, subPath string) {
+	ref := strings.TrimPrefix(uri, "pvc://")
+	parts := strings.SplitN(ref, "/", 2)
+	claim = parts[0]
+	if len(parts) == 2 {
+		subPath = strings.Trim(parts[1], "/")
+	}
+	return claim, subPath
+}
+
 func (b *Builder) ensureModelVolume(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
 	for _, v := range podSpec.Volumes {
 		if v.Name == api.ModelVolumeName {
@@ -475,7 +510,7 @@ func (b *Builder) ensureModelVolume(llmSvc *servingv1alpha2.LLMInferenceService,
 			},
 		})
 	case strings.HasPrefix(uri, "pvc://"):
-		pvcName := strings.TrimPrefix(uri, "pvc://")
+		pvcName, _ := parsePVCURI(uri)
 		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
 			Name: api.ModelVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -505,7 +540,7 @@ func (b *Builder) ensureModelVolume(llmSvc *servingv1alpha2.LLMInferenceService,
 	})
 }
 
-func (b *Builder) ensureModelVolumeMount(podSpec *corev1.PodSpec) {
+func (b *Builder) ensureModelVolumeMount(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
 	if len(podSpec.Containers) == 0 {
 		return
 	}
@@ -515,11 +550,15 @@ func (b *Builder) ensureModelVolumeMount(podSpec *corev1.PodSpec) {
 			return
 		}
 	}
-	c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+	mount := corev1.VolumeMount{
 		Name:      api.ModelVolumeName,
 		MountPath: api.ModelMountPath,
 		ReadOnly:  true,
-	})
+	}
+	if strings.HasPrefix(llmSvc.Spec.Model.URI, "pvc://") {
+		_, mount.SubPath = parsePVCURI(llmSvc.Spec.Model.URI)
+	}
+	c.VolumeMounts = append(c.VolumeMounts, mount)
 
 	// Inject /tmp scratch mount
 	foundTmp := false
@@ -542,6 +581,19 @@ func (b *Builder) ensureHealthProbes(podSpec *corev1.PodSpec) {
 		return
 	}
 	c := &podSpec.Containers[0]
+	if c.StartupProbe == nil {
+		c.StartupProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{Path: "/health", Port: intstr.FromInt32(8000)},
+			},
+			// Large quantized and multimodal models may spend several minutes
+			// loading weights and warming hardware-specific kernels. StartupProbe
+			// gates liveness until that one-time initialization completes.
+			InitialDelaySeconds: 30,
+			PeriodSeconds:       15,
+			FailureThreshold:    60,
+		}
+	}
 	if c.ReadinessProbe == nil {
 		c.ReadinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -760,25 +812,38 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 	default:
 		// Default to vllm image if not already set by template
 		if c.Image == "" {
-			c.Image = api.VLLMImage
+			c.Image = b.RuntimeImage
+			if c.Image == "" {
+				c.Image = api.VLLMImage
+			}
 		}
 		if b.AirGappedMode && b.LocalRegistry != "" {
 			c.Image = b.rewriteImage(c.Image)
 		}
-		// vLLM args are typically handled by applying WellKnown config or user spec.
-		// If no args provided, we add safe defaults.
-		if len(c.Args) == 0 {
-			c.Args = []string{
-				"--model", api.ModelMountPath,
-				"--host", "0.0.0.0",
-				"--port", "8000",
-			}
+		// The mounted model is mandatory even when a preset or user supplied other args.
+		if !hasArg(c.Args, "--model") {
+			c.Args = append([]string{"--model", api.ModelMountPath}, c.Args...)
 		}
-		// Weight quantization (vLLM v0.24.0) is appended after existing args.
+		if !hasArg(c.Args, "--host") {
+			c.Args = append(c.Args, "--host", "0.0.0.0")
+		}
+		if !hasArg(c.Args, "--port") {
+			c.Args = append(c.Args, "--port", "8000")
+		}
+		// Weight quantization is appended after existing args.
 		if q := llmSvc.Spec.Quantization; q != nil {
 			c.Args = append(c.Args, "--quantization", q.Method)
 		}
 	}
+}
+
+func hasArg(args []string, target string) bool {
+	for _, arg := range args {
+		if arg == target || strings.HasPrefix(arg, target+"=") {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureQuantCppArgs configures arguments for the llama.cpp / quant-cpp engine.

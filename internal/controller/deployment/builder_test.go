@@ -108,6 +108,39 @@ func TestBuilder_Build(t *testing.T) {
 	require.NotNil(t, c.LivenessProbe)
 	require.NotNil(t, c.LivenessProbe.HTTPGet)
 	assert.Equal(t, "/health", c.LivenessProbe.HTTPGet.Path)
+	require.NotNil(t, c.StartupProbe)
+	require.NotNil(t, c.StartupProbe.HTTPGet)
+	assert.Equal(t, "/health", c.StartupProbe.HTTPGet.Path)
+	assert.Equal(t, int32(30), c.StartupProbe.InitialDelaySeconds)
+	assert.Equal(t, int32(15), c.StartupProbe.PeriodSeconds)
+	assert.Equal(t, int32(60), c.StartupProbe.FailureThreshold)
+}
+
+func TestBuilder_Build_PreservesExplicitStartupProbe(t *testing.T) {
+	client := fake.NewClientBuilder().Build()
+	builder := &Builder{Client: client}
+	custom := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{Command: []string{"test", "-f", "/tmp/model-ready"}},
+		},
+		PeriodSeconds:    5,
+		FailureThreshold: 120,
+	}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "custom-startup", Namespace: "default"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{Name: "custom", URI: "pvc://weights"},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Name:         "vllm",
+				StartupProbe: custom.DeepCopy(),
+			}}}},
+		},
+	}
+
+	deployment := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA, nil)
+	require.NotNil(t, deployment)
+	require.NotEmpty(t, deployment.Spec.Template.Spec.Containers)
+	assert.Equal(t, custom, deployment.Spec.Template.Spec.Containers[0].StartupProbe)
 }
 
 func TestBuilder_Build_DefaultVLLMArgsUseCpuFallback(t *testing.T) {
@@ -140,6 +173,73 @@ func TestBuilder_Build_DefaultVLLMArgsUseCpuFallback(t *testing.T) {
 	assert.NotContains(t, dep.Spec.Template.Spec.Containers[0].Args, "--device")
 	assert.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "--host")
 	assert.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "0.0.0.0")
+}
+
+func TestBuilder_Build_RuntimeImageAndMountedModelOverride(t *testing.T) {
+	builder := &Builder{
+		Client:       fake.NewClientBuilder().Build(),
+		RuntimeImage: "registry.example/vllm:v0.25.1",
+	}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "gemma", Namespace: "default"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{URI: "pvc://weights/gemma"},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+				Name: "vllm", Args: []string{"--max-model-len", "4096"},
+			}}}},
+		},
+	}
+
+	dep := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA, nil)
+	c := dep.Spec.Template.Spec.Containers[0]
+	assert.Equal(t, "registry.example/vllm:v0.25.1", c.Image)
+	assert.Equal(t, []string{"--model", api.ModelMountPath}, c.Args[:2])
+	assert.Contains(t, c.Args, "--max-model-len")
+}
+
+func TestBuilder_Build_PreservesPersistentKernelCacheConfiguration(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build()}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "gemma", Namespace: "default"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{URI: "pvc://weights"},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{
+					Name: "vllm",
+					Env: []corev1.EnvVar{
+						{Name: "VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR", Value: "/var/cache/vllm/flashinfer"},
+						{Name: "TORCHINDUCTOR_CACHE_DIR", Value: "/var/cache/vllm/torchinductor"},
+					},
+					VolumeMounts: []corev1.VolumeMount{{Name: "kernel-cache", MountPath: "/var/cache/vllm"}},
+				}},
+				Volumes: []corev1.Volume{{
+					Name: "kernel-cache",
+					VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: "gemma-kernel-cache",
+					}},
+				}},
+			}},
+		},
+	}
+
+	dep := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA, nil)
+	require.NotNil(t, dep)
+	podSpec := dep.Spec.Template.Spec
+	require.NotEmpty(t, podSpec.Containers)
+	c := podSpec.Containers[0]
+	assert.Contains(t, c.Env, corev1.EnvVar{
+		Name: "VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR", Value: "/var/cache/vllm/flashinfer",
+	})
+	assert.Contains(t, c.Env, corev1.EnvVar{
+		Name: "TORCHINDUCTOR_CACHE_DIR", Value: "/var/cache/vllm/torchinductor",
+	})
+	assert.Contains(t, c.VolumeMounts, corev1.VolumeMount{Name: "kernel-cache", MountPath: "/var/cache/vllm"})
+	assert.Contains(t, podSpec.Volumes, corev1.Volume{
+		Name: "kernel-cache",
+		VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+			ClaimName: "gemma-kernel-cache",
+		}},
+	})
 }
 
 func TestBuilder_Build_ReplicaCountGreaterThanOneUsesRollingUpdate(t *testing.T) {
@@ -263,6 +363,32 @@ func TestBuilder_Build_PVCVolumeMount(t *testing.T) {
 	assert.Empty(t, podSpec.InitContainers, "Init containers should be empty for native PVC mounting")
 }
 
+func TestBuilder_Build_PVCVolumeSubPath(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build()}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "gemma", Namespace: "default"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model:    servingv1alpha2.ModelSpec{URI: "pvc://gemma4-weights/gemma-4-26B-A4B-it-NVFP4"},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "vllm"}}}},
+		},
+	}
+
+	dep := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA, nil)
+	var claimName, subPath string
+	for _, volume := range dep.Spec.Template.Spec.Volumes {
+		if volume.Name == api.ModelVolumeName && volume.PersistentVolumeClaim != nil {
+			claimName = volume.PersistentVolumeClaim.ClaimName
+		}
+	}
+	for _, mount := range dep.Spec.Template.Spec.Containers[0].VolumeMounts {
+		if mount.Name == api.ModelVolumeName {
+			subPath = mount.SubPath
+		}
+	}
+	assert.Equal(t, "gemma4-weights", claimName)
+	assert.Equal(t, "gemma-4-26B-A4B-it-NVFP4", subPath)
+}
+
 func TestBuilder_BuildStorageInitializer(t *testing.T) {
 	client := fake.NewClientBuilder().Build()
 	builder := &Builder{
@@ -277,6 +403,9 @@ func TestBuilder_BuildStorageInitializer(t *testing.T) {
 		Spec: servingv1alpha2.LLMInferenceServiceSpec{
 			Model: servingv1alpha2.ModelSpec{
 				URI: "hf://mistralai/Mistral-7B",
+				Storage: &servingv1alpha2.StorageSpec{
+					SecretRef: &corev1.LocalObjectReference{Name: "hf-credentials"},
+				},
 			},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
@@ -301,7 +430,13 @@ func TestBuilder_BuildStorageInitializer(t *testing.T) {
 	require.NotNil(t, initContainer)
 
 	assert.Equal(t, "storage-initializer", initContainer.Name)
-	assert.Equal(t, api.StorageInitializerImage, initContainer.Image)
+	assert.Equal(t, api.HuggingFaceInitializerImage, initContainer.Image)
+	assert.Equal(t, []string{"/bin/sh", "-ec"}, initContainer.Command)
+	assert.Contains(t, initContainer.Args[0], "hf download")
+	assert.Contains(t, initContainer.Args[0], "hf-xet=="+api.HuggingFaceXetVersion)
+	require.Len(t, initContainer.EnvFrom, 1)
+	require.NotNil(t, initContainer.EnvFrom[0].SecretRef)
+	assert.Equal(t, "hf-credentials", initContainer.EnvFrom[0].SecretRef.Name)
 	foundKeyEnv := false
 	for _, env := range initContainer.Env {
 		if env.Name == "CKODEX_LOCAL_COSIGN_KEY_PATH" && env.Value == "/etc/cosign/cosign.pub" {
@@ -336,6 +471,15 @@ func TestBuilder_BuildStorageInitializer(t *testing.T) {
 	initContainerCustom := builder.BuildStorageInitializer(context.Background(), llmSvc, HardwareNVIDIA, nil)
 	require.NotNil(t, initContainerCustom)
 	assert.Equal(t, api.CKodexStorageInitializerImage, initContainerCustom.Image)
+
+	// Air-gapped HF references become OCI references before initializer selection.
+	airGapBuilder := &Builder{Client: client, AirGappedMode: true, LocalRegistry: "registry.internal"}
+	llmSvc.Spec.Model.URI = "hf://mistralai/Mistral-7B"
+	initContainerAirGap := airGapBuilder.BuildStorageInitializer(context.Background(), llmSvc, HardwareNVIDIA, nil)
+	require.NotNil(t, initContainerAirGap)
+	assert.Equal(t, airGapBuilder.rewriteImage(api.CKodexStorageInitializerImage), initContainerAirGap.Image)
+	assert.Equal(t, []string{"oci://registry.internal/hf/mistralai/Mistral-7B", api.ModelMountPath}, initContainerAirGap.Args)
+	assert.Empty(t, initContainerAirGap.Command)
 
 	// PVC skip test
 	llmSvc.Spec.Model.URI = "pvc://my-pvc"

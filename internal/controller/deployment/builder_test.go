@@ -405,7 +405,7 @@ func TestBuilder_Build_PVCSubPathWithExistingModelMount(t *testing.T) {
 				Containers: []corev1.Container{{
 					Name: "vllm",
 					VolumeMounts: []corev1.VolumeMount{{
-						Name: api.ModelVolumeName, MountPath: api.ModelMountPath, ReadOnly: true,
+						Name: api.ModelVolumeName, MountPath: "/custom-models",
 					}},
 				}},
 			}},
@@ -427,6 +427,8 @@ func TestBuilder_Build_PVCSubPathWithExistingModelMount(t *testing.T) {
 		}
 	}
 	require.NotNil(t, modelMount)
+	assert.Equal(t, api.ModelMountPath, modelMount.MountPath)
+	assert.True(t, modelMount.ReadOnly)
 	assert.Equal(t, "models/gemma-4", modelMount.SubPath)
 	require.NotNil(t, tmpMount)
 	assert.Equal(t, "/tmp", tmpMount.MountPath)
@@ -440,6 +442,29 @@ func TestBuilder_Build_PVCSubPathWithExistingModelMount(t *testing.T) {
 	}
 	require.NotNil(t, tmpVolume)
 	require.NotNil(t, tmpVolume.EmptyDir)
+}
+
+func TestBuilder_Build_PreservesExplicitModelMountPath(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build()}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{URI: "pvc://weights/model"},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{
+					Name: "vllm",
+					Args: []string{"--model", "/custom-models"},
+					VolumeMounts: []corev1.VolumeMount{{
+						Name: api.ModelVolumeName, MountPath: "/custom-models", ReadOnly: true,
+					}},
+				}},
+			}},
+		},
+	}
+
+	dep := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA, nil)
+	mount := dep.Spec.Template.Spec.Containers[0].VolumeMounts[0]
+	assert.Equal(t, "/custom-models", mount.MountPath)
+	assert.Equal(t, []string{"--model", "/custom-models"}, dep.Spec.Template.Spec.Containers[0].Args[:2])
 }
 
 func TestParseHuggingFaceURIEmptyRevisionDefaultsToMain(t *testing.T) {

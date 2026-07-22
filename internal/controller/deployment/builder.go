@@ -572,6 +572,10 @@ func (b *Builder) ensureModelVolumeMount(llmSvc *servingv1alpha2.LLMInferenceSer
 		m := &c.VolumeMounts[i]
 		if m.Name == api.ModelVolumeName {
 			modelMountFound = true
+			if !hasArg(c.Args, "--model") {
+				m.MountPath = api.ModelMountPath
+				m.ReadOnly = true
+			}
 			if strings.HasPrefix(llmSvc.Spec.Model.URI, "pvc://") {
 				_, m.SubPath = parsePVCURI(llmSvc.Spec.Model.URI)
 			}

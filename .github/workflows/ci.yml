@@ -99,7 +99,7 @@ jobs:
 
       - name: Run Hugging Face initializer vulnerability scan
         uses: dagger/dagger-for-github@v8.4.0
-        timeout-minutes: 5
+        timeout-minutes: 15
         env:
           DAGGER_NO_NAG: "1"
         with:

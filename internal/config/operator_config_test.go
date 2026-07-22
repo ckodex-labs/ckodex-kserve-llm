@@ -101,6 +101,7 @@ func TestLoadFromEnv_StringFields(t *testing.T) {
 	setEnv(t, "CKODEX_AUTH_ISSUER_URL", "https://idp.corp.internal")
 	setEnv(t, "CKODEX_AUTH_AUDIENCE", "inference-service")
 	setEnv(t, "CKODEX_PROMETHEUS_URL", "http://prometheus.monitoring:9090")
+	setEnv(t, "CKODEX_HUGGING_FACE_INITIALIZER_IMAGE", "registry.corp/hf-initializer@sha256:1234")
 
 	cfg := config.DefaultOperatorConfig()
 	cfg.LoadFromEnv()
@@ -111,6 +112,7 @@ func TestLoadFromEnv_StringFields(t *testing.T) {
 	assert.Equal(t, "https://idp.corp.internal", cfg.Auth.IssuerURL)
 	assert.Equal(t, "inference-service", cfg.Auth.Audience)
 	assert.Equal(t, "http://prometheus.monitoring:9090", cfg.PrometheusURL)
+	assert.Equal(t, "registry.corp/hf-initializer@sha256:1234", cfg.Defaults.HuggingFaceInitializerImage)
 }
 
 func TestLoadFromEnv_AllowInsecurePromotionGates(t *testing.T) {

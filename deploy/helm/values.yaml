@@ -6,7 +6,7 @@ replicaCount: 2
 image:
   repository: ghcr.io/ckodex-labs/ckodex-kserve-llm
   # Release images retain the leading "v" from the Git tag.
-  tag: "v0.18.0-beta.5"
+  tag: "v0.18.0-beta.6"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -78,6 +78,8 @@ vllm:
   # Set this to a cluster-validated ROCm image before enabling AMD selection.
   rocmImage: ""
   storageInitializerImage: "kserve/storage-initializer:v0.19.0"
+  # Purpose-built Xet-aware image; dependencies are installed at image build time.
+  huggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.6"
 
   # v0.19.0 features
   cpuKvOffloading:

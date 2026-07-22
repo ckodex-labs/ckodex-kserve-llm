@@ -21,6 +21,7 @@ func TestReleaseDefaultsStayAligned(t *testing.T) {
 	assert.Equal(t, "kserve/storage-initializer:v0.19.0", controller.StorageInitializerImage)
 	assert.Equal(t, controller.StorageInitializerImage, controllerapi.StorageInitializerImage)
 	assert.Equal(t, controller.StorageInitializerImage, cfg.Defaults.StorageInitializerImage)
+	assert.Equal(t, controllerapi.HuggingFaceInitializerImage, cfg.Defaults.HuggingFaceInitializerImage)
 	assert.Equal(t, scheduler.EPPImage, cfg.Defaults.SchedulerImage)
 	assert.Equal(t, scheduler.EPPImage, cfg.Scheduler.Image)
 	assert.Equal(t, "ghcr.io/spiffe/spire-agent:1.15.1", security.SPIREAgentImage)

@@ -53,6 +53,8 @@ spec:
           value: {{ .Values.featureGates.enableLocalModelCache | quote }}
         - name: CKODEX_RUNTIME_IMAGE
           value: {{ .Values.runtime.defaultImage | quote }}
+        - name: CKODEX_HUGGING_FACE_INITIALIZER_IMAGE
+          value: {{ .Values.runtime.huggingFaceInitializerImage | quote }}
         - name: CKODEX_ENVOY_GATEWAY_NAMESPACE
           value: {{ .Values.gateway.dataPlaneNamespace | quote }}
         - name: CKODEX_HF_MIRROR_URL

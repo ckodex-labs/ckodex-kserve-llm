@@ -6,9 +6,7 @@ const (
 	VLLMImage                     = "vllm/vllm-openai:v0.25.1"
 	QuantCppImage                 = "ckodex/quant-cpp:v0.1.0"
 	StorageInitializerImage       = "kserve/storage-initializer:v0.19.0"
-	HuggingFaceInitializerImage   = "python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7"
-	HuggingFaceHubVersion         = "1.8.0"
-	HuggingFaceXetVersion         = "1.5.2"
+	HuggingFaceInitializerImage   = "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.6"
 	HFCSIPVStorageSize            = "500Gi" // Nominal; hf-csi-driver does not enforce capacity limits
 	CKodexStorageInitializerImage = "ckodex/storage-initializer:v0.1.0"
 	HFMountCSIDriver              = "hf.csi.huggingface.co"

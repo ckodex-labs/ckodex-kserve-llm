@@ -87,6 +87,8 @@ spec:
             - name: CKODEX_HF_MIRROR_URL
               value: {{ .Values.registry.mirrorURL | quote }}
             {{- end }}
+            - name: CKODEX_HUGGING_FACE_INITIALIZER_IMAGE
+              value: {{ .Values.vllm.huggingFaceInitializerImage | quote }}
             # Feature Gates
             - name: CKODEX_FEATURE_ENABLE_SECURITY
               value: {{ .Values.features.enableSecurity | quote }}

@@ -82,6 +82,7 @@ type LLMInferenceServiceReconciler struct {
 	LocalRegistry      string
 	LocalCosignKeyPath string
 	RuntimeImage       string
+	HFInitializerImage string
 
 	// Modular sub-reconcilers
 	DeploymentBuilder    *deployment.Builder
@@ -451,6 +452,7 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		LocalRegistry:           r.LocalRegistry,
 		LocalCosignKeyPath:      r.LocalCosignKeyPath,
 		RuntimeImage:            r.RuntimeImage,
+		HFInitializerImage:      r.HFInitializerImage,
 	}
 	r.StatusReconciler = &status.Reconciler{
 		Client:          mgr.GetClient(),

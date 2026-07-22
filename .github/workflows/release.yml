@@ -59,6 +59,8 @@ jobs:
     outputs:
       image-digest: ${{ steps.build.outputs.digest }}
       image-name: ${{ steps.build.outputs.name }}
+      hf-initializer-digest: ${{ steps.build-hf-initializer.outputs.digest }}
+      hf-initializer-name: ${{ steps.build-hf-initializer.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -122,6 +124,31 @@ jobs:
           COSIGN_REF: ${{ steps.build.outputs.name }}@${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${COSIGN_REF}"
 
+      - name: Build, scan, and publish Hugging Face initializer
+        id: build-hf-initializer
+        shell: bash
+        env:
+          DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          IMAGE_REF: ghcr.io/${{ github.repository }}-huggingface-initializer:${{ github.ref_name }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          dagger call scan-hugging-face-initializer --source=.
+          full_ref=$(dagger call publish-hugging-face-initializer \
+            --source=. \
+            --image-ref="$IMAGE_REF" \
+            --registry-username="$REGISTRY_USERNAME" \
+            --registry-token=env:GITHUB_TOKEN)
+          digest=$(echo "$full_ref" | grep -oE 'sha256:[a-f0-9]+')
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${{ github.repository }}-huggingface-initializer" >> "$GITHUB_OUTPUT"
+
+      - name: Sign Hugging Face initializer with cosign (OIDC)
+        shell: bash
+        env:
+          COSIGN_REF: ${{ steps.build-hf-initializer.outputs.name }}@${{ steps.build-hf-initializer.outputs.digest }}
+        run: cosign sign --yes "${COSIGN_REF}"
+
       - name: Generate SBOM (CycloneDX via Trivy)
         shell: bash
         env:
@@ -136,7 +163,13 @@ jobs:
             --image-ref="$IMAGE_REF" \
             --registry-username="$REGISTRY_USERNAME" \
             --registry-token=env:GITHUB_TOKEN \
-            export --path=sbom/sbom.cdx.json
+            export --path=sbom/manager.cdx.json
+          dagger call sbom \
+            --source=. \
+            --image-ref="${IMAGE_REF%:*}-huggingface-initializer:${{ github.ref_name }}" \
+            --registry-username="$REGISTRY_USERNAME" \
+            --registry-token=env:GITHUB_TOKEN \
+            export --path=sbom/huggingface-initializer.cdx.json
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
@@ -200,6 +233,21 @@ jobs:
     with:
       image: ${{ needs.image-release.outputs.image-name }}
       digest: ${{ needs.image-release.outputs.image-digest }}
+      registry-username: ${{ github.actor }}
+      private-repository: true
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  hf-initializer-provenance:
+    needs: [image-release]
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
+    with:
+      image: ${{ needs.image-release.outputs.hf-initializer-name }}
+      digest: ${{ needs.image-release.outputs.hf-initializer-digest }}
       registry-username: ${{ github.actor }}
       private-repository: true
     secrets:

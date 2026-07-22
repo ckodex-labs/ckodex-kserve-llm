@@ -40,6 +40,7 @@ type Builder struct {
 	LocalRegistry      string // e.g. "local-registry.corp.internal"
 	LocalCosignKeyPath string
 	RuntimeImage       string
+	HFInitializerImage string
 }
 
 // Build constructs the desired Deployment spec.
@@ -203,6 +204,9 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 	}
 
 	initializerImage := api.HuggingFaceInitializerImage
+	if b.HFInitializerImage != "" {
+		initializerImage = b.HFInitializerImage
+	}
 	if scheme != "hf" && scheme != "huggingface" {
 		initializerImage = api.CKodexStorageInitializerImage
 	}
@@ -235,10 +239,8 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 	}
 	if scheme == "hf" || scheme == "huggingface" {
 		repo, revision := parseHuggingFaceURI(uri)
-		container.Command = []string{"/bin/sh", "-ec"}
 		container.Args = []string{
-			fmt.Sprintf("python -m venv /tmp/hf-venv && /tmp/hf-venv/bin/pip install --disable-pip-version-check --no-cache-dir huggingface_hub==%s hf-xet==%s && exec /tmp/hf-venv/bin/hf download \"$1\" --revision \"$2\" --local-dir \"$3\"", api.HuggingFaceHubVersion, api.HuggingFaceXetVersion),
-			"--", repo, revision, api.ModelMountPath,
+			"download", repo, "--revision", revision, "--local-dir", api.ModelMountPath,
 		}
 		container.Env = append(container.Env,
 			corev1.EnvVar{Name: "HOME", Value: "/tmp"},
@@ -459,6 +461,9 @@ func parseHuggingFaceURI(uri string) (repo, revision string) {
 	revision = "main"
 	if idx := strings.LastIndex(repo, "@"); idx >= 0 {
 		repo, revision = repo[:idx], repo[idx+1:]
+		if revision == "" {
+			revision = "main"
+		}
 	}
 	return repo, revision
 }
@@ -474,62 +479,71 @@ func parsePVCURI(uri string) (claim, subPath string) {
 }
 
 func (b *Builder) ensureModelVolume(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
+	modelVolumeFound := false
 	for _, v := range podSpec.Volumes {
 		if v.Name == api.ModelVolumeName {
-			return
+			modelVolumeFound = true
+			break
 		}
 	}
 
-	uri := llmSvc.Spec.Model.URI
-	switch {
-	case strings.HasPrefix(uri, "modelpack://"):
-		ref := strings.TrimPrefix(uri, "modelpack://")
-		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
-			Name: api.ModelVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				CSI: &corev1.CSIVolumeSource{
-					Driver:           "model.csi.modelpack.org",
-					VolumeAttributes: map[string]string{"modelRef": ref},
+	if !modelVolumeFound {
+		uri := llmSvc.Spec.Model.URI
+		switch {
+		case strings.HasPrefix(uri, "modelpack://"):
+			ref := strings.TrimPrefix(uri, "modelpack://")
+			podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+				Name: api.ModelVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					CSI: &corev1.CSIVolumeSource{
+						Driver:           "model.csi.modelpack.org",
+						VolumeAttributes: map[string]string{"modelRef": ref},
+					},
 				},
-			},
-		})
-	case strings.HasPrefix(uri, "hf-mount://"):
-		// PV+PVC are provisioned by HFCSIReconciler before the pod is built.
-		// The PVC name is the same deterministic formula used in hfcsi_reconciler.go.
-		pvcName := fmt.Sprintf("hf-model-%s-%s", llmSvc.Namespace, llmSvc.Name)
-		if len(pvcName) > 253 {
-			pvcName = pvcName[:253]
+			})
+		case strings.HasPrefix(uri, "hf-mount://"):
+			// PV+PVC are provisioned by HFCSIReconciler before the pod is built.
+			// The PVC name is the same deterministic formula used in hfcsi_reconciler.go.
+			pvcName := fmt.Sprintf("hf-model-%s-%s", llmSvc.Namespace, llmSvc.Name)
+			if len(pvcName) > 253 {
+				pvcName = pvcName[:253]
+			}
+			podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+				Name: api.ModelVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvcName,
+						ReadOnly:  true,
+					},
+				},
+			})
+		case strings.HasPrefix(uri, "pvc://"):
+			pvcName, _ := parsePVCURI(uri)
+			podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+				Name: api.ModelVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvcName,
+						ReadOnly:  true,
+					},
+				},
+			})
+		default:
+			podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
+				Name: api.ModelVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			})
 		}
-		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
-			Name: api.ModelVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: pvcName,
-					ReadOnly:  true,
-				},
-			},
-		})
-	case strings.HasPrefix(uri, "pvc://"):
-		pvcName, _ := parsePVCURI(uri)
-		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
-			Name: api.ModelVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: pvcName,
-					ReadOnly:  true,
-				},
-			},
-		})
-	default:
-		podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
-			Name: api.ModelVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		})
 	}
 
 	// Always add the 4Gi /tmp scratch space to support ReadOnlyRootFilesystem
+	for _, volume := range podSpec.Volumes {
+		if volume.Name == "tmp-scratch" {
+			return
+		}
+	}
 	podSpec.Volumes = append(podSpec.Volumes, corev1.Volume{
 		Name: "tmp-scratch",
 		VolumeSource: corev1.VolumeSource{
@@ -545,20 +559,28 @@ func (b *Builder) ensureModelVolumeMount(llmSvc *servingv1alpha2.LLMInferenceSer
 		return
 	}
 	c := &podSpec.Containers[0]
-	for _, m := range c.VolumeMounts {
+	modelMountFound := false
+	for i := range c.VolumeMounts {
+		m := &c.VolumeMounts[i]
 		if m.Name == api.ModelVolumeName {
-			return
+			modelMountFound = true
+			if strings.HasPrefix(llmSvc.Spec.Model.URI, "pvc://") {
+				_, m.SubPath = parsePVCURI(llmSvc.Spec.Model.URI)
+			}
+			break
 		}
 	}
-	mount := corev1.VolumeMount{
-		Name:      api.ModelVolumeName,
-		MountPath: api.ModelMountPath,
-		ReadOnly:  true,
+	if !modelMountFound {
+		mount := corev1.VolumeMount{
+			Name:      api.ModelVolumeName,
+			MountPath: api.ModelMountPath,
+			ReadOnly:  true,
+		}
+		if strings.HasPrefix(llmSvc.Spec.Model.URI, "pvc://") {
+			_, mount.SubPath = parsePVCURI(llmSvc.Spec.Model.URI)
+		}
+		c.VolumeMounts = append(c.VolumeMounts, mount)
 	}
-	if strings.HasPrefix(llmSvc.Spec.Model.URI, "pvc://") {
-		_, mount.SubPath = parsePVCURI(llmSvc.Spec.Model.URI)
-	}
-	c.VolumeMounts = append(c.VolumeMounts, mount)
 
 	// Inject /tmp scratch mount
 	foundTmp := false

@@ -97,6 +97,17 @@ jobs:
           args: scan --source=.
           dagger-flags: --progress plain
 
+      - name: Run Hugging Face initializer vulnerability scan
+        uses: dagger/dagger-for-github@v8.4.0
+        timeout-minutes: 5
+        env:
+          DAGGER_NO_NAG: "1"
+        with:
+          version: v0.21.7
+          verb: call
+          args: scan-hugging-face-initializer --source=.
+          dagger-flags: --progress plain
+
       - name: Rehearse release artifacts
         run: make release-readiness
 

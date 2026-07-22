@@ -389,6 +389,65 @@ func TestBuilder_Build_PVCVolumeSubPath(t *testing.T) {
 	assert.Equal(t, "gemma-4-26B-A4B-it-NVFP4", subPath)
 }
 
+func TestBuilder_Build_PVCSubPathWithExistingModelMount(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build()}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "gemma", Namespace: "default"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{URI: "pvc://gemma4-weights/models/gemma-4"},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Volumes: []corev1.Volume{{
+					Name: api.ModelVolumeName,
+					VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: "gemma4-weights",
+					}},
+				}},
+				Containers: []corev1.Container{{
+					Name: "vllm",
+					VolumeMounts: []corev1.VolumeMount{{
+						Name: api.ModelVolumeName, MountPath: api.ModelMountPath, ReadOnly: true,
+					}},
+				}},
+			}},
+		},
+	}
+
+	dep := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA, nil)
+	podSpec := dep.Spec.Template.Spec
+	require.Len(t, podSpec.Containers, 1)
+
+	var modelMount, tmpMount *corev1.VolumeMount
+	for i := range podSpec.Containers[0].VolumeMounts {
+		mount := &podSpec.Containers[0].VolumeMounts[i]
+		switch mount.Name {
+		case api.ModelVolumeName:
+			modelMount = mount
+		case "tmp-scratch":
+			tmpMount = mount
+		}
+	}
+	require.NotNil(t, modelMount)
+	assert.Equal(t, "models/gemma-4", modelMount.SubPath)
+	require.NotNil(t, tmpMount)
+	assert.Equal(t, "/tmp", tmpMount.MountPath)
+
+	var tmpVolume *corev1.Volume
+	for i := range podSpec.Volumes {
+		if podSpec.Volumes[i].Name == "tmp-scratch" {
+			tmpVolume = &podSpec.Volumes[i]
+			break
+		}
+	}
+	require.NotNil(t, tmpVolume)
+	require.NotNil(t, tmpVolume.EmptyDir)
+}
+
+func TestParseHuggingFaceURIEmptyRevisionDefaultsToMain(t *testing.T) {
+	repo, revision := parseHuggingFaceURI("hf://org/model@")
+	assert.Equal(t, "org/model", repo)
+	assert.Equal(t, "main", revision)
+}
+
 func TestBuilder_BuildStorageInitializer(t *testing.T) {
 	client := fake.NewClientBuilder().Build()
 	builder := &Builder{
@@ -431,9 +490,10 @@ func TestBuilder_BuildStorageInitializer(t *testing.T) {
 
 	assert.Equal(t, "storage-initializer", initContainer.Name)
 	assert.Equal(t, api.HuggingFaceInitializerImage, initContainer.Image)
-	assert.Equal(t, []string{"/bin/sh", "-ec"}, initContainer.Command)
-	assert.Contains(t, initContainer.Args[0], "hf download")
-	assert.Contains(t, initContainer.Args[0], "hf-xet=="+api.HuggingFaceXetVersion)
+	assert.Empty(t, initContainer.Command)
+	assert.Equal(t, []string{
+		"download", "mistralai/Mistral-7B", "--revision", "main", "--local-dir", api.ModelMountPath,
+	}, initContainer.Args)
 	require.Len(t, initContainer.EnvFrom, 1)
 	require.NotNil(t, initContainer.EnvFrom[0].SecretRef)
 	assert.Equal(t, "hf-credentials", initContainer.EnvFrom[0].SecretRef.Name)
@@ -485,4 +545,26 @@ func TestBuilder_BuildStorageInitializer(t *testing.T) {
 	llmSvc.Spec.Model.URI = "pvc://my-pvc"
 	initContainerPVC := builder.BuildStorageInitializer(context.Background(), llmSvc, HardwareNVIDIA, nil)
 	assert.Nil(t, initContainerPVC, "Storage initializer should be nil for pvc:// URI")
+}
+
+func TestBuilder_BuildStorageInitializer_PreservesHFImageOverride(t *testing.T) {
+	builder := &Builder{
+		Client:             fake.NewClientBuilder().Build(),
+		HFInitializerImage: "registry.internal/hf-initializer@sha256:1234",
+	}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{URI: "hf://org/model@release"},
+		},
+	}
+
+	container := builder.BuildStorageInitializer(context.Background(), llmSvc, HardwareNVIDIA, nil)
+	require.NotNil(t, container)
+	assert.Equal(t, builder.HFInitializerImage, container.Image)
+	assert.Equal(t, []string{
+		"download", "org/model", "--revision", "release", "--local-dir", api.ModelMountPath,
+	}, container.Args)
+	for _, arg := range container.Args {
+		assert.NotContains(t, arg, "pip install")
+	}
 }

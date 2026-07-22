@@ -33,6 +33,8 @@ featureGates:
 runtime:
   # v0.25.1 includes the mixed-dtype NVFP4 correctness fix used by Gemma/Qwen.
   defaultImage: "vllm/vllm-openai:v0.25.1"
+  # Purpose-built Xet-aware image; dependencies are installed at image build time.
+  huggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.6"
 
 gateway:
   # Namespace where Envoy Gateway creates its data-plane proxy pods.

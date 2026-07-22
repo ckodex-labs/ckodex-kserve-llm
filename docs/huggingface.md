@@ -96,6 +96,12 @@ arguments.
 
 The `hf://` init container uses `hf download`, not the removed
 `huggingface-cli` command. `spec.model.storage.secretRef` is projected with
-`envFrom`, so an `HF_TOKEN` key reaches the client. The downloader image and
-client versions are pinned in `internal/controller/api/constants.go`; changing
-them requires the storage-initializer tests and a live gated/Xet model check.
+`envFrom`, so an `HF_TOKEN` key reaches the client. The purpose-built downloader
+image installs pinned `huggingface_hub` and `hf-xet` packages during the image
+build; model pods do not install packages or require PyPI access at startup.
+The release workflow scans, signs, inventories, and emits provenance for that
+image alongside the manager image.
+
+Set `CKODEX_HUGGING_FACE_INITIALIZER_IMAGE` (or the corresponding Helm value)
+to use a registry mirror or a digest-pinned copy. Changing the image requires
+the storage-initializer tests and a live gated/Xet model check.

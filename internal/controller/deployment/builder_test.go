@@ -568,3 +568,25 @@ func TestBuilder_BuildStorageInitializer_PreservesHFImageOverride(t *testing.T) 
 		assert.NotContains(t, arg, "pip install")
 	}
 }
+
+func TestBuilder_BuildStorageInitializer_HFMirrorUsesXetInitializer(t *testing.T) {
+	builder := &Builder{
+		Client:      fake.NewClientBuilder().Build(),
+		HFMirrorURL: "https://hf-mirror.corp.internal",
+	}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{URI: "hf-mirror://org/model@release"},
+		},
+	}
+
+	container := builder.BuildStorageInitializer(context.Background(), llmSvc, HardwareNVIDIA, nil)
+	require.NotNil(t, container)
+	assert.Equal(t, api.HuggingFaceInitializerImage, container.Image)
+	assert.Equal(t, []string{
+		"download", "org/model", "--revision", "release", "--local-dir", api.ModelMountPath,
+	}, container.Args)
+	assert.Contains(t, container.Env, corev1.EnvVar{
+		Name: "HF_ENDPOINT", Value: builder.HFMirrorURL,
+	})
+}

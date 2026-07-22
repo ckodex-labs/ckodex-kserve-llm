@@ -105,3 +105,8 @@ image alongside the manager image.
 Set `CKODEX_HUGGING_FACE_INITIALIZER_IMAGE` (or the corresponding Helm value)
 to use a registry mirror or a digest-pinned copy. Changing the image requires
 the storage-initializer tests and a live gated/Xet model check.
+
+When `CKODEX_HF_MIRROR_URL` is configured, the webhook rewrites `hf://` to
+`hf-mirror://` and the deployment builder keeps the Xet-aware initializer while
+setting `HF_ENDPOINT` to that mirror. The model repository and optional
+`@revision` retain the same syntax as `hf://`.

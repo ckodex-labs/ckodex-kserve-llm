@@ -41,6 +41,7 @@ type Builder struct {
 	LocalCosignKeyPath string
 	RuntimeImage       string
 	HFInitializerImage string
+	HFMirrorURL        string
 }
 
 // Build constructs the desired Deployment spec.
@@ -207,7 +208,7 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 	if b.HFInitializerImage != "" {
 		initializerImage = b.HFInitializerImage
 	}
-	if scheme != "hf" && scheme != "huggingface" {
+	if !isHuggingFaceScheme(scheme) {
 		initializerImage = api.CKodexStorageInitializerImage
 	}
 	if b.AirGappedMode && b.LocalRegistry != "" {
@@ -237,7 +238,7 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 			},
 		},
 	}
-	if scheme == "hf" || scheme == "huggingface" {
+	if isHuggingFaceScheme(scheme) {
 		repo, revision := parseHuggingFaceURI(uri)
 		container.Args = []string{
 			"download", repo, "--revision", revision, "--local-dir", api.ModelMountPath,
@@ -247,6 +248,9 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 			corev1.EnvVar{Name: "HF_HOME", Value: "/tmp/huggingface"},
 			corev1.EnvVar{Name: "HF_HUB_DISABLE_UPDATE_CHECK", Value: "1"},
 		)
+		if scheme == "hf-mirror" && b.HFMirrorURL != "" {
+			container.Env = append(container.Env, corev1.EnvVar{Name: "HF_ENDPOINT", Value: b.HFMirrorURL})
+		}
 	}
 
 	if llmSvc.Spec.Model.Storage != nil {
@@ -457,7 +461,7 @@ func (b *Builder) isLocalModelCacheReady(ctx context.Context, modelURI string) b
 }
 
 func parseHuggingFaceURI(uri string) (repo, revision string) {
-	repo = strings.TrimPrefix(strings.TrimPrefix(uri, "hf://"), "huggingface://")
+	repo = strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(uri, "hf://"), "huggingface://"), "hf-mirror://")
 	revision = "main"
 	if idx := strings.LastIndex(repo, "@"); idx >= 0 {
 		repo, revision = repo[:idx], repo[idx+1:]
@@ -466,6 +470,10 @@ func parseHuggingFaceURI(uri string) (repo, revision string) {
 		}
 	}
 	return repo, revision
+}
+
+func isHuggingFaceScheme(scheme string) bool {
+	return scheme == "hf" || scheme == "huggingface" || scheme == "hf-mirror"
 }
 
 func parsePVCURI(uri string) (claim, subPath string) {

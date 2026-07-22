@@ -145,6 +145,7 @@ func main() {
 		LocalCosignKeyPath: cfg.LocalCosignKeyPath,
 		RuntimeImage:       cfg.Defaults.RuntimeImage,
 		HFInitializerImage: cfg.Defaults.HuggingFaceInitializerImage,
+		HFMirrorURL:        cfg.HuggingFaceMirrorURL,
 	}
 
 	// gRPC — independent of gateway (controls Service port definition)

@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.26.4-bookworm AS builder
+FROM golang:1.26.5-bookworm AS builder
 
 ARG TARGETOS=linux
 ARG TARGETARCH

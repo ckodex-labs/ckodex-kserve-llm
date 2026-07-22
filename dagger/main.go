@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	goBuilderImage    = "golang:1.26.4-bookworm"
+	goBuilderImage    = "golang:1.26.5-bookworm"
 	golangciLintImage = "golangci/golangci-lint:v2.12.2"
 	trivyVersion      = "0.72.0"
 	cosignVersion     = "v3.1.1"

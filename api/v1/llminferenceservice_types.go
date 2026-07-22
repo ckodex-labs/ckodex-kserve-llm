@@ -123,7 +123,7 @@ type ExperimentalSpec struct {
 type ModelSpec struct {
 	// URI is the model artifact location.
 	// Supported schemes: hf://, hf-mount://, hf-mirror://, s3://, gs://, pvc://, oci://, ocis://, seaweedfs://.
-	// +kubebuilder:validation:Pattern=`^(hf|hf-mount|hf-mirror|s3|swfs|gs|pvc|oci|ocis|modelpack|https?)://.*$`
+	// +kubebuilder:validation:Pattern=`^(hf|hf-mount|hf-mirror|s3|swfs|seaweedfs|gs|pvc|oci|ocis|modelpack|https?)://.*$`
 	URI string `json:"uri"`
 
 	// Name is the model identifier used in inference requests.

@@ -109,6 +109,10 @@ func TestBuildMapsKServeV019MultiNodeContract(t *testing.T) {
 	}
 
 	predictor, _, _ := unstructuredMap(obj.Object, "spec", "predictor")
+	strategy, _, _ := unstructuredMap(predictor, "deploymentStrategy")
+	if strategy["type"] != "Recreate" {
+		t.Fatalf("deployment strategy = %#v, want Recreate", strategy)
+	}
 	model, _, _ := unstructuredMap(predictor, "model")
 	if model["runtime"] != "custom-multinode-runtime" {
 		t.Fatalf("runtime = %v", model["runtime"])

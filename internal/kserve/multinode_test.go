@@ -8,10 +8,14 @@ import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -217,6 +221,92 @@ func TestReconcileCreatesInferenceServiceAndRemovesOwnedLegacyDeployment(t *test
 	}, &appsv1.Deployment{}); err == nil {
 		t.Fatal("owned legacy Deployment was not removed")
 	}
+}
+
+func TestReconcilePreservesExternalMetadataAndDoesNotRewriteUnchangedObject(t *testing.T) {
+	scheme := multiNodeScheme(t)
+	svc := multiNodeService()
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build()
+	reconciler := &Reconciler{Client: cl, Scheme: scheme}
+	ctx := context.Background()
+
+	if err := reconciler.Reconcile(ctx, svc); err != nil {
+		t.Fatalf("first Reconcile() error = %v", err)
+	}
+	isvc := NewInferenceService()
+	key := types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}
+	if err := cl.Get(ctx, key, isvc); err != nil {
+		t.Fatal(err)
+	}
+	annotations := isvc.GetAnnotations()
+	annotations["external.example.com/state"] = "preserve"
+	isvc.SetAnnotations(annotations)
+	if err := cl.Update(ctx, isvc); err != nil {
+		t.Fatal(err)
+	}
+	resourceVersion := isvc.GetResourceVersion()
+
+	if err := reconciler.Reconcile(ctx, svc); err != nil {
+		t.Fatalf("second Reconcile() error = %v", err)
+	}
+	if err := cl.Get(ctx, key, isvc); err != nil {
+		t.Fatal(err)
+	}
+	if isvc.GetAnnotations()["external.example.com/state"] != "preserve" {
+		t.Fatal("external annotation was removed")
+	}
+	if isvc.GetResourceVersion() != resourceVersion {
+		t.Fatalf("unchanged object was rewritten: resourceVersion %s -> %s",
+			resourceVersion, isvc.GetResourceVersion())
+	}
+}
+
+func TestReconcileToleratesMissingLegacyLeaderWorkerSetCRD(t *testing.T) {
+	scheme := multiNodeScheme(t)
+	svc := multiNodeService()
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build()
+	reconciler := &Reconciler{
+		Client: &missingLWSClient{Client: base},
+		Scheme: scheme,
+	}
+	if err := reconciler.Reconcile(context.Background(), svc); err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+}
+
+func multiNodeScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := servingv1alpha2.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := policyv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := autoscalingv2.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	return scheme
+}
+
+type missingLWSClient struct {
+	client.Client
+}
+
+func (c *missingLWSClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if unstructured, ok := obj.(*unstructured.Unstructured); ok &&
+		unstructured.GroupVersionKind().Group == "leaderworkerset.x-k8s.io" {
+		return &meta.NoKindMatchError{
+			GroupKind: schema.GroupKind{Group: "leaderworkerset.x-k8s.io", Kind: "LeaderWorkerSet"},
+		}
+	}
+	return c.Client.Get(ctx, key, obj, opts...)
 }
 
 func unstructuredMap(object map[string]interface{}, fields ...string) (map[string]interface{}, bool, error) {

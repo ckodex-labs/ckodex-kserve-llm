@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -73,25 +74,36 @@ func (r *Reconciler) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMI
 	if err != nil {
 		return err
 	}
-	if err := controllerutil.SetControllerReference(llmSvc, desired, r.Scheme); err != nil {
-		return fmt.Errorf("set KServe InferenceService owner reference: %w", err)
-	}
 
 	existing := NewInferenceService()
-	key := types.NamespacedName{Name: llmSvc.Name, Namespace: llmSvc.Namespace}
-	if err := r.Get(ctx, key, existing); err != nil {
-		if apierrors.IsNotFound(err) {
-			if err := r.Create(ctx, desired); err != nil {
-				return fmt.Errorf("create KServe InferenceService: %w", err)
-			}
-			return r.cleanupLegacyResources(ctx, llmSvc)
-		}
-		return fmt.Errorf("get KServe InferenceService: %w", err)
-	}
+	existing.SetName(llmSvc.Name)
+	existing.SetNamespace(llmSvc.Namespace)
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, existing, func() error {
+		existing.Object["spec"] = desired.Object["spec"]
 
-	desired.SetResourceVersion(existing.GetResourceVersion())
-	if err := r.Update(ctx, desired); err != nil {
-		return fmt.Errorf("update KServe InferenceService: %w", err)
+		labels := existing.GetLabels()
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		for key, value := range desired.GetLabels() {
+			labels[key] = value
+		}
+		existing.SetLabels(labels)
+
+		annotations := existing.GetAnnotations()
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		for key, value := range desired.GetAnnotations() {
+			annotations[key] = value
+		}
+		existing.SetAnnotations(annotations)
+		if err := controllerutil.SetControllerReference(llmSvc, existing, r.Scheme); err != nil {
+			return fmt.Errorf("set KServe InferenceService owner reference: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("create or update KServe InferenceService: %w", err)
 	}
 	return r.cleanupLegacyResources(ctx, llmSvc)
 }
@@ -353,7 +365,7 @@ func (r *Reconciler) cleanupLegacyResources(ctx context.Context, llmSvc *serving
 		if err := r.Delete(ctx, lws); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("delete legacy LeaderWorkerSet: %w", err)
 		}
-	} else if err != nil && !apierrors.IsNotFound(err) {
+	} else if err != nil && !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 		return fmt.Errorf("get legacy LeaderWorkerSet: %w", err)
 	}
 	return nil

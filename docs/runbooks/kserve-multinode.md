@@ -69,3 +69,39 @@ CKodex-owned standalone `LeaderWorkerSet` or same-name Deployment may exist.
 Live acceptance still requires at least two schedulable GPU nodes and a real
 model load. Unit tests prove the emitted resource contract; they do not prove
 Ray/NCCL behavior on hardware.
+
+## Two-node hardware acceptance
+
+After the model is deployed, run the fail-closed hardware gate from a host that
+can reach the OpenAI endpoint:
+
+```bash
+export E2E_KUBECONFIG=/path/to/kubeconfig
+export E2E_KSERVE_MULTINODE=true
+export E2E_KSERVE_MULTINODE_NAMESPACE=models
+export E2E_KSERVE_MULTINODE_NAME=gemma4-multinode
+export E2E_KSERVE_MULTINODE_MODEL=unsloth/gemma-4-26B-A4B-it-NVFP4
+export E2E_KSERVE_MULTINODE_ENDPOINT=http://<gateway-or-port-forward>/v1/chat/completions
+
+go test -tags=e2e ./test/e2e/multinode \
+  -run '^TestKServeMultiNodeOpenAIRequest$' \
+  -count=1 -v
+```
+
+The gate is read-only: it does not apply CRDs or create, update, or delete
+cluster resources.
+
+When `E2E_KSERVE_MULTINODE=true`, missing resources or configuration do not
+skip. The gate requires:
+
+1. `LLMInferenceService` and its upstream KServe `InferenceService` to report
+   `Ready=True`.
+2. The upstream object to retain Standard mode, autoscaling `none`, and exactly
+   one head replica.
+3. At least two Ready KServe predictor pods with positive `nvidia.com/gpu`
+   requests and limits.
+4. Those pods to be scheduled across at least two distinct nodes.
+5. The OpenAI endpoint to return HTTP 200 with a non-empty `choices` array.
+
+Set `E2E_KSERVE_MULTINODE_API_KEY` when the endpoint requires bearer
+authentication. The test reads but never logs the key.

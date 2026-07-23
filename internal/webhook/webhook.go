@@ -95,7 +95,7 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 			errs = append(errs, "spec.model.uri pointing to unsafe formats (.pkl, .bin, .pt) is forbidden; use .safetensors")
 		}
 
-		validSchemes := []string{"hf://", "hf-mount://", "hf-mirror://", "s3://", "swfs://", "gs://", "pvc://", "oci://", "ocis://", "modelpack://", "seaweedfs://", "http://", "https://"}
+		validSchemes := []string{"hf://", "huggingface://", "hf-mount://", "hf-mirror://", "s3://", "swfs://", "gs://", "pvc://", "oci://", "ocis://", "modelpack://", "seaweedfs://", "http://", "https://"}
 		valid := false
 		for _, scheme := range validSchemes {
 			if strings.HasPrefix(llmSvc.Spec.Model.URI, scheme) {

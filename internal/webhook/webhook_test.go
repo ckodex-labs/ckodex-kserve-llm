@@ -89,6 +89,7 @@ func TestValidator_ValidateCreate_UnknownScheme(t *testing.T) {
 func TestValidator_ValidateCreate_ValidSchemes(t *testing.T) {
 	schemes := []string{
 		"hf://meta-llama/Llama-3.2-1B",
+		"huggingface://meta-llama/Llama-3.2-1B",
 		"hf-mirror://internal.corp/llama",
 		"s3://bucket/prefix/model",
 		"gs://bucket/model",

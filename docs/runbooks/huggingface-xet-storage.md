@@ -27,9 +27,12 @@ The workload type is material. If it is omitted, KServe defaults it to
 `initContainer`; a second `hf://` match then competes with KServe's default
 storage container, and selection is not deterministic.
 
-For a normal KServe `InferenceService` init container, update the existing
-KServe `default` `ClusterStorageContainer` image instead of creating another
-`hf://` `initContainer` match.
+Do not reuse this `localModelDownloadJob` resource for a normal KServe
+`InferenceService` init container. Replacing KServe's default handler requires a
+separate migration that removes its existing `hf://` match before registering a
+new `initContainer` handler. This initializer currently implements the
+single-source `<source-uri> <destination-path>` contract; it does not advertise
+KServe multi-model download support.
 
 ## Separate Cache Concerns
 

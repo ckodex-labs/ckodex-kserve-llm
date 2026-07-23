@@ -49,12 +49,42 @@ jobs:
         run: |
           golangci-lint run -v --timeout 10m ./...
           go test ./...
+          go run ./hack/helm-contract
           make release-readiness
+
+  hf-initializer-arm64:
+    name: Hugging Face initializer (arm64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pre-pull Dagger engine
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if docker pull registry.dagger.io/engine:v0.21.7; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          exit 1
+
+      - name: Scan native arm64 Hugging Face initializer
+        uses: dagger/dagger-for-github@v8.4.0
+        timeout-minutes: 15
+        env:
+          DAGGER_NO_NAG: "1"
+        with:
+          version: v0.21.7
+          verb: call
+          args: scan-hugging-face-initializer-arch --source=. --arch=arm64
+          dagger-flags: --progress plain
 
   # 1. Image build, scan, and publish
   image-release:
     name: Image Build + Push
-    needs: [verify]
+    needs: [verify, hf-initializer-arm64]
     runs-on: ubuntu-latest
     outputs:
       image-digest: ${{ steps.build.outputs.digest }}
@@ -133,7 +163,7 @@ jobs:
           REGISTRY_USERNAME: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          dagger call scan-hugging-face-initializer --source=.
+          dagger call scan-hugging-face-initializer-arch --source=. --arch=amd64
           full_ref=$(dagger call publish-hugging-face-initializer \
             --source=. \
             --image-ref="$IMAGE_REF" \

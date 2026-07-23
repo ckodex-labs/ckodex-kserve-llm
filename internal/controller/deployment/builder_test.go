@@ -573,6 +573,13 @@ func TestBuilder_BuildStorageInitializer(t *testing.T) {
 	require.NotNil(t, initContainerCustom)
 	assert.Equal(t, api.CKodexStorageInitializerImage, initContainerCustom.Image)
 
+	// Legacy huggingface:// objects remain readable through the compatibility
+	// initializer, while new API objects use the canonical KServe hf:// scheme.
+	llmSvc.Spec.Model.URI = "huggingface://mistralai/Mistral-7B"
+	initContainerLegacyHF := builder.BuildStorageInitializer(context.Background(), llmSvc, HardwareNVIDIA, nil)
+	require.NotNil(t, initContainerLegacyHF)
+	assert.Equal(t, api.CKodexStorageInitializerImage, initContainerLegacyHF.Image)
+
 	// Air-gapped HF references become OCI references before initializer selection.
 	airGapBuilder := &Builder{Client: client, AirGappedMode: true, LocalRegistry: "registry.internal"}
 	llmSvc.Spec.Model.URI = "hf://mistralai/Mistral-7B"

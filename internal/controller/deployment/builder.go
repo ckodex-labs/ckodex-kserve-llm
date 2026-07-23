@@ -472,7 +472,7 @@ func parseHuggingFaceURI(uri string) (repo, revision string) {
 }
 
 func isHuggingFaceScheme(scheme string) bool {
-	return scheme == "hf" || scheme == "huggingface" || scheme == "hf-mirror"
+	return scheme == "hf" || scheme == "hf-mirror"
 }
 
 func parsePVCURI(uri string) (claim, subPath string) {

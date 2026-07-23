@@ -462,6 +462,36 @@ func TestBuilder_Build_PVCSubPathWithExistingModelMount(t *testing.T) {
 	require.NotNil(t, tmpVolume.EmptyDir)
 }
 
+func TestBuilder_Build_PVCRootPreservesExistingModelMountSubPath(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build()}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "gemma", Namespace: "default"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{URI: "pvc://gemma4-weights"},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{
+					Name: "vllm",
+					VolumeMounts: []corev1.VolumeMount{{
+						Name: api.ModelVolumeName, MountPath: "/custom-models", SubPath: "models/gemma-4",
+					}},
+				}},
+			}},
+		},
+	}
+
+	dep := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA, nil)
+	var modelMount *corev1.VolumeMount
+	for i := range dep.Spec.Template.Spec.Containers[0].VolumeMounts {
+		mount := &dep.Spec.Template.Spec.Containers[0].VolumeMounts[i]
+		if mount.Name == api.ModelVolumeName {
+			modelMount = mount
+			break
+		}
+	}
+	require.NotNil(t, modelMount)
+	assert.Equal(t, "models/gemma-4", modelMount.SubPath)
+}
+
 func TestBuilder_Build_PreservesExplicitModelMountPath(t *testing.T) {
 	builder := &Builder{Client: fake.NewClientBuilder().Build()}
 	llmSvc := &servingv1alpha2.LLMInferenceService{

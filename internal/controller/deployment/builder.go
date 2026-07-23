@@ -576,7 +576,10 @@ func (b *Builder) ensureModelVolumeMount(llmSvc *servingv1alpha2.LLMInferenceSer
 				m.ReadOnly = true
 			}
 			if strings.HasPrefix(llmSvc.Spec.Model.URI, "pvc://") {
-				_, m.SubPath = parsePVCURI(llmSvc.Spec.Model.URI)
+				_, uriSubPath := parsePVCURI(llmSvc.Spec.Model.URI)
+				if uriSubPath != "" {
+					m.SubPath = uriSubPath
+				}
 			}
 			break
 		}

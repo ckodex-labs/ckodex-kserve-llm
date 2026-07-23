@@ -66,10 +66,16 @@ func TestLLMInferenceService_ReconcileMultiNodeDelegatesToKServe(t *testing.T) {
 		Tensor:   ptr32(2),
 		Pipeline: ptr32(2),
 	}
+	modelPVC := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: "model-weights", Namespace: llmSvc.Namespace},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+		},
+	}
 
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
-		WithObjects(llmSvc).
+		WithObjects(llmSvc, modelPVC).
 		WithStatusSubresource(llmSvc).
 		Build()
 	r := setupReconciler(cl, s)

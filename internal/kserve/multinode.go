@@ -70,6 +70,9 @@ func NewInferenceService() *unstructured.Unstructured {
 
 // Reconcile creates or updates the upstream KServe InferenceService.
 func (r *Reconciler) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
+	if err := r.validateSharedModelPVC(ctx, llmSvc); err != nil {
+		return err
+	}
 	desired, err := r.Build(llmSvc)
 	if err != nil {
 		return err
@@ -181,9 +184,8 @@ func validateMultiNode(llmSvc *servingv1alpha2.LLMInferenceService) error {
 	if !RequiresMultiNode(llmSvc) {
 		return fmt.Errorf("KServe multi-node requires spec.worker or pipeline parallelism greater than one")
 	}
-	if !strings.HasPrefix(llmSvc.Spec.Model.URI, "pvc://") &&
-		!strings.HasPrefix(llmSvc.Spec.Model.URI, "oci://") {
-		return fmt.Errorf("KServe v0.19 multi-node storage URI must use pvc:// or oci://, got %q", llmSvc.Spec.Model.URI)
+	if !strings.HasPrefix(llmSvc.Spec.Model.URI, "pvc://") {
+		return fmt.Errorf("KServe v0.19 multi-node storage URI must use pvc://, got %q", llmSvc.Spec.Model.URI)
 	}
 	if llmSvc.Spec.Replicas != nil && *llmSvc.Spec.Replicas != 1 {
 		return fmt.Errorf("KServe v0.19 multi-node requires exactly one head replica")
@@ -214,6 +216,43 @@ func validateMultiNode(llmSvc *servingv1alpha2.LLMInferenceService) error {
 		}
 	}
 	return nil
+}
+
+func (r *Reconciler) validateSharedModelPVC(
+	ctx context.Context,
+	llmSvc *servingv1alpha2.LLMInferenceService,
+) error {
+	claimName, err := modelPVCClaimName(llmSvc.Spec.Model.URI)
+	if err != nil {
+		return err
+	}
+	pvc := &corev1.PersistentVolumeClaim{}
+	key := types.NamespacedName{Name: claimName, Namespace: llmSvc.Namespace}
+	if err := r.Get(ctx, key, pvc); err != nil {
+		return fmt.Errorf("get multi-node model PVC %s: %w", key, err)
+	}
+	for _, mode := range pvc.Spec.AccessModes {
+		if mode == corev1.ReadWriteMany {
+			return nil
+		}
+	}
+	return fmt.Errorf(
+		"multi-node model PVC %s must declare ReadWriteMany access, got %v",
+		key,
+		pvc.Spec.AccessModes,
+	)
+}
+
+func modelPVCClaimName(uri string) (string, error) {
+	if !strings.HasPrefix(uri, "pvc://") {
+		return "", fmt.Errorf("KServe v0.19 multi-node storage URI must use pvc://, got %q", uri)
+	}
+	remainder := strings.TrimPrefix(uri, "pvc://")
+	claimName, _, _ := strings.Cut(remainder, "/")
+	if claimName == "" {
+		return "", fmt.Errorf("KServe v0.19 multi-node storage URI has an empty PVC claim name")
+	}
+	return claimName, nil
 }
 
 func parallelismSizes(p *servingv1alpha2.ParallelismSpec) (int32, int32) {

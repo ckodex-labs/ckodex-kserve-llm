@@ -6,7 +6,7 @@ metadata:
 spec:
   model:
     name: unsloth/gemma-4-26B-A4B-it-NVFP4
-    # KServe v0.19 multi-node accepts pvc:// or oci:// storage.
+    # The referenced PVC must use ReadWriteMany so every Ray pod can read it.
     uri: pvc://gemma4-weights
     storage:
       serviceAccountName: model-reader

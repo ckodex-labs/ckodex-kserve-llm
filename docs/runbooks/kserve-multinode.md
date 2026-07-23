@@ -12,8 +12,8 @@ projection.
 - The `kserve-huggingfaceserver-multinode` `ClusterServingRuntime` installed,
   or `CKODEX_KSERVE_MULTINODE_RUNTIME` set to another compatible installed
   runtime.
-- Model weights available through `pvc://` or `oci://`. A PVC must be readable
-  from every selected node.
+- Model weights available through a `pvc://` URI. The referenced PVC must
+  declare `ReadWriteMany` so every selected node can mount it.
 - GPU requests on both the head template and worker template.
 
 Apply

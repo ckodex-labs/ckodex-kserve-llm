@@ -43,8 +43,8 @@ KServe multi-model download support.
   `LMCacheConnectorV1` configuration and a backing store; enabling vLLM prefix
   caching is not equivalent.
 - KServe multi-node inference is a different topology. KServe 0.19 requires
-  Standard mode, disabled autoscaling, and `pvc://` or `oci://` storage. A PVC
-  must be readable on every selected node. Tensor and pipeline parallelism are
+  Standard mode, disabled autoscaling, and a `pvc://` model URI backed by a
+  `ReadWriteMany` PVC. Tensor and pipeline parallelism are
   configured through `workerSpec`, not environment variables. See
   [KServe v0.19 Multi-Node Serving](kserve-multinode.md).
 

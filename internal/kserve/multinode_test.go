@@ -2,12 +2,14 @@ package kserve
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,6 +60,9 @@ func multiNodeService() *servingv1alpha2.LLMInferenceService {
 						Name: "model",
 						Env:  []corev1.EnvVar{{Name: "HF_HOME", Value: "/cache"}},
 						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("2"),
+							},
 							Limits: corev1.ResourceList{
 								corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("2"),
 							},
@@ -75,6 +80,9 @@ func multiNodeService() *servingv1alpha2.LLMInferenceService {
 						Containers: []corev1.Container{{
 							Name: "worker",
 							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("2"),
+								},
 								Limits: corev1.ResourceList{
 									corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("2"),
 								},
@@ -114,6 +122,11 @@ func TestBuildMapsKServeV019MultiNodeContract(t *testing.T) {
 	if _, found := model["env"]; !found {
 		t.Fatal("head container environment override was not propagated")
 	}
+	assertGPUResources(t, model["resources"], "head")
+	headNodeSelector := predictor["nodeSelector"].(map[string]interface{})
+	if headNodeSelector["accelerator"] != "blackwell" {
+		t.Fatalf("head node selector = %#v", headNodeSelector)
+	}
 	if predictor["serviceAccountName"] != "model-reader" {
 		t.Fatalf("serviceAccountName = %v", predictor["serviceAccountName"])
 	}
@@ -138,6 +151,11 @@ func TestBuildMapsKServeV019MultiNodeContract(t *testing.T) {
 	if _, found := container["image"]; found {
 		t.Fatal("worker image override must not replace the KServe runtime image")
 	}
+	assertGPUResources(t, container["resources"], "worker")
+	workerNodeSelector := worker["nodeSelector"].(map[string]interface{})
+	if workerNodeSelector["accelerator"] != "blackwell" {
+		t.Fatalf("worker node selector = %#v", workerNodeSelector)
+	}
 }
 
 func TestBuildRejectsUnsupportedMultiNodeInputs(t *testing.T) {
@@ -146,6 +164,7 @@ func TestBuildRejectsUnsupportedMultiNodeInputs(t *testing.T) {
 		mutate func(*servingv1alpha2.LLMInferenceService)
 	}{
 		{"hf storage", func(s *servingv1alpha2.LLMInferenceService) { s.Spec.Model.URI = "hf://org/model" }},
+		{"oci storage", func(s *servingv1alpha2.LLMInferenceService) { s.Spec.Model.URI = "oci://registry/model" }},
 		{"scaled heads", func(s *servingv1alpha2.LLMInferenceService) { s.Spec.Replicas = int32Ptr(2) }},
 		{"autoscaling", func(s *servingv1alpha2.LLMInferenceService) { s.Spec.Scaling = &servingv1alpha2.ScalingSpec{} }},
 		{"data parallel", func(s *servingv1alpha2.LLMInferenceService) { s.Spec.Parallelism.Data = int32Ptr(2) }},
@@ -204,7 +223,7 @@ func TestReconcileCreatesInferenceServiceAndRemovesOwnedLegacyDeployment(t *test
 			}},
 		},
 	}
-	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc, legacy).Build()
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc, legacy, sharedModelPVC(svc)).Build()
 	reconciler := &Reconciler{Client: cl, Scheme: scheme}
 
 	if err := reconciler.Reconcile(context.Background(), svc); err != nil {
@@ -226,7 +245,7 @@ func TestReconcileCreatesInferenceServiceAndRemovesOwnedLegacyDeployment(t *test
 func TestReconcilePreservesExternalMetadataAndDoesNotRewriteUnchangedObject(t *testing.T) {
 	scheme := multiNodeScheme(t)
 	svc := multiNodeService()
-	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build()
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc, sharedModelPVC(svc)).Build()
 	reconciler := &Reconciler{Client: cl, Scheme: scheme}
 	ctx := context.Background()
 
@@ -264,13 +283,76 @@ func TestReconcilePreservesExternalMetadataAndDoesNotRewriteUnchangedObject(t *t
 func TestReconcileToleratesMissingLegacyLeaderWorkerSetCRD(t *testing.T) {
 	scheme := multiNodeScheme(t)
 	svc := multiNodeService()
-	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build()
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc, sharedModelPVC(svc)).Build()
 	reconciler := &Reconciler{
 		Client: &missingLWSClient{Client: base},
 		Scheme: scheme,
 	}
 	if err := reconciler.Reconcile(context.Background(), svc); err != nil {
 		t.Fatalf("Reconcile() error = %v", err)
+	}
+}
+
+func TestReconcileRejectsModelPVCWithoutReadWriteMany(t *testing.T) {
+	scheme := multiNodeScheme(t)
+	svc := multiNodeService()
+	pvc := sharedModelPVC(svc)
+	pvc.Spec.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc, pvc).Build()
+	reconciler := &Reconciler{Client: cl, Scheme: scheme}
+
+	err := reconciler.Reconcile(context.Background(), svc)
+	if err == nil || !strings.Contains(err.Error(), "must declare ReadWriteMany") {
+		t.Fatalf("Reconcile() error = %v, want ReadWriteMany validation error", err)
+	}
+	isvc := NewInferenceService()
+	if err := cl.Get(context.Background(), types.NamespacedName{
+		Name: svc.Name, Namespace: svc.Namespace,
+	}, isvc); !apierrors.IsNotFound(err) {
+		t.Fatalf("InferenceService created for non-RWX PVC: %v", err)
+	}
+}
+
+func TestModelPVCClaimNamePreservesKServeSubpath(t *testing.T) {
+	claimName, err := modelPVCClaimName("pvc://gemma4-weights/models/gemma")
+	if err != nil {
+		t.Fatalf("modelPVCClaimName() error = %v", err)
+	}
+	if claimName != "gemma4-weights" {
+		t.Fatalf("claim name = %q, want gemma4-weights", claimName)
+	}
+
+	for _, uri := range []string{"oci://registry/model", "pvc://"} {
+		if _, err := modelPVCClaimName(uri); err == nil {
+			t.Fatalf("modelPVCClaimName(%q) error = nil, want validation error", uri)
+		}
+	}
+}
+
+func sharedModelPVC(svc *servingv1alpha2.LLMInferenceService) *corev1.PersistentVolumeClaim {
+	claimName, err := modelPVCClaimName(svc.Spec.Model.URI)
+	if err != nil {
+		panic(err)
+	}
+	return &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: claimName, Namespace: svc.Namespace},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+		},
+	}
+}
+
+func assertGPUResources(t *testing.T, raw interface{}, location string) {
+	t.Helper()
+	resources, ok := raw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("%s resources = %#v", location, raw)
+	}
+	for _, field := range []string{"requests", "limits"} {
+		values, ok := resources[field].(map[string]interface{})
+		if !ok || values["nvidia.com/gpu"] != "2" {
+			t.Fatalf("%s GPU %s = %#v", location, field, resources[field])
+		}
 	}
 }
 

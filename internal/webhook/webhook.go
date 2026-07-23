@@ -17,11 +17,6 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
 
-const (
-	// defaultVLLMImage is the default vLLM container image.
-	defaultVLLMImage = "vllm/vllm-openai:v0.25.1"
-)
-
 // WebhookConfig carries runtime policy settings injected at manager startup.
 type WebhookConfig struct {
 	// HFMirrorURL, when non-empty, causes the mutating webhook to rewrite hf:// URIs
@@ -252,13 +247,11 @@ func (d *LLMInferenceServiceDefaulter) Default(_ context.Context, llmSvc *servin
 		llmSvc.Spec.Replicas = &one
 	}
 
-	// Default container image if not set
+	// Leave an empty image for the controller to resolve from the live
+	// CKODEX_RUNTIME_IMAGE configuration. Admission-time image defaulting would
+	// persist a stale value and prevent the reconciler from applying that setting.
 	if len(llmSvc.Spec.Template.Spec.Containers) > 0 {
 		c := &llmSvc.Spec.Template.Spec.Containers[0]
-
-		if c.Image == "" {
-			c.Image = defaultVLLMImage
-		}
 
 		// Inject security context
 		if c.SecurityContext == nil {

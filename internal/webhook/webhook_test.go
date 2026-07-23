@@ -315,13 +315,14 @@ func TestDefaulter_Default_ExistingReplicasNotOverwritten(t *testing.T) {
 	assert.Equal(t, int32(3), *svc.Spec.Replicas)
 }
 
-func TestDefaulter_Default_EmptyImageGetsDefault(t *testing.T) {
+func TestDefaulter_Default_EmptyImageRemainsUnsetForController(t *testing.T) {
 	d := &webhook.LLMInferenceServiceDefaulter{}
 	svc := minimalValidSvc()
 	svc.Spec.Template.Spec.Containers[0].Image = ""
 	err := d.Default(context.Background(), svc)
 	require.NoError(t, err)
-	assert.NotEmpty(t, svc.Spec.Template.Spec.Containers[0].Image)
+	assert.Empty(t, svc.Spec.Template.Spec.Containers[0].Image,
+		"controller must resolve the configured runtime image")
 }
 
 func TestDefaulter_Default_SecurityContextInjected(t *testing.T) {

@@ -245,7 +245,7 @@ func TestBuildASRContainer_FasterWhisperDefaults(t *testing.T) {
 	c := r.buildASRContainer(svc)
 
 	assert.Equal(t, asrContainerName, c.Name)
-	assert.Equal(t, "ghcr.io/fedirz/faster-whisper-server:latest-cpu", c.Image,
+	assert.Equal(t, "fedirz/faster-whisper-server:latest-cpu", c.Image,
 		"default faster-whisper image must be used when runtimeImage is empty")
 	assert.Equal(t, int32(asrServerPort), c.Ports[0].ContainerPort)
 
@@ -337,7 +337,7 @@ func TestBuildASRService_Spec(t *testing.T) {
 // TestDefaultASRRuntimeImage verifies correct defaults per runtime.
 func TestDefaultASRRuntimeImage(t *testing.T) {
 	assert.Equal(t,
-		"ghcr.io/fedirz/faster-whisper-server:latest-cpu",
+		"fedirz/faster-whisper-server:latest-cpu",
 		servingv1alpha2.DefaultASRRuntimeImage(servingv1alpha2.ASRRuntimeFasterWhisper),
 	)
 	// transformers has no default — user must supply runtimeImage.

@@ -59,7 +59,7 @@ spec:
     uri: hf://openai/whisper-large-v3
 
   runtime: faster-whisper
-  # runtimeImage: omitted — uses ghcr.io/fedirz/faster-whisper-server:latest-cpu
+  # runtimeImage: omitted — uses fedirz/faster-whisper-server:latest-cpu (Docker Hub)
 
   languages:
     - en

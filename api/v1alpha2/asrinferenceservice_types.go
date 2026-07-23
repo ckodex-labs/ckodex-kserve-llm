@@ -34,7 +34,12 @@ const (
 func DefaultASRRuntimeImage(r ASRRuntime) string {
 	switch r {
 	case ASRRuntimeFasterWhisper:
-		return "ghcr.io/fedirz/faster-whisper-server:latest-cpu"
+		// NOTE: the upstream fedirz/faster-whisper-server project was renamed to
+		// "speaches" (ghcr.io/speaches-ai/speaches), and the old
+		// ghcr.io/fedirz/faster-whisper-server path now 404s. The Docker Hub
+		// mirror fedirz/faster-whisper-server:latest-cpu still hosts the same
+		// server the operator's env/args target, so we default to it here.
+		return "fedirz/faster-whisper-server:latest-cpu"
 	default:
 		// ASRRuntimeTransformers has no canonical public default image in this repo.
 		// Users must set spec.runtimeImage explicitly for that runtime.

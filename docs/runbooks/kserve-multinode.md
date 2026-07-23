@@ -83,7 +83,7 @@ export E2E_KSERVE_MULTINODE_NAME=gemma4-multinode
 export E2E_KSERVE_MULTINODE_MODEL=unsloth/gemma-4-26B-A4B-it-NVFP4
 export E2E_KSERVE_MULTINODE_ENDPOINT=http://<gateway-or-port-forward>/v1/chat/completions
 
-go test -tags=e2e ./test/e2e/multinode \
+go test ./test/e2e/multinode \
   -run '^TestKServeMultiNodeOpenAIRequest$' \
   -count=1 -v
 ```

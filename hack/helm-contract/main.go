@@ -120,7 +120,7 @@ func validateRuntimeDefaults(deployment *unstructured.Unstructured) error {
 	containers, _, _ := unstructured.NestedSlice(
 		deployment.Object, "spec", "template", "spec", "containers")
 	if len(containers) == 0 {
-		return errors.New("Deployment has no manager container")
+		return errors.New("deployment has no manager container")
 	}
 	manager := containers[0].(map[string]interface{})
 	image, _ := manager["image"].(string)

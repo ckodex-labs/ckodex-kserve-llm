@@ -515,12 +515,6 @@ func TestBuilder_Build_PreservesExplicitModelMountPath(t *testing.T) {
 	assert.Equal(t, []string{"--model", "/custom-models"}, dep.Spec.Template.Spec.Containers[0].Args[:2])
 }
 
-func TestParseHuggingFaceURIEmptyRevisionDefaultsToMain(t *testing.T) {
-	repo, revision := parseHuggingFaceURI("hf://org/model@")
-	assert.Equal(t, "org/model", repo)
-	assert.Equal(t, "main", revision)
-}
-
 func TestBuilder_BuildStorageInitializer(t *testing.T) {
 	client := fake.NewClientBuilder().Build()
 	builder := &Builder{

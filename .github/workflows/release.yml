@@ -317,3 +317,30 @@ jobs:
           chart_version="${RELEASE_VERSION#v}"
           helm package deploy/helm --version "${chart_version}" --app-version "${chart_version}"
           helm push ckodex-kserve-llm-operator-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
+  # 6. Public artifact acceptance
+  # Uses only anonymous GHCR bearer tokens. A release fails if any published
+  # tag is private, missing, points at the wrong digest, or lacks an architecture.
+  public-release-contract:
+    name: Public Release Contract
+    needs: [image-release, helm-release]
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Verify anonymous artifact retrieval
+        shell: bash
+        run: |
+          go run ./hack/public-release-contract \
+            --repository="ghcr.io/${{ github.repository }}" \
+            --chart-repository="ghcr.io/${{ github.repository_owner }}/charts/ckodex-kserve-llm-operator" \
+            --version="${{ github.ref_name }}" \
+            --operator-digest="${{ needs.image-release.outputs.image-digest }}" \
+            --initializer-digest="${{ needs.image-release.outputs.hf-initializer-digest }}"

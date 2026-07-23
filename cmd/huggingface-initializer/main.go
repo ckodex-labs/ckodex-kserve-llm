@@ -45,7 +45,7 @@ func normalizeArgs(args []string) ([]string, error) {
 	}
 	if !isHuggingFaceURI(args[0]) {
 		if strings.Contains(args[0], "://") {
-			return nil, fmt.Errorf("unsupported source URI %q; expected hf://", args[0])
+			return nil, fmt.Errorf("unsupported source URI %q; expected hf:// or hf-mirror://", args[0])
 		}
 		return args, nil
 	}

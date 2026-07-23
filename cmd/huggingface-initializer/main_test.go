@@ -73,4 +73,5 @@ func TestNormalizeArgsRejectsIncompleteKServeContract(t *testing.T) {
 
 	_, err = normalizeArgs([]string{"huggingface://org/model", "/mnt/models"})
 	require.ErrorContains(t, err, "unsupported source URI")
+	require.ErrorContains(t, err, "hf:// or hf-mirror://")
 }

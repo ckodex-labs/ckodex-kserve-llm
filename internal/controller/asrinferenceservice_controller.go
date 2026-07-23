@@ -302,7 +302,12 @@ func (r *ASRInferenceServiceReconciler) buildASRDeployment(
 	}
 
 	// Start from the user-supplied pod template (resources, tolerations, etc.).
-	podTemplate := asrSvc.Spec.Template.DeepCopy()
+	// Spec.Template is an optional pointer; default to an empty template when
+	// the user omitted it so the operator can inject the runtime container.
+	podTemplate := &corev1.PodTemplateSpec{}
+	if asrSvc.Spec.Template != nil {
+		podTemplate = asrSvc.Spec.Template.DeepCopy()
+	}
 	if podTemplate.Labels == nil {
 		podTemplate.Labels = make(map[string]string)
 	}

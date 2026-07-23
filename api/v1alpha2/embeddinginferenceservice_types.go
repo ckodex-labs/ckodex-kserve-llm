@@ -117,8 +117,9 @@ type EmbeddingInferenceServiceSpec struct {
 	// Template allows customising the pod template (resources, tolerations,
 	// node selectors, additional sidecars, etc.).
 	// The operator injects the primary runtime container at position 0.
+	// Omit the template to use the operator-managed pod defaults.
 	// +optional
-	Template corev1.PodTemplateSpec `json:"template,omitempty"`
+	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
 }
 
 // EmbeddingInferenceServiceStatus defines the observed state of an EmbeddingInferenceService.

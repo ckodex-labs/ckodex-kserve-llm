@@ -230,7 +230,12 @@ func (r *EmbeddingInferenceServiceReconciler) buildEmbeddingDeployment(
 		replicas = embSvc.Spec.Replicas
 	}
 
-	podTemplate := embSvc.Spec.Template.DeepCopy()
+	// Spec.Template is an optional pointer; default to an empty template when
+	// the user omitted it so the operator can inject the runtime container.
+	podTemplate := &corev1.PodTemplateSpec{}
+	if embSvc.Spec.Template != nil {
+		podTemplate = embSvc.Spec.Template.DeepCopy()
+	}
 	if podTemplate.Labels == nil {
 		podTemplate.Labels = make(map[string]string)
 	}

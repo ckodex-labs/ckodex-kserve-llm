@@ -121,8 +121,9 @@ type ASRInferenceServiceSpec struct {
 	// to match limits. If TerminationGracePeriodSeconds is not specified, it
 	// defaults to 30s. The operator injects the primary runtime container at
 	// position 0; containers defined here are appended as sidecars.
+	// Omit the template to use the operator-managed pod defaults.
 	// +optional
-	Template corev1.PodTemplateSpec `json:"template,omitempty"`
+	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
 }
 
 // ASRInferenceServiceStatus defines the observed state of an ASRInferenceService.

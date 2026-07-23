@@ -315,6 +315,7 @@ spec:
                   Template allows customising the pod template (resources, tolerations,
                   node selectors, additional sidecars, etc.).
                   The operator injects the primary runtime container at position 0.
+                  Omit the template to use the operator-managed pod defaults.
                 properties:
                   metadata:
                     description: |-

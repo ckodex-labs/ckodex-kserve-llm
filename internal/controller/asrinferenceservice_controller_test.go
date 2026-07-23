@@ -344,8 +344,12 @@ func TestBuildASRDeployment_SidecarsMerged(t *testing.T) {
 		Recorder: record.NewFakeRecorder(10),
 	}
 	svc := newASRSvc("wh", "ns", func(s *servingv1alpha2.ASRInferenceService) {
-		s.Spec.Template.Spec.Containers = []corev1.Container{
-			{Name: "prometheus-exporter", Image: "prom/exporter:latest"},
+		s.Spec.Template = &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{Name: "prometheus-exporter", Image: "prom/exporter:latest"},
+				},
+			},
 		}
 	})
 

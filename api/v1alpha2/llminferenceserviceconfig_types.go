@@ -92,7 +92,7 @@ type LLMInferenceServiceConfigSpec struct {
 // VLLMDefaultsSpec defines default vLLM container configurations.
 type VLLMDefaultsSpec struct {
 	// Image is the default vLLM container image.
-	// +kubebuilder:default="vllm/vllm-openai:v0.24.0"
+	// +kubebuilder:default="vllm/vllm-openai:v0.25.1"
 	// +optional
 	Image string `json:"image,omitempty"`
 
@@ -104,8 +104,8 @@ type VLLMDefaultsSpec struct {
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
-	// EnableTurboQuant activates 6x KV cache compression for long-context stability.
-	// Requires a vllm-turboquant compatible image.
+	// EnableTurboQuant activates a non-standard runtime extension when explicitly configured.
+	// The selected image must implement the corresponding flag and environment contract.
 	// +optional
 	EnableTurboQuant bool `json:"enableTurboQuant,omitempty"`
 

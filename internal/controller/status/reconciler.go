@@ -99,7 +99,7 @@ func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInfe
 	if isOptimized {
 		optCondition.Status = metav1.ConditionTrue
 		optCondition.Reason = "Optimized"
-		optCondition.Message = "WellKnown optimizations (e.g. TurboQuant) applied"
+		optCondition.Message = "WellKnown model-specific defaults applied"
 	}
 	r.setCondition(&llmSvc.Status.Conditions, optCondition)
 

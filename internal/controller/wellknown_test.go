@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
-	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
 func TestGetWellKnownConfig(t *testing.T) {
@@ -87,7 +86,7 @@ func TestGetWellKnownConfig(t *testing.T) {
 			if tt.expected {
 				require.NotNil(t, cfg)
 				assert.Contains(t, cfg.VLLMDefaults.Args, "--max-model-len")
-				assert.Equal(t, api.VLLMGemma4Image, cfg.VLLMDefaults.Image)
+				assert.Empty(t, cfg.VLLMDefaults.Image)
 
 				if strings.Contains(tt.uri, "gemma-4-E2B-it") {
 					assert.Equal(t, resource.MustParse("32Gi"), cfg.VLLMDefaults.Resources.Requests[corev1.ResourceMemory])
@@ -144,54 +143,15 @@ func TestApplyConfigToSpecWithOverrides(t *testing.T) {
 	reconciler := &LLMInferenceServiceReconciler{}
 	cfg := GetWellKnownConfig("hf://google/gemma-4-E2B-it")
 	require.NotNil(t, cfg)
-	require.True(t, cfg.VLLMDefaults.EnableTurboQuant)
 
-	t.Run("TurboQuant Enabled by Default", func(t *testing.T) {
-		spec := &servingv1alpha2.LLMInferenceServiceSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: "vllm"}},
-				},
-			},
-		}
-		reconciler.ApplyConfigToSpec(spec, cfg)
+	spec := &servingv1alpha2.LLMInferenceServiceSpec{
+		Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+			Name:  "vllm",
+			Image: "registry.example/vllm:validated",
+		}}}},
+	}
+	reconciler.ApplyConfigToSpec(spec, cfg)
 
-		found := false
-		for _, e := range spec.Template.Spec.Containers[0].Env {
-			if e.Name == "VLLM_TURBOQUANT" && e.Value == "true" {
-				found = true
-				break
-			}
-		}
-		assert.True(t, found, "VLLM_TURBOQUANT should be injected by default")
-	})
-
-	t.Run("TurboQuant Suppressed by User Override", func(t *testing.T) {
-		spec := &servingv1alpha2.LLMInferenceServiceSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name: "vllm",
-							Env: []corev1.EnvVar{
-								{Name: "VLLM_TURBOQUANT", Value: "false"},
-							},
-						},
-					},
-				},
-			},
-		}
-		reconciler.ApplyConfigToSpec(spec, cfg)
-
-		count := 0
-		val := ""
-		for _, e := range spec.Template.Spec.Containers[0].Env {
-			if e.Name == "VLLM_TURBOQUANT" {
-				count++
-				val = e.Value
-			}
-		}
-		assert.Equal(t, 1, count, "Should only have one VLLM_TURBOQUANT env var")
-		assert.Equal(t, "false", val, "User-provided FALSE should be preserved")
-	})
+	assert.Equal(t, "registry.example/vllm:validated", spec.Template.Spec.Containers[0].Image)
+	assert.NotContains(t, spec.Template.Spec.Containers[0].Args, "--enable-turboquant")
 }

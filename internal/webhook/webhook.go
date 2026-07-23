@@ -17,11 +17,6 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
 
-const (
-	// defaultVLLMImage is the default vLLM container image.
-	defaultVLLMImage = "vllm/vllm-openai:v0.24.0"
-)
-
 // WebhookConfig carries runtime policy settings injected at manager startup.
 type WebhookConfig struct {
 	// HFMirrorURL, when non-empty, causes the mutating webhook to rewrite hf:// URIs
@@ -100,7 +95,7 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 			errs = append(errs, "spec.model.uri pointing to unsafe formats (.pkl, .bin, .pt) is forbidden; use .safetensors")
 		}
 
-		validSchemes := []string{"hf://", "hf-mirror://", "s3://", "gs://", "pvc://", "oci://", "ocis://", "seaweedfs://", "http://", "https://"}
+		validSchemes := []string{"hf://", "hf-mount://", "hf-mirror://", "s3://", "swfs://", "gs://", "pvc://", "oci://", "ocis://", "modelpack://", "seaweedfs://", "http://", "https://"}
 		valid := false
 		for _, scheme := range validSchemes {
 			if strings.HasPrefix(llmSvc.Spec.Model.URI, scheme) {
@@ -152,9 +147,6 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 		errs = append(errs, err.Error())
 	}
 	if err := v.validateParallelism(llmSvc, &warnings); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if err := v.validateTurboQuant(llmSvc, &warnings); err != nil {
 		errs = append(errs, err.Error())
 	}
 
@@ -230,30 +222,6 @@ func (v *LLMInferenceServiceValidator) validateParallelism(llmSvc *servingv1alph
 	return nil
 }
 
-func (v *LLMInferenceServiceValidator) validateTurboQuant(llmSvc *servingv1alpha2.LLMInferenceService, warnings *admission.Warnings) error {
-	if len(llmSvc.Spec.Template.Spec.Containers) == 0 {
-		return nil
-	}
-	c := &llmSvc.Spec.Template.Spec.Containers[0]
-
-	// Check if TurboQuant is enabled (either in spec or via well-known check)
-	// Note: Actual and full EnableTurboQuant logic resides in controller, but we can catch obvious image mismatches here.
-	image := c.Image
-
-	// Check registry (mimicking controller logic)
-	// We don't want to import controller here due to potential circular deps if controller uses webhook,
-	// but currently webhook is separate. However, to keep it clean, we check the URI scheme.
-	isTurboQuantModel := strings.Contains(llmSvc.Spec.Model.URI, "gemma-4")
-
-	if isTurboQuantModel && image != "" && !strings.Contains(image, "turboquant") && !strings.Contains(image, "vllm-0.18") {
-		*warnings = append(*warnings, fmt.Sprintf(
-			"Model %s is optimized for TurboQuant, but image %s might not support it. Consider using mitkox/vllm-turboquant:latest",
-			llmSvc.Spec.Model.Name, image))
-	}
-
-	return nil
-}
-
 // ----- Mutating Webhook -----
 
 // LLMInferenceServiceDefaulter injects defaults into LLMInferenceService CRs.
@@ -279,13 +247,11 @@ func (d *LLMInferenceServiceDefaulter) Default(_ context.Context, llmSvc *servin
 		llmSvc.Spec.Replicas = &one
 	}
 
-	// Default container image if not set
+	// Leave an empty image for the controller to resolve from the live
+	// CKODEX_RUNTIME_IMAGE configuration. Admission-time image defaulting would
+	// persist a stale value and prevent the reconciler from applying that setting.
 	if len(llmSvc.Spec.Template.Spec.Containers) > 0 {
 		c := &llmSvc.Spec.Template.Spec.Containers[0]
-
-		if c.Image == "" {
-			c.Image = defaultVLLMImage
-		}
 
 		// Inject security context
 		if c.SecurityContext == nil {

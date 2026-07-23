@@ -4,7 +4,6 @@ on:
   push:
     branches: [main, "release/**"]
   pull_request:
-    branches: [main]
 
 # Least-privilege: read-only by default.
 permissions:
@@ -46,6 +45,9 @@ jobs:
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
+
+      - name: Verify Helm install contracts
+        run: go run ./hack/helm-contract
 
       - name: Install GoReleaser
         shell: bash
@@ -97,6 +99,17 @@ jobs:
           args: scan --source=.
           dagger-flags: --progress plain
 
+      - name: Run Hugging Face initializer vulnerability scan
+        uses: dagger/dagger-for-github@v8.4.0
+        timeout-minutes: 15
+        env:
+          DAGGER_NO_NAG: "1"
+        with:
+          version: v0.21.7
+          verb: call
+          args: scan-hugging-face-initializer-arch --source=. --arch=amd64
+          dagger-flags: --progress plain
+
       - name: Rehearse release artifacts
         run: make release-readiness
 
@@ -110,3 +123,32 @@ jobs:
             dist/
             bin/release-readiness.json
           retention-days: 30
+
+  hf-initializer-arm64:
+    name: Hugging Face initializer (arm64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pre-pull Dagger engine
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 60s docker pull registry.dagger.io/engine:v0.21.7; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          exit 1
+
+      - name: Scan native arm64 Hugging Face initializer
+        uses: dagger/dagger-for-github@v8.4.0
+        timeout-minutes: 15
+        env:
+          DAGGER_NO_NAG: "1"
+        with:
+          version: v0.21.7
+          verb: call
+          args: scan-hugging-face-initializer-arch --source=. --arch=arm64
+          dagger-flags: --progress plain

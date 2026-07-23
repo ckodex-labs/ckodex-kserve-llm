@@ -20,13 +20,12 @@ const (
 
 // vLLM Images (Keep here for hardware-specific selection)
 const (
-	VLLMGenericImage  = "vllm/vllm-openai-cpu:v0.24.0"
-	VLLMCPUArm64Image = "vllm/vllm-openai:v0.24.0-aarch64"
-	VLLMMPSImage      = "vllm/vllm-openai:v0.24.0-aarch64"
-	// vLLM does not publish a v0.24.0-rocm tag in the vllm-openai repository.
+	VLLMGenericImage  = "vllm/vllm-openai-cpu:v0.25.1"
+	VLLMCPUArm64Image = "vllm/vllm-openai:v0.25.1-aarch64"
+	VLLMMPSImage      = "vllm/vllm-openai:v0.25.1-aarch64"
+	// vLLM does not publish a v0.25.1-rocm tag in the vllm-openai repository.
 	// Keep ROCm explicit so clusters can provide a validated hardware image.
-	VLLMROCmImage   = ""
-	VLLMGemma4Image = "vllm/vllm-openai:gemma4"
+	VLLMROCmImage = ""
 )
 
 // DetectHardware identifies the best available hardware across all nodes.
@@ -127,7 +126,6 @@ func ApplyHardwareOptimizations(ctx context.Context, hwType HardwareType, podSpe
 	case HardwareNVIDIA:
 		envVars["VLLM_TARGET_DEVICE"] = "cuda"
 		envVars["GPU_MEMORY_UTILIZATION"] = "0.9"
-		envVars["VLLM_ENABLE_CUDA_COMPATIBILITY"] = "true"
 
 	case HardwareAMD:
 		if VLLMROCmImage != "" && (container.Image == "" || !strings.Contains(container.Image, "-rocm")) {

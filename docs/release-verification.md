@@ -32,6 +32,10 @@ On a real tag such as `v0.18.0-beta.5`, GitHub Actions is expected to:
 3. generate image and binary provenance through the SLSA GitHub generator workflows,
 4. package and push the Helm chart to GHCR with the tag version.
 
+Starting with `v0.18.0-beta.6`, the image path also builds, scans, signs,
+inventories, and emits provenance for the dedicated Xet-aware Hugging Face
+initializer. This removes package installation from model-pod startup.
+
 Local green checks are not enough to claim public release readiness unless that hosted path has also succeeded.
 
 ## Current Published Release

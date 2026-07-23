@@ -19,13 +19,16 @@ rules:
   resources: [events, secrets]
   verbs: [create, get, list, patch, update, watch]
 - apiGroups: [""]
-  resources: [limitranges, persistentvolumeclaims, pods, resourcequotas, services]
+  resources: [limitranges, persistentvolumeclaims, persistentvolumes, pods, resourcequotas, services]
   verbs: [create, delete, get, list, patch, update, watch]
 - apiGroups: [""]
   resources: [serviceaccounts]
   verbs: [get, list, patch, update, watch]
 - apiGroups: [apps]
   resources: [deployments]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [autoscaling]
+  resources: [horizontalpodautoscalers]
   verbs: [create, delete, get, list, patch, update, watch]
 - apiGroups: [batch]
   resources: [jobs]
@@ -55,6 +58,7 @@ rules:
     - localmodelcaches
     - modelonboardings
     - multimodalinferenceservices
+    - rerankerinferenceservices
     - skillregistries
   verbs: [create, delete, get, list, patch, update, watch]
 - apiGroups: [serving.ckodex.com]
@@ -68,6 +72,7 @@ rules:
     - llminferenceservices/finalizers
     - modelonboardings/finalizers
     - multimodalinferenceservices/finalizers
+    - rerankerinferenceservices/finalizers
     - skillregistries/finalizers
   verbs: [update]
 - apiGroups: [serving.ckodex.com]
@@ -84,6 +89,7 @@ rules:
     - localmodelcaches/status
     - modelonboardings/status
     - multimodalinferenceservices/status
+    - rerankerinferenceservices/status
     - skillregistries/status
   verbs: [get, patch, update]
 ---
@@ -100,6 +106,40 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: ckodex-operator-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ckodex-kserve-llm-operator.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+---
+# Leader election is namespace-scoped and intentionally separate from the
+# operator's workload permissions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+rules:
+- apiGroups: [coordination.k8s.io]
+  resources: [leases]
+  verbs: [create, get, list, patch, update, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-leader-election
 subjects:
 - kind: ServiceAccount
   name: {{ include "ckodex-kserve-llm-operator.serviceAccountName" . }}

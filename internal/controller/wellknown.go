@@ -13,7 +13,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
-	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
 // GetWellKnownConfig returns a predefined configuration for a known model URI.
@@ -40,16 +39,13 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 		// 5B params, Any-to-Any, Dense. Single GPU (8 GB VRAM).
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
-				Image: api.VLLMGemma4Image,
 				Args: []string{
 					"--max-model-len", "131072",
 					"--trust-remote-code",
 					"--enforce-eager",
-					"--enable-turboquant",
 					"--gpu-memory-utilization", "0.95",
 					"--max-num-seqs", "256",
 				},
-				EnableTurboQuant: true,
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("8"),
@@ -68,16 +64,13 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 		// 8B params, Any-to-Any, Dense. Single GPU (16 GB VRAM).
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
-				Image: api.VLLMGemma4Image,
 				Args: []string{
 					"--max-model-len", "131072",
 					"--trust-remote-code",
 					"--enforce-eager",
-					"--enable-turboquant",
 					"--gpu-memory-utilization", "0.95",
 					"--max-num-seqs", "128",
 				},
-				EnableTurboQuant: true,
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("16"),
@@ -99,14 +92,11 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Expert: true, // Enable MoE expert routing
 			},
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
-				Image: api.VLLMGemma4Image,
 				Args: []string{
 					"--max-model-len", "65536",
 					"--trust-remote-code",
 					"--enforce-eager",
-					"--enable-turboquant",
 				},
-				EnableTurboQuant: true,
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("32"),
@@ -128,14 +118,11 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Tensor: ptr.To(int32(2)),
 			},
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
-				Image: api.VLLMGemma4Image,
 				Args: []string{
 					"--max-model-len", "65536",
 					"--trust-remote-code",
 					"--enforce-eager",
-					"--enable-turboquant",
 				},
-				EnableTurboQuant: true,
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("32"),
@@ -345,7 +332,7 @@ func (r *LLMInferenceServiceReconciler) ApplyConfigToSpec(spec *servingv1alpha2.
 			if cfg.VLLMDefaults.Resources != nil {
 				mergeResources(&c.Resources, cfg.VLLMDefaults.Resources)
 			}
-			// Phase 4: Handle TurboQuant env injection
+			// Handle an explicitly configured TurboQuant extension.
 			if cfg.VLLMDefaults.EnableTurboQuant {
 				// Only inject if not already overridden by user
 				found := false
@@ -461,7 +448,7 @@ func mergeResources(base, defaultResources *corev1.ResourceRequirements) {
 }
 
 // GetRerankerWellKnownConfig returns resource defaults for known cross-encoder reranker models.
-// Returns nil for unknown models — the controller falls back to api.DefaultVLLM* constants.
+// Returns nil for unknown models; the controller applies its generic defaults.
 func GetRerankerWellKnownConfig(modelURI string) *servingv1alpha2.RerankerInferenceServiceSpec {
 	norm := strings.ToLower(modelURI)
 	switch {

@@ -143,6 +143,9 @@ func main() {
 		AirGappedMode:      cfg.AirGappedMode,
 		LocalRegistry:      cfg.LocalRegistry,
 		LocalCosignKeyPath: cfg.LocalCosignKeyPath,
+		RuntimeImage:       cfg.Defaults.RuntimeImage,
+		HFInitializerImage: cfg.Defaults.HuggingFaceInitializerImage,
+		HFMirrorURL:        cfg.HuggingFaceMirrorURL,
 	}
 
 	// gRPC — independent of gateway (controls Service port definition)
@@ -172,8 +175,9 @@ func main() {
 	// Security: NetworkPolicy + Vault + OPA + eBPF + SPIRE mTLS
 	if cfg.Features.EnableSecurity {
 		reconciler.NetworkPolicy = &security.NetworkPolicyReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
+			Client:                    mgr.GetClient(),
+			Scheme:                    mgr.GetScheme(),
+			GatewayDataPlaneNamespace: os.Getenv("CKODEX_ENVOY_GATEWAY_NAMESPACE"),
 		}
 		reconciler.ToolSurface = &security.ToolSurfaceReconciler{
 			Client: mgr.GetClient(),

@@ -8846,11 +8846,11 @@ spec:
                     type: array
                   enableTurboQuant:
                     description: |-
-                      EnableTurboQuant activates 6x KV cache compression for long-context stability.
-                      Requires a vllm-turboquant compatible image.
+                      EnableTurboQuant activates a non-standard runtime extension when explicitly configured.
+                      The selected image must implement the corresponding flag and environment contract.
                     type: boolean
                   image:
-                    default: vllm/vllm-openai:v0.24.0
+                    default: vllm/vllm-openai:v0.25.1
                     description: Image is the default vLLM container image.
                     type: string
                   resources:

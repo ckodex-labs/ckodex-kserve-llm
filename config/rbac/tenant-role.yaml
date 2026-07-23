@@ -1,36 +1,69 @@
 ---
-# ClusterRoleBinding: binds ckodex-operator-cluster-role to the operator ServiceAccount.
-# This grants cluster-scoped access ONLY (nodes, CRDs, LocalModelCache, Gatekeeper).
+# Reusable namespace-workload role. Bind this ClusterRole with a RoleBinding in
+# each managed namespace; the Helm chart creates those bindings from
+# .Values.managedNamespaces.
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: ClusterRole
 metadata:
-  name: ckodex-operator-cluster-rolebinding
-  labels:
-    app.kubernetes.io/managed-by: ckodex-kserve-llm-operator
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: ckodex-operator-cluster-role
-subjects:
-- kind: ServiceAccount
-  name: ckodex-kserve-llm-operator
-  namespace: ckodex-system
----
-# RoleBinding template: binds ckodex-operator-namespace-role to the operator SA
-# in each managed namespace. Instantiated per namespace by the Helm chart.
-# The Helm template iterates .Values.managedNamespaces to create one binding per ns.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: ckodex-operator-namespace-rolebinding
-  namespace: default  # overridden per namespace by Helm
-  labels:
-    app.kubernetes.io/managed-by: ckodex-kserve-llm-operator
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
   name: ckodex-operator-namespace-role
-subjects:
-- kind: ServiceAccount
-  name: ckodex-kserve-llm-operator
-  namespace: ckodex-system
+rules:
+- apiGroups: [""]
+  resources: [configmaps, events, limitranges, persistentvolumeclaims, pods, resourcequotas, secrets, services]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [apps]
+  resources: [deployments]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [autoscaling]
+  resources: [horizontalpodautoscalers]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [batch]
+  resources: [jobs]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [gateway.networking.k8s.io]
+  resources: [gateways, grpcroutes, httproutes]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [networking.k8s.io]
+  resources: [networkpolicies]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [policy]
+  resources: [poddisruptionbudgets]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [serving.ckodex.com]
+  resources:
+  - agents
+  - agents/finalizers
+  - agents/status
+  - aipacks
+  - aipacks/status
+  - asrinferenceservices
+  - asrinferenceservices/finalizers
+  - asrinferenceservices/status
+  - coactorgroups
+  - coactorgroups/status
+  - embeddinginferenceservices
+  - embeddinginferenceservices/finalizers
+  - embeddinginferenceservices/status
+  - inferenceactors
+  - inferenceactors/status
+  - inferencesessions
+  - inferencesessions/status
+  - llminferenceservices
+  - llminferenceservices/finalizers
+  - llminferenceservices/status
+  - llmloraadapters
+  - llmloraadapters/status
+  - localmodelcaches
+  - localmodelcaches/status
+  - modelonboardings
+  - modelonboardings/finalizers
+  - modelonboardings/status
+  - multimodalinferenceservices
+  - multimodalinferenceservices/finalizers
+  - multimodalinferenceservices/status
+  - rerankerinferenceservices
+  - rerankerinferenceservices/finalizers
+  - rerankerinferenceservices/status
+  - skillregistries
+  - skillregistries/finalizers
+  - skillregistries/status
+  verbs: [create, delete, get, list, patch, update, watch]

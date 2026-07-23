@@ -210,6 +210,9 @@ type DefaultsConfig struct {
 	// StorageInitializerImage is the default storage initializer image.
 	StorageInitializerImage string `json:"storageInitializerImage"`
 
+	// HuggingFaceInitializerImage is the Xet-aware hf:// downloader image.
+	HuggingFaceInitializerImage string `json:"huggingFaceInitializerImage"`
+
 	// DefaultReplicas is the default number of model server replicas.
 	DefaultReplicas int32 `json:"defaultReplicas"`
 }
@@ -317,12 +320,12 @@ func DefaultOperatorConfig() OperatorConfig {
 	return OperatorConfig{
 		Features: DefaultFeatureGates(),
 		Defaults: DefaultsConfig{
-			// CPU-optimized vLLM image for ARM64/x86 nodes (no GPU).
 			// Pinned to a specific version — :latest is a supply chain risk and air-gapped blocker.
-			RuntimeImage:            "vllm/vllm-openai-cpu:v0.24.0",
-			SchedulerImage:          "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0",
-			StorageInitializerImage: "kserve/storage-initializer:v0.19.0",
-			DefaultReplicas:         1,
+			RuntimeImage:                "vllm/vllm-openai:v0.25.1",
+			SchedulerImage:              "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0",
+			StorageInitializerImage:     "kserve/storage-initializer:v0.19.0",
+			HuggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.6",
+			DefaultReplicas:             1,
 		},
 		Scheduler: SchedulerDefaults{
 			Image: "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0",
@@ -375,6 +378,7 @@ func (c *OperatorConfig) LoadFromEnv() {
 	c.Features.FromEnv()
 
 	envStr("CKODEX_RUNTIME_IMAGE", &c.Defaults.RuntimeImage)
+	envStr("CKODEX_HUGGING_FACE_INITIALIZER_IMAGE", &c.Defaults.HuggingFaceInitializerImage)
 	envStr("CKODEX_SCHEDULER_IMAGE", &c.Scheduler.Image)
 	envStr("CKODEX_AUTH_ISSUER_URL", &c.Auth.IssuerURL)
 	envStr("CKODEX_AUTH_AUDIENCE", &c.Auth.Audience)

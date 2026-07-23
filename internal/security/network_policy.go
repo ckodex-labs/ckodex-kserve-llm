@@ -27,8 +27,11 @@ import (
 // NetworkPolicyReconciler manages default-deny + explicit allow network policies.
 type NetworkPolicyReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                    *runtime.Scheme
+	GatewayDataPlaneNamespace string
 }
+
+const defaultGatewayDataPlaneNamespace = "envoy-gateway-system"
 
 // 3. allow-lws-intra    — facilitates pod-to-pod communication for multi-worker models
 // 4. allow-tools        — permits egress to declared ToolSurface APIs and CIDRs (M3 Phase 4)
@@ -67,6 +70,7 @@ func (r *NetworkPolicyReconciler) ReconcileNetworkPolicy(ctx context.Context, ll
 
 	// 2. Allow Gateway Ingress
 	protoTCP := corev1.ProtocolTCP
+	gatewayName, gatewayNamespace := gatewayIdentity(llmSvc)
 	allowGateway := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: llmSvc.Name + "-allow-gateway", Namespace: llmSvc.Namespace,
@@ -78,9 +82,25 @@ func (r *NetworkPolicyReconciler) ReconcileNetworkPolicy(ctx context.Context, ll
 			Ingress: []networkingv1.NetworkPolicyIngressRule{
 				{
 					From: []networkingv1.NetworkPolicyPeer{
+						// EPP/scheduler pods are workload-local.
 						{PodSelector: &metav1.LabelSelector{
 							MatchLabels: map[string]string{"serving.ckodex.com/role": "scheduler"},
 						}},
+						// Envoy Gateway data-plane pods normally run in a separate
+						// namespace. NamespaceSelector is required here: a bare
+						// PodSelector only matches the workload namespace and silently
+						// leaves an Accepted HTTPRoute unable to reach its backend.
+						{
+							NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{
+								"kubernetes.io/metadata.name": r.gatewayDataPlaneNamespace(),
+							}},
+							PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{
+								"app.kubernetes.io/component":                    "proxy",
+								"app.kubernetes.io/managed-by":                   "envoy-gateway",
+								"gateway.envoyproxy.io/owning-gateway-name":      gatewayName,
+								"gateway.envoyproxy.io/owning-gateway-namespace": gatewayNamespace,
+							}},
+						},
 					},
 					Ports: []networkingv1.NetworkPolicyPort{
 						{Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 8000}, Protocol: &protoTCP},
@@ -211,6 +231,24 @@ func (r *NetworkPolicyReconciler) ReconcileNetworkPolicy(ctx context.Context, ll
 
 	logger.Info("Total Isolation network policies reconciled", "count", len(policies))
 	return nil
+}
+
+func (r *NetworkPolicyReconciler) gatewayDataPlaneNamespace() string {
+	if r.GatewayDataPlaneNamespace != "" {
+		return r.GatewayDataPlaneNamespace
+	}
+	return defaultGatewayDataPlaneNamespace
+}
+
+func gatewayIdentity(llmSvc *servingv1alpha2.LLMInferenceService) (name, namespace string) {
+	if ref := llmSvc.Spec.Router.Gateway.ExistingRef; ref != nil {
+		namespace = ref.Namespace
+		if namespace == "" {
+			namespace = llmSvc.Namespace
+		}
+		return ref.Name, namespace
+	}
+	return llmSvc.Name + "-gateway", llmSvc.Namespace
 }
 
 func (r *NetworkPolicyReconciler) reconcileSinglePolicy(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, np *networkingv1.NetworkPolicy) error {

@@ -232,7 +232,8 @@ func TestReconcileDeployment_Gemma4WellKnown(t *testing.T) {
 	args := strings.Join(vllmContainer.Args, " ")
 	assert.Contains(t, args, "--max-model-len 131072")
 	assert.Contains(t, args, "--trust-remote-code")
-	assert.Contains(t, args, "--enable-turboquant")
+	assert.Contains(t, args, "--model /mnt/models")
+	assert.Equal(t, api.VLLMImage, vllmContainer.Image)
 
 	// Verify resources from WellKnown config (requests match our defined defaults)
 	assert.Equal(t, resource.MustParse("8"), vllmContainer.Resources.Requests[corev1.ResourceCPU])
@@ -259,7 +260,7 @@ func TestReconcileDeployment_OCIGemma4Optimization(t *testing.T) {
 	// Verify vLLM args are optimized even for OCI URI
 	vllmContainer := deploy.Spec.Template.Spec.Containers[0]
 	args := strings.Join(vllmContainer.Args, " ")
-	assert.Contains(t, args, "--enable-turboquant")
+	assert.Contains(t, args, "--model /mnt/models")
 }
 
 // TestReconcileDeployment_PVCNativeMount verifies that pvc:// URI results in direct volume mount.

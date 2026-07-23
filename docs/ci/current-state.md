@@ -66,7 +66,7 @@ Tag push (v*)
 
 | Tool | Version | Source |
 |------|---------|--------|
-| Go | `go.mod` (1.26.4) | go.mod |
+| Go | `go.mod` (1.26.5) | go.mod |
 | Dagger CLI | v0.21.7 | installed |
 | golangci-lint | v2.12.2 | `dagger/main.go` |
 | Trivy | 0.72.0 | `dagger/main.go` |

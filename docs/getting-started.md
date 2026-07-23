@@ -128,6 +128,9 @@ At minimum:
 The chart under `deploy/helm/` does not install CRDs or all external
 dependencies. Review `deploy/helm/values.yaml` before use.
 
+For a concrete public-model smoke test, gated-repository credentials, and the
+optional CSI/FUSE path, follow [Hugging Face: First Model](huggingface.md).
+
 ## Repository Verification
 
 ```bash

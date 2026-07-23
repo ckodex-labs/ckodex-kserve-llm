@@ -23,7 +23,7 @@
           <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm">
             View repository
           </a>
-          <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.5">
+          <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.7">
             Latest release
           </a>
           <a class="button button--secondary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/overview.md">
@@ -61,7 +61,7 @@
       <section class="release" aria-label="Current release">
         <div>
           <p class="eyebrow">Current public release</p>
-          <h2>v0.18.0-beta.5</h2>
+          <h2>v0.18.0-beta.7</h2>
           <p>
             The current GitHub release is marked Latest and publishes binaries,
             checksums, Sigstore metadata, container image provenance, binary
@@ -83,7 +83,7 @@
           </div>
           <div>
             <dt>Release page</dt>
-            <dd><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.5">open</a></dd>
+            <dd><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.7">open</a></dd>
           </div>
         </dl>
       </section>
@@ -100,7 +100,7 @@
 
       <section class="code-block">
         <h2>Quick proof commands</h2>
-        <pre><code>TAG=v0.18.0-beta.5
+        <pre><code>TAG=v0.18.0-beta.7
 helm pull oci://ghcr.io/ckodex-labs/charts/ckodex-kserve-llm-operator --version "${TAG#v}"
 gh release download "$TAG" --repo ckodex-labs/ckodex-kserve-llm --dir release-assets
 (cd release-assets && sha256sum -c checksums.txt)</code></pre>

@@ -8,6 +8,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -335,70 +336,16 @@ func (r *ASRInferenceServiceReconciler) buildASRDeployment(
 func (r *ASRInferenceServiceReconciler) buildASRContainer(
 	asrSvc *servingv1alpha2.ASRInferenceService,
 ) corev1.Container {
-	img := asrSvc.Spec.RuntimeImage
-	if img == "" {
-		img = servingv1alpha2.DefaultASRRuntimeImage(asrSvc.Spec.Runtime)
-	}
-	if img == "" {
-		// ASSUMPTION: caller validated runtime=transformers requires runtimeImage;
-		// an empty image here is a programming error, not a user error.
-		img = "scratch"
-	}
-
-	env := []corev1.EnvVar{
-		// FACT: faster-whisper-server and transformers runtimes both read MODEL for the HF URI.
-		{Name: "MODEL", Value: asrSvc.Spec.Model.URI},
-	}
-
-	if len(asrSvc.Spec.Languages) > 0 {
-		env = append(env, corev1.EnvVar{
-			Name:  "LANGUAGE",
-			Value: strings.Join(asrSvc.Spec.Languages, ","),
-		})
-	}
-
-	// Inject HF_TOKEN from the canonical secret if present; failure is non-fatal
-	// for public models (gated models will fail to download without a token).
-	env = append(env, corev1.EnvVar{
-		Name: "HF_TOKEN",
-		ValueFrom: &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "hf-credentials"},
-				Key:                  "HF_TOKEN",
-				Optional:             ptr.To(true),
-			},
-		},
-	})
-
 	return corev1.Container{
 		Name:  asrContainerName,
-		Image: img,
+		Image: asrRuntimeImage(asrSvc),
 		Ports: []corev1.ContainerPort{
 			{Name: "http", ContainerPort: asrServerPort, Protocol: corev1.ProtocolTCP},
 		},
-		Env: env,
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/health",
-					Port: intstr.FromInt32(asrServerPort),
-				},
-			},
-			InitialDelaySeconds: 30,
-			PeriodSeconds:       15,
-			FailureThreshold:    3,
-		},
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/health",
-					Port: intstr.FromInt32(asrServerPort),
-				},
-			},
-			InitialDelaySeconds: 15,
-			PeriodSeconds:       10,
-			FailureThreshold:    6, // allow extra time for model download on cold start
-		},
+		Env:           asrEnvironment(asrSvc),
+		LivenessProbe: asrHealthProbe(30, 15, 3),
+		// Allow extra time for model download on cold start.
+		ReadinessProbe: asrHealthProbe(15, 10, 6),
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse(DefaultASRCPURequest),
@@ -409,6 +356,60 @@ func (r *ASRInferenceServiceReconciler) buildASRContainer(
 				corev1.ResourceMemory: resource.MustParse(DefaultASRMemoryRequest),
 			},
 		},
+	}
+}
+
+func asrRuntimeImage(asrSvc *servingv1alpha2.ASRInferenceService) string {
+	if asrSvc.Spec.RuntimeImage != "" {
+		return asrSvc.Spec.RuntimeImage
+	}
+	if image := servingv1alpha2.DefaultASRRuntimeImage(asrSvc.Spec.Runtime); image != "" {
+		return image
+	}
+	// ASSUMPTION: caller validated runtime=transformers requires runtimeImage;
+	// an empty image here is a programming error, not a user error.
+	return "scratch"
+}
+
+func asrEnvironment(asrSvc *servingv1alpha2.ASRInferenceService) []corev1.EnvVar {
+	var env []corev1.EnvVar
+	if asrSvc.Spec.Runtime == servingv1alpha2.ASRRuntimeFasterWhisper {
+		env = append(env, corev1.EnvVar{
+			Name:  "PRELOAD_MODELS",
+			Value: asrPreloadModelsJSON(asrModelID(asrSvc.Spec.Model.URI)),
+		})
+	} else {
+		env = append(env, corev1.EnvVar{Name: "MODEL", Value: asrSvc.Spec.Model.URI})
+		if len(asrSvc.Spec.Languages) > 0 {
+			env = append(env, corev1.EnvVar{
+				Name:  "LANGUAGE",
+				Value: strings.Join(asrSvc.Spec.Languages, ","),
+			})
+		}
+	}
+	return append(env, corev1.EnvVar{
+		Name: "HF_TOKEN",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "hf-credentials"},
+				Key:                  "HF_TOKEN",
+				Optional:             ptr.To(true),
+			},
+		},
+	})
+}
+
+func asrHealthProbe(initialDelay, period, failures int32) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/health",
+				Port: intstr.FromInt32(asrServerPort),
+			},
+		},
+		InitialDelaySeconds: initialDelay,
+		PeriodSeconds:       period,
+		FailureThreshold:    failures,
 	}
 }
 
@@ -446,6 +447,20 @@ func asrLabels(name string) map[string]string {
 		"app.kubernetes.io/component": "asr-server",
 		"app.kubernetes.io/part-of":   "ckodex-llm-operator",
 	}
+}
+
+func asrModelID(uri string) string {
+	return strings.TrimPrefix(
+		strings.TrimPrefix(
+			strings.TrimPrefix(uri, "hf://"),
+			"huggingface://",
+		),
+		"hf-mirror://",
+	)
+}
+
+func asrPreloadModelsJSON(modelID string) string {
+	return "[" + strconv.Quote(modelID) + "]"
 }
 
 // SetupWithManager registers the controller with the manager.

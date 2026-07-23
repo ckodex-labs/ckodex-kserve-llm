@@ -121,13 +121,7 @@ type ASRInferenceServiceSpec struct {
 	// to match limits. If TerminationGracePeriodSeconds is not specified, it
 	// defaults to 30s. The operator injects the primary runtime container at
 	// position 0; containers defined here are appended as sidecars.
-	//
-	// This is a pointer so that an omitted template serialises as absent
-	// rather than an empty object. A non-pointer struct with omitempty still
-	// marshals `template: {spec: {}}`, which the CRD's structural schema
-	// rejects (spec.template.spec.containers is required) — that made the
-	// operator's own AddFinalizer Update fail with
-	// "spec.template.spec.containers: Required value".
+	// Omit the template to use the operator-managed pod defaults.
 	// +optional
 	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
 }

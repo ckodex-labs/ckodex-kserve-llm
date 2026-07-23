@@ -697,7 +697,6 @@ func TestReconcileNetworkPolicies_AllowGatewayCreated(t *testing.T) {
 	require.Len(t, ports, 2)
 	assert.Equal(t, int32(8000), ports[0].Port.IntVal)
 	assert.Equal(t, int32(8001), ports[1].Port.IntVal)
-
 }
 
 func TestReconcileNetworkPolicies_ExistingGatewayIdentityScopesEnvoyPeer(t *testing.T) {

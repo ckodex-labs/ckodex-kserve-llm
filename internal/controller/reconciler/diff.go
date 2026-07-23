@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -23,12 +24,14 @@ func SyncDeployment(ctx context.Context, existing, desired *appsv1.Deployment, r
 		}
 	}
 
-	if !equality.Semantic.DeepEqual(existing.Labels, desired.Labels) {
-		existing.Labels = desired.Labels
+	// Merge (not replace) top-level labels/annotations: apply the operator's
+	// managed keys but preserve keys added by other controllers — notably
+	// deployment.kubernetes.io/revision, which the Deployment controller re-adds
+	// after every wholesale replace, producing an infinite reconcile loop.
+	if syncManagedMap(&existing.Labels, desired.Labels, isManagedDeploymentLabel) {
 		changed = true
 	}
-	if !equality.Semantic.DeepEqual(existing.Annotations, desired.Annotations) {
-		existing.Annotations = desired.Annotations
+	if syncManagedMap(&existing.Annotations, desired.Annotations, isManagedDeploymentAnnotation) {
 		changed = true
 	}
 	if !equality.Semantic.DeepEqual(existing.Spec.Template.Labels, desired.Spec.Template.Labels) {
@@ -61,6 +64,57 @@ func SyncDeployment(ctx context.Context, existing, desired *appsv1.Deployment, r
 	}
 
 	return changed
+}
+
+// syncManagedMap converges operator-managed keys while preserving metadata owned
+// by Kubernetes and other controllers.
+func syncManagedMap(target *map[string]string, desired map[string]string, managed func(string) bool) bool {
+	changed := false
+	for k := range *target {
+		if managed(k) {
+			if _, ok := desired[k]; !ok {
+				delete(*target, k)
+				changed = true
+			}
+		}
+	}
+	for k, v := range desired {
+		if !managed(k) {
+			continue
+		}
+		if *target == nil {
+			*target = make(map[string]string, len(desired))
+		}
+		if cur, ok := (*target)[k]; !ok || cur != v {
+			(*target)[k] = v
+			changed = true
+		}
+	}
+	return changed
+}
+
+func isManagedDeploymentLabel(key string) bool {
+	switch key {
+	case "app.kubernetes.io/name",
+		"app.kubernetes.io/instance",
+		"app.kubernetes.io/managed-by",
+		"serving.ckodex.com/model":
+		return true
+	default:
+		return strings.HasPrefix(key, "ckodex.cost/")
+	}
+}
+
+func isManagedDeploymentAnnotation(key string) bool {
+	switch key {
+	case "ckodex.com/canary-weight",
+		"sidecar.istio.io/inject",
+		"sidecar.istio.io/rewriteAppHTTPProbers",
+		"sidecar.istio.io/discoveryNamespaces":
+		return true
+	default:
+		return false
+	}
 }
 
 // ContainersEqual compares two slices of containers looking only at managed fields.
@@ -118,7 +172,24 @@ func VolumeMountsEqual(a, b []corev1.VolumeMount) bool {
 	return equality.Semantic.DeepEqual(a, b)
 }
 
-// VolumesEqual compares two slices of volumes.
+// VolumesEqual compares two slices of volumes as a set keyed by name
+// (order-insensitive), mirroring EnvsEqual. Volume ordering is not semantically
+// meaningful; treating it as significant caused an infinite Deployment update
+// loop when the builder and the Vector sidecar injector emitted the same volumes
+// in different orders (existing != desired every reconcile).
 func VolumesEqual(a, b []corev1.Volume) bool {
-	return equality.Semantic.DeepEqual(a, b)
+	if len(a) != len(b) {
+		return false
+	}
+	am := make(map[string]corev1.Volume, len(a))
+	for i := range a {
+		am[a[i].Name] = a[i]
+	}
+	for _, v := range b {
+		av, ok := am[v.Name]
+		if !ok || !equality.Semantic.DeepEqual(av, v) {
+			return false
+		}
+	}
+	return true
 }

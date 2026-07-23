@@ -143,6 +143,12 @@ func TestInjectVectorSidecar_AddsVectorConfigVolume(t *testing.T) {
 		if v.Name == "vector-config" {
 			found = true
 			assert.Equal(t, "my-vector-cm", v.ConfigMap.Name)
+			// DefaultMode must equal the API server default (0644) so the
+			// reconciler's desired volume matches the persisted (defaulted) one;
+			// otherwise the Deployment loops forever on "volumes changed".
+			if assert.NotNil(t, v.ConfigMap.DefaultMode, "vector-config DefaultMode must be set") {
+				assert.Equal(t, int32(0o644), *v.ConfigMap.DefaultMode)
+			}
 		}
 	}
 	assert.True(t, found, "vector-config volume must be present")

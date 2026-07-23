@@ -51,7 +51,9 @@ RUN set -eu; \
       --only-binary=:all: \
       --platform="${pip_platform}" \
       --target=/opt/huggingface-python \
-      --requirement /tmp/requirements.txt
+      --requirement /tmp/requirements.txt; \
+    PYTHONPATH=/opt/huggingface-python python -m pip check; \
+    test -x /opt/huggingface-python/bin/hf
 
 # Hugging Face initializer stage. Dependencies are resolved at image-build time,
 # so model pods do not need PyPI access during startup.
@@ -59,9 +61,6 @@ FROM python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee56815788280
 COPY --from=builder /workspace/huggingface-initializer /huggingface-initializer
 COPY --from=huggingface-python-deps /opt/huggingface-python /usr/local/lib/python3.12/site-packages
 COPY --from=huggingface-python-deps /opt/huggingface-python/bin/hf /usr/local/bin/hf
-RUN python -m pip check \
-    && hf --help >/dev/null \
-    && python -c "import hf_xet"
 ENV HOME=/tmp \
     HF_HOME=/tmp/huggingface \
     HF_HUB_DISABLE_TELEMETRY=1 \

@@ -55,6 +55,7 @@ func (m *CkodexOperator) ScanHuggingFaceInitializer(
 func smokeTestHuggingFaceInitializer(ctx context.Context, source *dagger.Directory) error {
 	const destination = "/tmp/model"
 	container := buildHuggingFaceInitializerVariant(source, "amd64").
+		WithExec([]string{"python", "-c", "import hf_xet"}).
 		WithMountedDirectory(destination, dag.Directory(), dagger.ContainerWithMountedDirectoryOpts{
 			Owner: "65532:65532",
 		}).

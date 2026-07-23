@@ -1,5 +1,7 @@
-# Build stage
-FROM golang:1.26.5-bookworm AS builder
+# Build stage. Compile on the native builder platform and cross-compile for the
+# requested target so multi-architecture builds do not run the Go compiler
+# through CPU emulation.
+FROM --platform=$BUILDPLATFORM golang:1.26.5-bookworm AS builder
 
 ARG TARGETOS=linux
 ARG TARGETARCH

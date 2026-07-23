@@ -141,8 +141,12 @@ func (r *Reconciler) Build(llmSvc *servingv1alpha2.LLMInferenceService) (*unstru
 	predictor := map[string]interface{}{
 		"minReplicas": int64(1),
 		"maxReplicas": int64(1),
-		"labels":      stringMapToInterface(labels),
-		"annotations": stringMapToInterface(annotations),
+		// A topology change can temporarily require both the old and new
+		// distributed workloads. Recreate prevents overlapping GPU allocation
+		// while KServe replaces a multi-node predictor.
+		"deploymentStrategy": map[string]interface{}{"type": "Recreate"},
+		"labels":             stringMapToInterface(labels),
+		"annotations":        stringMapToInterface(annotations),
 		"model": map[string]interface{}{
 			"modelFormat": map[string]interface{}{"name": "huggingface"},
 			"runtime":     runtimeName,

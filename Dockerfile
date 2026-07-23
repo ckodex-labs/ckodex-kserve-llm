@@ -30,20 +30,36 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 
 FROM gcr.io/projectsigstore/cosign:v3.1.1 AS cosign
 
-# Hugging Face initializer stage. Dependencies are resolved at image-build time,
-# so model pods do not need PyPI access during startup.
-FROM python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS huggingface-initializer
+# Resolve and unpack target-architecture wheels on the native build platform.
+# The final image still executes a short target-platform import check, but does
+# not run pip's resolver and installer through CPU emulation.
+FROM --platform=$BUILDPLATFORM python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS huggingface-python-deps
+ARG TARGETARCH
 COPY build/huggingface-initializer-requirements.txt /tmp/requirements.txt
-COPY --from=builder /workspace/huggingface-initializer /huggingface-initializer
-RUN python -m pip install \
+RUN set -eu; \
+    case "${TARGETARCH}" in \
+      amd64) pip_platform=manylinux2014_x86_64 ;; \
+      arm64) pip_platform=manylinux_2_28_aarch64 ;; \
+      *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    python -m pip install \
       --disable-pip-version-check \
       --no-cache-dir \
       --no-compile \
       --root-user-action=ignore \
       --require-hashes \
-      --requirement /tmp/requirements.txt \
-    && rm /tmp/requirements.txt \
-    && python -m pip check \
+      --only-binary=:all: \
+      --platform="${pip_platform}" \
+      --target=/opt/huggingface-python \
+      --requirement /tmp/requirements.txt
+
+# Hugging Face initializer stage. Dependencies are resolved at image-build time,
+# so model pods do not need PyPI access during startup.
+FROM python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS huggingface-initializer
+COPY --from=builder /workspace/huggingface-initializer /huggingface-initializer
+COPY --from=huggingface-python-deps /opt/huggingface-python /usr/local/lib/python3.12/site-packages
+COPY --from=huggingface-python-deps /opt/huggingface-python/bin/hf /usr/local/bin/hf
+RUN python -m pip check \
     && hf --help >/dev/null \
     && python -c "import hf_xet"
 ENV HOME=/tmp \

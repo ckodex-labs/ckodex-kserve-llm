@@ -3,7 +3,7 @@ name: ckodex-kserve-llm-operator
 description: A production-grade Kubernetes operator for managing distributed LLM inference workloads.
 type: application
 version: 0.18.0-beta.6
-appVersion: "v0.18.0-beta.6"
+appVersion: "v0.18.0-beta.7"
 keywords:
   - kubernetes
   - llm

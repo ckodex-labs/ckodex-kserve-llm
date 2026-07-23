@@ -5,7 +5,7 @@ metadata:
 spec:
   container:
     name: storage-initializer
-    image: ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.6
+    image: ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.7
     imagePullPolicy: IfNotPresent
     env:
       - name: HF_TOKEN

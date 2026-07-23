@@ -117,8 +117,15 @@ type EmbeddingInferenceServiceSpec struct {
 	// Template allows customising the pod template (resources, tolerations,
 	// node selectors, additional sidecars, etc.).
 	// The operator injects the primary runtime container at position 0.
+	//
+	// This is a pointer so that an omitted template serialises as absent
+	// rather than an empty object. A non-pointer struct with omitempty still
+	// marshals `template: {spec: {}}`, which the CRD's structural schema
+	// rejects (spec.template.spec.containers is required) — that made the
+	// operator's own AddFinalizer Update fail with
+	// "spec.template.spec.containers: Required value".
 	// +optional
-	Template corev1.PodTemplateSpec `json:"template,omitempty"`
+	Template *corev1.PodTemplateSpec `json:"template,omitempty"`
 }
 
 // EmbeddingInferenceServiceStatus defines the observed state of an EmbeddingInferenceService.

@@ -210,8 +210,12 @@ func TestBuildEmbeddingDeployment_CustomReplicas(t *testing.T) {
 func TestBuildEmbeddingDeployment_SidecarsMerged(t *testing.T) {
 	r := &EmbeddingInferenceServiceReconciler{}
 	svc := newEmbSvc("bge", "ns", func(s *servingv1alpha2.EmbeddingInferenceService) {
-		s.Spec.Template.Spec.Containers = []corev1.Container{
-			{Name: "metrics-exporter", Image: "prom/exporter:latest"},
+		s.Spec.Template = &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{Name: "metrics-exporter", Image: "prom/exporter:latest"},
+				},
+			},
 		}
 	})
 

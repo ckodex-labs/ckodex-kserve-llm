@@ -8,14 +8,13 @@ These images power the primary data plane for LLM and Embedding workloads.
 
 | Component | Version | Image Reference | Use Case |
 | :--- | :--- | :--- | :--- |
-| **vLLM** | `v0.24.0` | `vllm/vllm-openai:v0.24.0` | CUDA inference runtime. |
-| **vLLM CPU** | `v0.24.0` | `vllm/vllm-openai-cpu:v0.24.0` | Local and CPU-only inference. |
-| **vLLM (Gemma 4)** | `gemma4` | `vllm/vllm-openai:gemma4` | Optimized for TurboQuant & Gemma 4. |
+| **vLLM** | `v0.25.1` | `vllm/vllm-openai:v0.25.1` | CUDA inference runtime; operator default. |
+| **vLLM CPU** | `v0.25.1` | `vllm/vllm-openai-cpu:v0.25.1` | Local and CPU-only inference; explicit opt-in. |
+| **vLLM (Gemma 4)** | `v0.25.1` | `vllm/vllm-openai:v0.25.1` | NVFP4-capable runtime; model is selected by the workload. |
 | **Quant-CPP** | `v0.1.0` | `ckodex/quant-cpp:v0.1.0` | Apple Silicon & low-memory GGUF. |
 
-The `v0.24.0-rocm` tag does not exist in `vllm/vllm-openai`. AMD clusters
-must configure an independently validated ROCm image; the operator does not
-fabricate a default tag.
+AMD clusters must configure an independently validated ROCm image; the
+operator does not fabricate a default tag.
 
 ## 2. Infrastructure & Data Plane
 
@@ -28,7 +27,8 @@ Components responsible for model distribution and observability.
 | **llm-d** | `v0.8.1` | Release bundle | Orchestration compatibility baseline. |
 | **llm-d Router EPP** | `v0.9.0` | `ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0` | KV-aware endpoint selection. |
 | **Hugging Face CSI** | `v0.11.1` | `ghcr.io/huggingface/charts/hf-csi-driver:0.11.1` | Lazy `hf-mount://` model access. |
-| **SeaweedFS** | `4.37` | `chrislusf/seaweedfs:4.37` | Local S3/filer integration. |
+| **SeaweedFS** | `4.40` | `chrislusf/seaweedfs:4.40` | External S3/filer integration target; not installed by this chart. |
+| **LMCache** | `operator-v0.5.1` | External KServe/vLLM integration | Not reconciled by this operator; see L-OP-006. |
 | **CKodex Storage Init** | `v0.1.0` | `ckodex/storage-initializer:v0.1.0` | Optimized swfs:// and hf:// downloads. |
 | **Vector Sidecar** | `0.54.0` | `timberio/vector:0.54.0-distroless-libc` | OIS Signal translation & OTel routing. |
 | **SeaweedFS Client** | `v3.x` | Go SDK (integrated) | High-speed model weight distribution. |
@@ -52,7 +52,7 @@ Zero-trust infrastructure injected into every governed workload.
 > [!NOTE]
 ## Compatibility Notes
 
-- vLLM `v0.24.0` removes `--enable-v2-runner`,
+- vLLM `v0.25.1` removes `--enable-v2-runner`,
   `--num-speculative-tokens`, `--speculative-model`, `--swap-space`, and
   `--gptq-ckpt-path`. The operator emits the replacement flags.
 - llm-d `v0.8.1` consumes Router EPP `v0.9.0`; the image was renamed from
@@ -64,3 +64,17 @@ Zero-trust infrastructure injected into every governed workload.
   Cosign `v3.1.1`, Dagger `v0.21.7`, and Go `v1.26.5` were
   checked on 2026-07-22. The CI, release, and image-build pins use these
   versions.
+
+## Live upstream alignment (2026-07-23)
+
+The release tags above were checked against the upstream GitHub release APIs:
+
+- [KServe v0.19.0](https://github.com/kserve/kserve/releases/tag/v0.19.0)
+- [llm-d v0.8.1](https://github.com/llm-d/llm-d/releases/tag/v0.8.1)
+- [vLLM v0.25.1](https://github.com/vllm-project/vllm/releases/tag/v0.25.1)
+- [SeaweedFS 4.40](https://github.com/seaweedfs/seaweedfs/releases/tag/4.40)
+- [LMCache operator-v0.5.1](https://github.com/LMCache/LMCache/releases/tag/operator-v0.5.1)
+
+LMCache is an intentional non-dependency today: enabling it requires a
+`LMCacheConnectorV1` vLLM configuration and a separately operated backing
+store. A router image alone is not LMCache support.

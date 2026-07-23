@@ -78,18 +78,22 @@ func TestValidator_ValidateCreate_NoContainers(t *testing.T) {
 }
 
 func TestValidator_ValidateCreate_UnknownScheme(t *testing.T) {
-	svc := minimalValidSvc()
-	svc.Spec.Model.URI = "ftp://some-host/model"
-	v := &webhook.LLMInferenceServiceValidator{}
-	_, err := v.ValidateCreate(context.Background(), svc)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "spec.model.uri must start with one of")
+	for _, uri := range []string{
+		"ftp://some-host/model",
+		"huggingface://org/model",
+	} {
+		svc := minimalValidSvc()
+		svc.Spec.Model.URI = uri
+		v := &webhook.LLMInferenceServiceValidator{}
+		_, err := v.ValidateCreate(context.Background(), svc)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "spec.model.uri must start with one of")
+	}
 }
 
 func TestValidator_ValidateCreate_ValidSchemes(t *testing.T) {
 	schemes := []string{
 		"hf://meta-llama/Llama-3.2-1B",
-		"huggingface://meta-llama/Llama-3.2-1B",
 		"hf-mirror://internal.corp/llama",
 		"s3://bucket/prefix/model",
 		"gs://bucket/model",

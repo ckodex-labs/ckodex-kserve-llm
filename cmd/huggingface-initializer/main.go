@@ -40,7 +40,13 @@ func main() {
 // Other argument forms pass through to the hf CLI for diagnostic use and
 // compatibility with pods created by older operator releases.
 func normalizeArgs(args []string) ([]string, error) {
-	if len(args) != 2 || !isHuggingFaceURI(args[0]) {
+	if len(args) != 2 {
+		return args, nil
+	}
+	if !isHuggingFaceURI(args[0]) {
+		if strings.Contains(args[0], "://") {
+			return nil, fmt.Errorf("unsupported source URI %q; expected hf://", args[0])
+		}
 		return args, nil
 	}
 
@@ -61,12 +67,11 @@ func normalizeArgs(args []string) ([]string, error) {
 
 func isHuggingFaceURI(uri string) bool {
 	return strings.HasPrefix(uri, "hf://") ||
-		strings.HasPrefix(uri, "huggingface://") ||
 		strings.HasPrefix(uri, "hf-mirror://")
 }
 
 func parseHuggingFaceURI(uri string) (repo, revision string) {
-	for _, prefix := range []string{"hf://", "huggingface://", "hf-mirror://"} {
+	for _, prefix := range []string{"hf://", "hf-mirror://"} {
 		if strings.HasPrefix(uri, prefix) {
 			repo = strings.TrimPrefix(uri, prefix)
 			break

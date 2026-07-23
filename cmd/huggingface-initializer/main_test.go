@@ -32,7 +32,7 @@ func TestNormalizeArgsKServeContract(t *testing.T) {
 		},
 		{
 			name: "empty revision",
-			uri:  "huggingface://org/model@",
+			uri:  "hf://org/model@",
 			want: []string{"download", "org/model", "--revision", "main", "--local-dir", "/mnt/models"},
 		},
 		{
@@ -70,4 +70,7 @@ func TestNormalizeArgsRejectsIncompleteKServeContract(t *testing.T) {
 
 	_, err = normalizeArgs([]string{"hf://org/model", ""})
 	require.ErrorContains(t, err, "must not be empty")
+
+	_, err = normalizeArgs([]string{"huggingface://org/model", "/mnt/models"})
+	require.ErrorContains(t, err, "unsupported source URI")
 }

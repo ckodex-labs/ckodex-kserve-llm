@@ -7,9 +7,10 @@ container interface:
 <source-uri> <destination-path>
 ```
 
-It translates `hf://`, `huggingface://`, and `hf-mirror://` sources to the
-hash-locked `hf download` client. The same image is therefore usable by the
-CKodex compatibility controller and KServe `ClusterStorageContainer`.
+It translates the KServe-standard `hf://` source and CKodex's `hf-mirror://`
+source to the hash-locked `hf download` client. The same image is therefore
+usable by the CKodex compatibility controller and KServe
+`ClusterStorageContainer`.
 
 ## KServe LocalModelCache Downloads
 

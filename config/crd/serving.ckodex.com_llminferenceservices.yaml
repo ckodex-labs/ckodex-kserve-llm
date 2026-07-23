@@ -17443,8 +17443,8 @@ spec:
                   uri:
                     description: |-
                       URI is the model artifact location.
-                      Supported schemes: hf://, huggingface://, hf-mount://, hf-mirror://, s3://, gs://, pvc://, oci://, ocis://, seaweedfs://.
-                    pattern: ^(hf|huggingface|hf-mount|hf-mirror|s3|swfs|seaweedfs|gs|pvc|oci|ocis|modelpack|https?)://.*$
+                      Supported schemes: hf://, hf-mount://, hf-mirror://, s3://, gs://, pvc://, oci://, ocis://, seaweedfs://.
+                    pattern: ^(hf|hf-mount|hf-mirror|s3|swfs|seaweedfs|gs|pvc|oci|ocis|modelpack|https?)://.*$
                     type: string
                 required:
                 - name
@@ -26493,13 +26493,13 @@ spec:
                   uri:
                     description: |-
                       URI is the model artifact location.
-                      Supported schemes: hf:// and huggingface:// (HuggingFace Hub), hf-mount:// (HuggingFace CSI lazy mount),
+                      Supported schemes: hf:// (HuggingFace Hub), hf-mount:// (HuggingFace CSI lazy mount),
                       hf-mirror://, s3://, swfs://, seaweedfs://, gs://, pvc://, oci://, ocis://, modelpack://.
                       hf-mount:// uses the hf-csi-driver to mount repos as a FUSE/NFS filesystem —
                       only accessed bytes are fetched, eliminating full model downloads.
                       `ocis://` is an explicit secure-OCI alias and follows the same runtime
                       verification path as `oci://`, while making the intent visible at the spec boundary.
-                    pattern: ^(hf|huggingface|hf-mount|hf-mirror|s3|swfs|seaweedfs|gs|pvc|oci|ocis|modelpack|https?)://.*$
+                    pattern: ^(hf|hf-mount|hf-mirror|s3|swfs|seaweedfs|gs|pvc|oci|ocis|modelpack|https?)://.*$
                     type: string
                 required:
                 - name

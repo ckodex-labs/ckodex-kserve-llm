@@ -56,15 +56,11 @@ metadata:
     app.kubernetes.io/part-of: ckodex-llm-operator
 spec:
   model:
-    name: whisper-large-v3
+    # Speaches exposes this repository ID as the OpenAI-compatible model name.
+    name: Systran/faster-whisper-large-v3
     uri: hf://Systran/faster-whisper-large-v3
 
   runtime: faster-whisper
   # runtimeImage: omitted — uses the digest-pinned Speaches CPU image
-
-  languages:
-    - en
-    - fr
-    - de
 
   replicas: 1

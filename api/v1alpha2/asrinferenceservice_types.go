@@ -97,7 +97,9 @@ type ASRInferenceServiceSpec struct {
 	// +optional
 	RuntimeImage string `json:"runtimeImage,omitempty"`
 
-	// Languages lists the BCP-47 / ISO 639-1 language codes the model should handle.
+	// Languages lists the BCP-47 / ISO 639-1 language codes passed to custom
+	// transformers runtimes. Speaches selects language per transcription request,
+	// so this field is ignored when runtime is faster-whisper.
 	// When empty, the runtime processes all languages the model supports.
 	// Example: ["en", "fr", "de"]
 	// +optional

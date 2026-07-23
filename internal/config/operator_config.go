@@ -328,7 +328,7 @@ func DefaultOperatorConfig() OperatorConfig {
 			KServeMultiNodeRuntime:      "kserve-huggingfaceserver-multinode",
 			SchedulerImage:              "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0",
 			StorageInitializerImage:     "kserve/storage-initializer:v0.19.0",
-			HuggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.6",
+			HuggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.7",
 			DefaultReplicas:             1,
 		},
 		Scheduler: SchedulerDefaults{

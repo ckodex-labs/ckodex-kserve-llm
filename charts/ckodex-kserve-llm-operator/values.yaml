@@ -36,7 +36,7 @@ runtime:
   # Installed KServe ClusterServingRuntime for v0.19 workerSpec workloads.
   kserveMultiNodeRuntime: "kserve-huggingfaceserver-multinode"
   # Purpose-built Xet-aware image; dependencies are installed at image build time.
-  huggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.6"
+  huggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.7"
 
 gateway:
   # Namespace where Envoy Gateway creates its data-plane proxy pods.

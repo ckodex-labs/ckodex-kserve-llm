@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"dagger/ckodex-operator/internal/dagger"
+	"golang.org/x/sync/errgroup"
 )
 
 // BuildHuggingFaceInitializer builds the amd64 Xet-aware hf:// initializer.
@@ -27,20 +28,28 @@ func (m *CkodexOperator) ScanHuggingFaceInitializer(
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
-	if err := smokeTestHuggingFaceInitializer(ctx, source); err != nil {
+	platforms := []string{"amd64", "arm64"}
+	outputs := make([]string, len(platforms))
+	g, groupCtx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		return smokeTestHuggingFaceInitializer(groupCtx, source)
+	})
+	for i, arch := range platforms {
+		i, arch := i, arch
+		g.Go(func() error {
+			output, err := scanRootfs(buildHuggingFaceInitializerVariant(source, arch).Rootfs()).Stdout(groupCtx)
+			if err != nil {
+				return fmt.Errorf("scan %s Hugging Face initializer: %w", arch, err)
+			}
+			outputs[i] = fmt.Sprintf("%s:\n%s", arch, output)
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
 		return "", err
 	}
-
-	platforms := []string{"amd64", "arm64"}
-	result := ""
-	for _, arch := range platforms {
-		output, err := scanRootfs(buildHuggingFaceInitializerVariant(source, arch).Rootfs()).Stdout(ctx)
-		if err != nil {
-			return result, fmt.Errorf("scan %s Hugging Face initializer: %w", arch, err)
-		}
-		result += fmt.Sprintf("%s:\n%s", arch, output)
-	}
-	return result, nil
+	return outputs[0] + outputs[1], nil
 }
 
 func smokeTestHuggingFaceInitializer(ctx context.Context, source *dagger.Directory) error {

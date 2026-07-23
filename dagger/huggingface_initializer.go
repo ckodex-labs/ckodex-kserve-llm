@@ -95,6 +95,18 @@ func scanHuggingFaceInitializerArch(ctx context.Context, source *dagger.Director
 
 func smokeTestHuggingFaceInitializer(ctx context.Context, source *dagger.Directory, arch string) error {
 	const destination = "/tmp/model"
+	const assertPayloadFilesAreNotLinks = `
+from pathlib import Path
+
+root = Path("/tmp/model")
+links = [
+    str(path.relative_to(root))
+    for path in root.rglob("*")
+    if path.is_symlink() and ".cache" not in path.relative_to(root).parts
+]
+if links:
+    raise SystemExit(f"downloaded model payload contains symlinks: {links}")
+`
 	container := buildHuggingFaceInitializerVariant(source, arch).
 		WithExec([]string{"python", "-c", "import hf_xet"}).
 		WithMountedDirectory(destination, dag.Directory(), dagger.ContainerWithMountedDirectoryOpts{
@@ -103,7 +115,8 @@ func smokeTestHuggingFaceInitializer(ctx context.Context, source *dagger.Directo
 		WithExec(
 			[]string{"hf://hf-internal-testing/tiny-random-gpt2", destination},
 			dagger.ContainerWithExecOpts{UseEntrypoint: true},
-		)
+		).
+		WithExec([]string{"python", "-c", assertPayloadFilesAreNotLinks})
 	if _, err := container.File(destination + "/config.json").Contents(ctx); err != nil {
 		return fmt.Errorf("exercise KServe Hugging Face initializer contract: %w", err)
 	}

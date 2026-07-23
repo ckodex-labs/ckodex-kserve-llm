@@ -27,6 +27,10 @@ func (m *CkodexOperator) ScanHuggingFaceInitializer(
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
+	if err := smokeTestHuggingFaceInitializer(ctx, source); err != nil {
+		return "", err
+	}
+
 	platforms := []string{"amd64", "arm64"}
 	result := ""
 	for _, arch := range platforms {
@@ -37,6 +41,22 @@ func (m *CkodexOperator) ScanHuggingFaceInitializer(
 		result += fmt.Sprintf("%s:\n%s", arch, output)
 	}
 	return result, nil
+}
+
+func smokeTestHuggingFaceInitializer(ctx context.Context, source *dagger.Directory) error {
+	const destination = "/tmp/model"
+	container := buildHuggingFaceInitializerVariant(source, "amd64").
+		WithMountedDirectory(destination, dag.Directory(), dagger.ContainerWithMountedDirectoryOpts{
+			Owner: "65532:65532",
+		}).
+		WithExec(
+			[]string{"hf://hf-internal-testing/tiny-random-gpt2", destination},
+			dagger.ContainerWithExecOpts{UseEntrypoint: true},
+		)
+	if _, err := container.File(destination + "/config.json").Contents(ctx); err != nil {
+		return fmt.Errorf("exercise KServe Hugging Face initializer contract: %w", err)
+	}
+	return nil
 }
 
 // PublishHuggingFaceInitializer builds and publishes amd64 and arm64 images.

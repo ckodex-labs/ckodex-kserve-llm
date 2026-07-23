@@ -242,10 +242,6 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 		},
 	}
 	if isHuggingFaceScheme(scheme) {
-		repo, revision := parseHuggingFaceURI(uri)
-		container.Args = []string{
-			"download", repo, "--revision", revision, "--local-dir", api.ModelMountPath,
-		}
 		container.Env = append(container.Env,
 			corev1.EnvVar{Name: "HOME", Value: "/tmp"},
 			corev1.EnvVar{Name: "HF_HOME", Value: "/tmp/huggingface"},

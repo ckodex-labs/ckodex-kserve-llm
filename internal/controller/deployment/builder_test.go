@@ -534,9 +534,7 @@ func TestBuilder_BuildStorageInitializer(t *testing.T) {
 	assert.Equal(t, "storage-initializer", initContainer.Name)
 	assert.Equal(t, api.HuggingFaceInitializerImage, initContainer.Image)
 	assert.Empty(t, initContainer.Command)
-	assert.Equal(t, []string{
-		"download", "mistralai/Mistral-7B", "--revision", "main", "--local-dir", api.ModelMountPath,
-	}, initContainer.Args)
+	assert.Equal(t, []string{"hf://mistralai/Mistral-7B", api.ModelMountPath}, initContainer.Args)
 	require.Len(t, initContainer.EnvFrom, 1)
 	require.NotNil(t, initContainer.EnvFrom[0].SecretRef)
 	assert.Equal(t, "hf-credentials", initContainer.EnvFrom[0].SecretRef.Name)
@@ -604,9 +602,7 @@ func TestBuilder_BuildStorageInitializer_PreservesHFImageOverride(t *testing.T) 
 	container := builder.BuildStorageInitializer(context.Background(), llmSvc, HardwareNVIDIA, nil)
 	require.NotNil(t, container)
 	assert.Equal(t, builder.HFInitializerImage, container.Image)
-	assert.Equal(t, []string{
-		"download", "org/model", "--revision", "release", "--local-dir", api.ModelMountPath,
-	}, container.Args)
+	assert.Equal(t, []string{"hf://org/model@release", api.ModelMountPath}, container.Args)
 	for _, arg := range container.Args {
 		assert.NotContains(t, arg, "pip install")
 	}
@@ -626,9 +622,7 @@ func TestBuilder_BuildStorageInitializer_HFMirrorUsesXetInitializer(t *testing.T
 	container := builder.BuildStorageInitializer(context.Background(), llmSvc, HardwareNVIDIA, nil)
 	require.NotNil(t, container)
 	assert.Equal(t, api.HuggingFaceInitializerImage, container.Image)
-	assert.Equal(t, []string{
-		"download", "org/model", "--revision", "release", "--local-dir", api.ModelMountPath,
-	}, container.Args)
+	assert.Equal(t, []string{"hf-mirror://org/model@release", api.ModelMountPath}, container.Args)
 	assert.Contains(t, container.Env, corev1.EnvVar{
 		Name: "HF_ENDPOINT", Value: builder.HFMirrorURL,
 	})

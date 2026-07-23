@@ -99,3 +99,47 @@ func TestSyncDeployment_PreservesUnmanagedAnnotations(t *testing.T) {
 		t.Fatalf("unmanaged annotation stripped: %v", existing.Annotations)
 	}
 }
+
+func TestSyncDeployment_PrunesStaleManagedMetadata(t *testing.T) {
+	base := func() *appsv1.Deployment {
+		return &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "gemma4"},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To(int32(1)),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "vllm", Image: "vllm:1"}}},
+				},
+			},
+		}
+	}
+	existing := base()
+	existing.Labels = map[string]string{
+		"ckodex.cost/team":         "inference",
+		"external.example.com/uid": "preserve",
+	}
+	existing.Annotations = map[string]string{
+		"ckodex.com/canary-weight":          "10",
+		"sidecar.istio.io/inject":           "true",
+		"deployment.kubernetes.io/revision": "16",
+	}
+	desired := base()
+
+	if !SyncDeployment(context.Background(), existing, desired, 1, false) {
+		t.Fatal("SyncDeployment reported no change for stale operator-managed metadata")
+	}
+	if _, ok := existing.Labels["ckodex.cost/team"]; ok {
+		t.Fatalf("stale operator-managed label preserved: %v", existing.Labels)
+	}
+	if _, ok := existing.Annotations["ckodex.com/canary-weight"]; ok {
+		t.Fatalf("stale canary annotation preserved: %v", existing.Annotations)
+	}
+	if _, ok := existing.Annotations["sidecar.istio.io/inject"]; ok {
+		t.Fatalf("stale sidecar annotation preserved: %v", existing.Annotations)
+	}
+	if existing.Labels["external.example.com/uid"] != "preserve" {
+		t.Fatalf("unmanaged label changed: %v", existing.Labels)
+	}
+	if existing.Annotations["deployment.kubernetes.io/revision"] != "16" {
+		t.Fatalf("unmanaged annotation changed: %v", existing.Annotations)
+	}
+}

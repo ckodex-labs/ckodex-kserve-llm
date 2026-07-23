@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,10 +28,10 @@ func SyncDeployment(ctx context.Context, existing, desired *appsv1.Deployment, r
 	// managed keys but preserve keys added by other controllers — notably
 	// deployment.kubernetes.io/revision, which the Deployment controller re-adds
 	// after every wholesale replace, producing an infinite reconcile loop.
-	if mergeManagedMap(&existing.Labels, desired.Labels) {
+	if syncManagedMap(&existing.Labels, desired.Labels, isManagedDeploymentLabel) {
 		changed = true
 	}
-	if mergeManagedMap(&existing.Annotations, desired.Annotations) {
+	if syncManagedMap(&existing.Annotations, desired.Annotations, isManagedDeploymentAnnotation) {
 		changed = true
 	}
 	if !equality.Semantic.DeepEqual(existing.Spec.Template.Labels, desired.Spec.Template.Labels) {
@@ -65,13 +66,18 @@ func SyncDeployment(ctx context.Context, existing, desired *appsv1.Deployment, r
 	return changed
 }
 
-// mergeManagedMap applies the operator-managed keys from desired onto *target,
-// adding or updating only those keys and preserving keys the operator does not
-// manage (e.g. deployment.kubernetes.io/revision added by the Deployment
-// controller). Wholesale replacement would strip such keys and cause an infinite
-// reconcile loop. Returns true if any managed key was added or changed.
-func mergeManagedMap(target *map[string]string, desired map[string]string) bool {
+// syncManagedMap converges operator-managed keys while preserving metadata owned
+// by Kubernetes and other controllers.
+func syncManagedMap(target *map[string]string, desired map[string]string, managed func(string) bool) bool {
 	changed := false
+	for k := range *target {
+		if managed(k) {
+			if _, ok := desired[k]; !ok {
+				delete(*target, k)
+				changed = true
+			}
+		}
+	}
 	for k, v := range desired {
 		if *target == nil {
 			*target = make(map[string]string, len(desired))
@@ -82,6 +88,30 @@ func mergeManagedMap(target *map[string]string, desired map[string]string) bool 
 		}
 	}
 	return changed
+}
+
+func isManagedDeploymentLabel(key string) bool {
+	switch key {
+	case "app.kubernetes.io/name",
+		"app.kubernetes.io/instance",
+		"app.kubernetes.io/managed-by",
+		"serving.ckodex.com/model":
+		return true
+	default:
+		return strings.HasPrefix(key, "ckodex.cost/")
+	}
+}
+
+func isManagedDeploymentAnnotation(key string) bool {
+	switch key {
+	case "ckodex.com/canary-weight",
+		"sidecar.istio.io/inject",
+		"sidecar.istio.io/rewriteAppHTTPProbers",
+		"sidecar.istio.io/discoveryNamespaces":
+		return true
+	default:
+		return false
+	}
 }
 
 // ContainersEqual compares two slices of containers looking only at managed fields.

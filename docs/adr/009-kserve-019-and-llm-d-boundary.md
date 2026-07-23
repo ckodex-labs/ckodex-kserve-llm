@@ -29,6 +29,10 @@ currently deploy or configure an LMCache service or connector.
 - Preserve the current API while a separate, tested migration maps CKodex
   fields to upstream KServe resources. This repair does not silently replace
   existing CRDs.
+- Explicit multi-node workloads map to KServe v0.19 `InferenceService`
+  `workerSpec`; CKodex does not create a second standalone `LeaderWorkerSet`.
+  The installed KServe multi-node runtime owns its image, Ray lifecycle, and
+  health probes.
 - Runtime images and model paths remain explicit: the configured vLLM image is
   honored, and the mounted artifact is passed as `--model /mnt/models`.
 
@@ -37,6 +41,10 @@ currently deploy or configure an LMCache service or connector.
 The immediate serving fixes are compatible with the current API, while future
 work has a clear direction. Full llm-d claims require live evidence for every
 enabled component, not merely a router image or an architecture diagram.
+
+Multi-node status and routing are projected from the upstream KServe object.
+Unsupported CKodex topology fields fail before resource creation instead of
+producing incomplete worker pods.
 
 ## References
 

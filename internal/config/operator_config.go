@@ -204,6 +204,9 @@ type DefaultsConfig struct {
 	// RuntimeImage is the default vLLM runtime image.
 	RuntimeImage string `json:"runtimeImage"`
 
+	// KServeMultiNodeRuntime is the installed KServe runtime selected for workerSpec workloads.
+	KServeMultiNodeRuntime string `json:"kserveMultiNodeRuntime"`
+
 	// SchedulerImage is the default EPP scheduler image.
 	SchedulerImage string `json:"schedulerImage"`
 
@@ -322,6 +325,7 @@ func DefaultOperatorConfig() OperatorConfig {
 		Defaults: DefaultsConfig{
 			// Pinned to a specific version — :latest is a supply chain risk and air-gapped blocker.
 			RuntimeImage:                "vllm/vllm-openai:v0.25.1",
+			KServeMultiNodeRuntime:      "kserve-huggingfaceserver-multinode",
 			SchedulerImage:              "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0",
 			StorageInitializerImage:     "kserve/storage-initializer:v0.19.0",
 			HuggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.6",
@@ -378,6 +382,7 @@ func (c *OperatorConfig) LoadFromEnv() {
 	c.Features.FromEnv()
 
 	envStr("CKODEX_RUNTIME_IMAGE", &c.Defaults.RuntimeImage)
+	envStr("CKODEX_KSERVE_MULTINODE_RUNTIME", &c.Defaults.KServeMultiNodeRuntime)
 	envStr("CKODEX_HUGGING_FACE_INITIALIZER_IMAGE", &c.Defaults.HuggingFaceInitializerImage)
 	envStr("CKODEX_SCHEDULER_IMAGE", &c.Scheduler.Image)
 	envStr("CKODEX_AUTH_ISSUER_URL", &c.Auth.IssuerURL)

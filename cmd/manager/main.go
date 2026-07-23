@@ -136,16 +136,17 @@ func main() {
 
 	// Build reconciler with feature-gated sub-reconcilers
 	reconciler := &controller.LLMInferenceServiceReconciler{
-		Client:             mgr.GetClient(),
-		Scheme:             mgr.GetScheme(),
-		Recorder:           mgr.GetEventRecorderFor("llminferenceservice-controller"),
-		OTEL_Endpoint:      cfg.Observability.OTLPEndpoint,
-		AirGappedMode:      cfg.AirGappedMode,
-		LocalRegistry:      cfg.LocalRegistry,
-		LocalCosignKeyPath: cfg.LocalCosignKeyPath,
-		RuntimeImage:       cfg.Defaults.RuntimeImage,
-		HFInitializerImage: cfg.Defaults.HuggingFaceInitializerImage,
-		HFMirrorURL:        cfg.HuggingFaceMirrorURL,
+		Client:                 mgr.GetClient(),
+		Scheme:                 mgr.GetScheme(),
+		Recorder:               mgr.GetEventRecorderFor("llminferenceservice-controller"),
+		OTEL_Endpoint:          cfg.Observability.OTLPEndpoint,
+		AirGappedMode:          cfg.AirGappedMode,
+		LocalRegistry:          cfg.LocalRegistry,
+		LocalCosignKeyPath:     cfg.LocalCosignKeyPath,
+		RuntimeImage:           cfg.Defaults.RuntimeImage,
+		KServeMultiNodeRuntime: cfg.Defaults.KServeMultiNodeRuntime,
+		HFInitializerImage:     cfg.Defaults.HuggingFaceInitializerImage,
+		HFMirrorURL:            cfg.HuggingFaceMirrorURL,
 	}
 
 	// gRPC — independent of gateway (controls Service port definition)
@@ -225,13 +226,6 @@ func main() {
 			"components", "NetworkPolicy+Vault+OPA+eBPF+SPIRE",
 			"allowedRegistries", len(cfg.Security.AllowedRegistries),
 		)
-	}
-
-	// LeaderWorkerSet — always wired; Reconcile is a no-op when spec.parallelism is nil.
-	// LWS CRD availability is checked lazily during reconciliation via unstructured client.
-	reconciler.LWS = &controller.Reconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
 	}
 
 	// Auth middleware — enabled when EnableAuth=true.

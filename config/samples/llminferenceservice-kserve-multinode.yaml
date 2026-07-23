@@ -1,0 +1,56 @@
+apiVersion: serving.ckodex.com/v1
+kind: LLMInferenceService
+metadata:
+  name: gemma4-multinode
+  namespace: models
+spec:
+  model:
+    name: unsloth/gemma-4-26B-A4B-it-NVFP4
+    # The referenced PVC must use ReadWriteMany so every Ray pod can read it.
+    uri: pvc://gemma4-weights
+    storage:
+      serviceAccountName: model-reader
+  replicas: 1
+  parallelism:
+    tensor: 2
+    pipeline: 2
+  template:
+    spec:
+      nodeSelector:
+        accelerator: nvidia-blackwell
+      containers:
+        - name: model
+          resources:
+            requests:
+              cpu: "8"
+              memory: 48Gi
+              nvidia.com/gpu: "2"
+            limits:
+              cpu: "8"
+              memory: 48Gi
+              nvidia.com/gpu: "2"
+  experimental:
+    worker:
+      template:
+        spec:
+          nodeSelector:
+            accelerator: nvidia-blackwell
+          containers:
+            # Image, command, and args are intentionally absent. The selected
+            # KServe runtime owns the Ray head/worker lifecycle.
+            - name: worker
+              resources:
+                requests:
+                  cpu: "8"
+                  memory: 48Gi
+                  nvidia.com/gpu: "2"
+                limits:
+                  cpu: "8"
+                  memory: 48Gi
+                  nvidia.com/gpu: "2"
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route: {}
+    scheduler: {}

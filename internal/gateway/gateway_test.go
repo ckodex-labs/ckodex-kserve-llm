@@ -70,6 +70,22 @@ func TestBuildHTTPRoute_BackendRef(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPRoute_MultiNodeUsesKServePredictorService(t *testing.T) {
+	llmSvc := baseLLMSvc("distributed")
+	llmSvc.Spec.Model.URI = "pvc://weights"
+	llmSvc.Spec.Worker = &servingv1alpha2.WorkerSpec{}
+
+	route := BuildHTTPRoute(llmSvc, nil)
+	if len(route.Spec.Rules) == 0 || len(route.Spec.Rules[0].BackendRefs) == 0 {
+		t.Fatal("route has no backend")
+	}
+	got := route.Spec.Rules[0].BackendRefs[0].Name
+	want := llmSvc.Name + "-predictor"
+	if string(got) != want {
+		t.Fatalf("backend name = %q, want %q", got, want)
+	}
+}
+
 func TestBuildHTTPRoute_ParentRef_Managed(t *testing.T) {
 	llmSvc := baseLLMSvc("test-model")
 	route := BuildHTTPRoute(llmSvc, nil)

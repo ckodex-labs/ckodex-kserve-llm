@@ -52,10 +52,10 @@ func normalizeArgs(args []string) ([]string, error) {
 
 	repo, revision := parseHuggingFaceURI(args[0])
 	if repo == "" {
-		return nil, fmt.Errorf("Hugging Face source URI must include a repository")
+		return nil, fmt.Errorf("invalid Hugging Face source URI: must include a repository")
 	}
 	if args[1] == "" {
-		return nil, fmt.Errorf("Hugging Face destination path must not be empty")
+		return nil, fmt.Errorf("invalid Hugging Face destination path: must not be empty")
 	}
 
 	return []string{

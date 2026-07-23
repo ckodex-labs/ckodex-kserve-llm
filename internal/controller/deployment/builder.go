@@ -459,18 +459,6 @@ func (b *Builder) isLocalModelCacheReady(ctx context.Context, modelURI string) b
 	return b.getReadyLMC(ctx, modelURI) != nil
 }
 
-func parseHuggingFaceURI(uri string) (repo, revision string) {
-	repo = strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(uri, "hf://"), "huggingface://"), "hf-mirror://")
-	revision = "main"
-	if idx := strings.LastIndex(repo, "@"); idx >= 0 {
-		repo, revision = repo[:idx], repo[idx+1:]
-		if revision == "" {
-			revision = "main"
-		}
-	}
-	return repo, revision
-}
-
 func isHuggingFaceScheme(scheme string) bool {
 	return scheme == "hf" || scheme == "hf-mirror"
 }

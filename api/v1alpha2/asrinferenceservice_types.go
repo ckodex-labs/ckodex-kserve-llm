@@ -17,8 +17,9 @@ import (
 type ASRRuntime string
 
 const (
-	// ASRRuntimeFasterWhisper uses the faster-whisper-server (fedirz/faster-whisper-server).
-	// Supports Whisper-family models: openai/whisper-*, distil-whisper/*, systran/faster-whisper-*.
+	// ASRRuntimeFasterWhisper uses Speaches, the maintained successor to
+	// faster-whisper-server. It requires CTranslate2-compatible Whisper models,
+	// such as Systran/faster-whisper-*.
 	// Exposes the OpenAI-compatible /v1/audio/transcriptions endpoint on port 8000.
 	ASRRuntimeFasterWhisper ASRRuntime = "faster-whisper"
 
@@ -34,12 +35,8 @@ const (
 func DefaultASRRuntimeImage(r ASRRuntime) string {
 	switch r {
 	case ASRRuntimeFasterWhisper:
-		// NOTE: the upstream fedirz/faster-whisper-server project was renamed to
-		// "speaches" (ghcr.io/speaches-ai/speaches), and the old
-		// ghcr.io/fedirz/faster-whisper-server path now 404s. The Docker Hub
-		// mirror fedirz/faster-whisper-server:latest-cpu still hosts the same
-		// server the operator's env/args target, so we default to it here.
-		return "fedirz/faster-whisper-server:latest-cpu"
+		// Speaches v0.9.0-rc.3 CPU multi-platform index (amd64 + arm64).
+		return "ghcr.io/speaches-ai/speaches@sha256:2163775b6df5e451a71200e8f675fed68dbd8ab184fc604453d549e486f22fd2"
 	default:
 		// ASRRuntimeTransformers has no canonical public default image in this repo.
 		// Users must set spec.runtimeImage explicitly for that runtime.
@@ -83,7 +80,8 @@ type ASRInferenceServiceList struct {
 // ASRInferenceServiceSpec defines the desired state of an ASRInferenceService.
 type ASRInferenceServiceSpec struct {
 	// Model specifies the ASR model to serve.
-	// For faster-whisper, use hf://openai/whisper-large-v3 or similar.
+	// For faster-whisper, use a CTranslate2 model such as
+	// hf://Systran/faster-whisper-large-v3.
 	// For transformers, use hf://CohereLabs/cohere-transcribe-03-2026.
 	Model ModelSpec `json:"model"`
 

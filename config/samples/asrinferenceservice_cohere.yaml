@@ -44,8 +44,9 @@ spec:
   replicas: 1
 
 ---
-# Faster-whisper example — Whisper large-v3 on CPU (no GPU required).
-# This uses the default faster-whisper runtime image automatically.
+# Speaches example — CTranslate2 Whisper large-v3 on CPU (no GPU required).
+# The operator preloads the model; clients must send the same repository ID in
+# the OpenAI-compatible transcription request's `model` field.
 apiVersion: serving.ckodex.com/v1alpha2
 kind: ASRInferenceService
 metadata:
@@ -56,10 +57,10 @@ metadata:
 spec:
   model:
     name: whisper-large-v3
-    uri: hf://openai/whisper-large-v3
+    uri: hf://Systran/faster-whisper-large-v3
 
   runtime: faster-whisper
-  # runtimeImage: omitted — uses fedirz/faster-whisper-server:latest-cpu (Docker Hub)
+  # runtimeImage: omitted — uses the digest-pinned Speaches CPU image
 
   languages:
     - en

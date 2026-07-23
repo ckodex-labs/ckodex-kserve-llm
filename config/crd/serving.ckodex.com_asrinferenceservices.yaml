@@ -75,7 +75,8 @@ spec:
               model:
                 description: |-
                   Model specifies the ASR model to serve.
-                  For faster-whisper, use hf://openai/whisper-large-v3 or similar.
+                  For faster-whisper, use a CTranslate2 model such as
+                  hf://Systran/faster-whisper-large-v3.
                   For transformers, use hf://CohereLabs/cohere-transcribe-03-2026.
                 properties:
                   hardwareAware:

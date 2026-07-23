@@ -240,26 +240,63 @@ func TestBuildASRContainer_FasterWhisperDefaults(t *testing.T) {
 		Recorder: record.NewFakeRecorder(10),
 	}
 	svc := newASRSvc("wh", "ns")
+	svc.Spec.Model.URI = "hf://Systran/faster-whisper-large-v3"
 	svc.Spec.Languages = []string{"en", "fr"}
 
 	c := r.buildASRContainer(svc)
 
 	assert.Equal(t, asrContainerName, c.Name)
-	assert.Equal(t, "fedirz/faster-whisper-server:latest-cpu", c.Image,
+	assert.Equal(t,
+		"ghcr.io/speaches-ai/speaches@sha256:2163775b6df5e451a71200e8f675fed68dbd8ab184fc604453d549e486f22fd2",
+		c.Image,
 		"default faster-whisper image must be used when runtimeImage is empty")
 	assert.Equal(t, int32(asrServerPort), c.Ports[0].ContainerPort)
 
-	var modelEnv, langEnv string
+	var preloadEnv string
 	for _, e := range c.Env {
-		switch e.Name {
-		case "MODEL":
-			modelEnv = e.Value
-		case "LANGUAGE":
-			langEnv = e.Value
+		if e.Name == "PRELOAD_MODELS" {
+			preloadEnv = e.Value
 		}
+		assert.NotEqual(t, "MODEL", e.Name, "Speaches does not consume MODEL")
+		assert.NotEqual(t, "LANGUAGE", e.Name, "language is selected per transcription request")
 	}
-	assert.Equal(t, "hf://openai/whisper-large-v3", modelEnv)
-	assert.Equal(t, "en,fr", langEnv)
+	assert.JSONEq(t, `["Systran/faster-whisper-large-v3"]`, preloadEnv)
+}
+
+func TestBuildASRContainer_TransformersEnvironment(t *testing.T) {
+	r := &ASRInferenceServiceReconciler{}
+	svc := newASRSvc("custom", "ns", func(s *servingv1alpha2.ASRInferenceService) {
+		s.Spec.Runtime = servingv1alpha2.ASRRuntimeTransformers
+		s.Spec.RuntimeImage = "registry.example/asr-transformers@sha256:abc"
+		s.Spec.Model.URI = "hf://CohereLabs/cohere-transcribe-03-2026"
+		s.Spec.Languages = []string{"en", "fr"}
+	})
+
+	c := r.buildASRContainer(svc)
+	env := make(map[string]string, len(c.Env))
+	for _, item := range c.Env {
+		env[item.Name] = item.Value
+	}
+	assert.Equal(t, svc.Spec.Model.URI, env["MODEL"])
+	assert.Equal(t, "en,fr", env["LANGUAGE"])
+	assert.NotContains(t, env, "PRELOAD_MODELS")
+}
+
+func TestASRModelID(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		uri  string
+		want string
+	}{
+		{name: "hf", uri: "hf://Systran/faster-whisper-small", want: "Systran/faster-whisper-small"},
+		{name: "legacy", uri: "huggingface://org/model", want: "org/model"},
+		{name: "mirror", uri: "hf-mirror://org/model", want: "org/model"},
+		{name: "other", uri: "pvc://models/asr", want: "pvc://models/asr"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, asrModelID(tc.uri))
+		})
+	}
 }
 
 // TestBuildASRContainer_OverrideImage verifies spec.runtimeImage overrides the default.
@@ -337,7 +374,7 @@ func TestBuildASRService_Spec(t *testing.T) {
 // TestDefaultASRRuntimeImage verifies correct defaults per runtime.
 func TestDefaultASRRuntimeImage(t *testing.T) {
 	assert.Equal(t,
-		"fedirz/faster-whisper-server:latest-cpu",
+		"ghcr.io/speaches-ai/speaches@sha256:2163775b6df5e451a71200e8f675fed68dbd8ab184fc604453d549e486f22fd2",
 		servingv1alpha2.DefaultASRRuntimeImage(servingv1alpha2.ASRRuntimeFasterWhisper),
 	)
 	// transformers has no default — user must supply runtimeImage.

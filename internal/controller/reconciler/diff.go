@@ -79,6 +79,9 @@ func syncManagedMap(target *map[string]string, desired map[string]string, manage
 		}
 	}
 	for k, v := range desired {
+		if !managed(k) {
+			continue
+		}
 		if *target == nil {
 			*target = make(map[string]string, len(desired))
 		}

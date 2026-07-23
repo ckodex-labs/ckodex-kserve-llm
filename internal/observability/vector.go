@@ -234,7 +234,7 @@ func InjectVectorSidecar(podSpec *corev1.PodSpec, configMapName string) {
 						// Match the API server's default so the desired volume equals the
 						// persisted (defaulted) one — otherwise the Deployment reconciler
 						// loops forever ("volumes changed" every pass).
-						DefaultMode: ptr.To[int32](420),
+						DefaultMode: ptr.To[int32](0o644),
 					},
 				},
 			},

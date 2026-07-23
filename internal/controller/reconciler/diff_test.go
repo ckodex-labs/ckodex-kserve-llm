@@ -123,6 +123,8 @@ func TestSyncDeployment_PrunesStaleManagedMetadata(t *testing.T) {
 		"deployment.kubernetes.io/revision": "16",
 	}
 	desired := base()
+	desired.Labels = map[string]string{"external.example.com/uid": "replace"}
+	desired.Annotations = map[string]string{"deployment.kubernetes.io/revision": "replace"}
 
 	if !SyncDeployment(context.Background(), existing, desired, 1, false) {
 		t.Fatal("SyncDeployment reported no change for stale operator-managed metadata")

@@ -147,7 +147,7 @@ func TestInjectVectorSidecar_AddsVectorConfigVolume(t *testing.T) {
 			// reconciler's desired volume matches the persisted (defaulted) one;
 			// otherwise the Deployment loops forever on "volumes changed".
 			if assert.NotNil(t, v.ConfigMap.DefaultMode, "vector-config DefaultMode must be set") {
-				assert.Equal(t, int32(420), *v.ConfigMap.DefaultMode)
+				assert.Equal(t, int32(0o644), *v.ConfigMap.DefaultMode)
 			}
 		}
 	}

@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	kserveintegration "github.com/ckodex-labs/kserve-llm-operator/internal/kserve"
 )
 
 // NetworkPolicyReconciler manages default-deny + explicit allow network policies.
@@ -71,6 +72,16 @@ func (r *NetworkPolicyReconciler) ReconcileNetworkPolicy(ctx context.Context, ll
 	// 2. Allow Gateway Ingress
 	protoTCP := corev1.ProtocolTCP
 	gatewayName, gatewayNamespace := gatewayIdentity(llmSvc)
+	gatewayPorts := []networkingv1.NetworkPolicyPort{
+		{Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 8000}, Protocol: &protoTCP},
+		{Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 8001}, Protocol: &protoTCP},
+	}
+	if kserveintegration.RequiresMultiNode(llmSvc) {
+		gatewayPorts = []networkingv1.NetworkPolicyPort{
+			// KServe's Hugging Face multi-node runtime serves HTTP on 8080.
+			{Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 8080}, Protocol: &protoTCP},
+		}
+	}
 	allowGateway := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: llmSvc.Name + "-allow-gateway", Namespace: llmSvc.Namespace,
@@ -102,10 +113,7 @@ func (r *NetworkPolicyReconciler) ReconcileNetworkPolicy(ctx context.Context, ll
 							}},
 						},
 					},
-					Ports: []networkingv1.NetworkPolicyPort{
-						{Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 8000}, Protocol: &protoTCP},
-						{Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 8001}, Protocol: &protoTCP},
-					},
+					Ports: gatewayPorts,
 				},
 			},
 		},

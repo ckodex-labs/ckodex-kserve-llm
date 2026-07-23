@@ -20,6 +20,7 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	kserveintegration "github.com/ckodex-labs/kserve-llm-operator/internal/kserve"
 )
 
 // Reconciler manages Gateway, HTTPRoute, and GRPCRoute resources.
@@ -53,7 +54,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMI
 	// vLLM's OpenAI-compatible server does not expose a separate gRPC listener,
 	// so this is disabled by default. Enable via CKODEX_FEATURE_ENABLE_GRPC=true
 	// when using a backend that serves the V2 gRPC Inference Protocol (e.g., Triton).
-	if r.EnableGRPC {
+	if r.EnableGRPC && !kserveintegration.RequiresMultiNode(llmSvc) {
 		if err := r.reconcileGRPCRoute(ctx, llmSvc); err != nil {
 			return fmt.Errorf("reconcile grpcroute: %w", err)
 		}

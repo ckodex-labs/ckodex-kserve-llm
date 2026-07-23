@@ -8,10 +8,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	kserveintegration "github.com/ckodex-labs/kserve-llm-operator/internal/kserve"
 )
 
 // Reconciler handles LLMInferenceService status updates.
@@ -36,7 +38,41 @@ func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInfe
 		llmSvc.Status.Replicas = deploy.Status.ReadyReplicas
 		llmSvc.Status.ModelReady = deploy.Status.ReadyReplicas > 0
 	}
+	llmSvc.Status.URL = fmt.Sprintf("http://%s.%s.svc.cluster.local/v2/models/%s",
+		llmSvc.Name, llmSvc.Namespace, llmSvc.Spec.Model.Name)
+	return r.finishUpdate(ctx, llmSvc, llmSvcBeforePatch, isOptimized, metrics)
+}
 
+// UpdateFromKServe projects the upstream InferenceService Ready condition and URL.
+func (r *Reconciler) UpdateFromKServe(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, llmSvcBeforePatch *servingv1alpha2.LLMInferenceService, isOptimized bool, metrics *servingv1alpha2.AdaptiveMetrics) error {
+	isvc := kserveintegration.NewInferenceService()
+	err := r.Client.Get(ctx, types.NamespacedName{Name: llmSvc.Name, Namespace: llmSvc.Namespace}, isvc)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("get KServe InferenceService for status: %w", err)
+		}
+		llmSvc.Status.Replicas = 0
+		llmSvc.Status.ModelReady = false
+	} else {
+		ready := kserveReady(isvc)
+		llmSvc.Status.ModelReady = ready
+		if ready {
+			llmSvc.Status.Replicas = 1
+		} else {
+			llmSvc.Status.Replicas = 0
+		}
+		if url, found, _ := unstructured.NestedString(isvc.Object, "status", "url"); found {
+			llmSvc.Status.URL = url
+		}
+	}
+	if llmSvc.Status.URL == "" {
+		llmSvc.Status.URL = fmt.Sprintf("http://%s.%s.svc.cluster.local",
+			kserveintegration.PredictorServiceName(llmSvc), llmSvc.Namespace)
+	}
+	return r.finishUpdate(ctx, llmSvc, llmSvcBeforePatch, isOptimized, metrics)
+}
+
+func (r *Reconciler) finishUpdate(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, llmSvcBeforePatch *servingv1alpha2.LLMInferenceService, isOptimized bool, metrics *servingv1alpha2.AdaptiveMetrics) error {
 	llmSvc.Status.ObservedGeneration = llmSvc.Generation
 
 	// 2. DeploymentReady Condition (Experimental)
@@ -83,11 +119,7 @@ func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInfe
 	// Update or add condition, preserving LastTransitionTime if status hasn't changed.
 	r.setCondition(&llmSvc.Status.Conditions, readyCondition)
 
-	// 3. Set URL
-	llmSvc.Status.URL = fmt.Sprintf("http://%s.%s.svc.cluster.local/v2/models/%s",
-		llmSvc.Name, llmSvc.Namespace, llmSvc.Spec.Model.Name)
-
-	// 4. Set optimization status
+	// 3. Set optimization status
 	llmSvc.Status.Optimized = isOptimized
 	optCondition := metav1.Condition{
 		Type:               servingv1alpha2.ConditionModelOptimized,
@@ -122,6 +154,20 @@ func (r *Reconciler) Update(ctx context.Context, llmSvc *servingv1alpha2.LLMInfe
 		}
 	}
 	return nil
+}
+
+func kserveReady(isvc *unstructured.Unstructured) bool {
+	conditions, found, _ := unstructured.NestedSlice(isvc.Object, "status", "conditions")
+	if !found {
+		return false
+	}
+	for _, raw := range conditions {
+		condition, ok := raw.(map[string]interface{})
+		if ok && condition["type"] == "Ready" && condition["status"] == "True" {
+			return true
+		}
+	}
+	return false
 }
 
 // SetCondition is a generic helper for setting an ad-hoc condition (e.g. GPUCapacity).

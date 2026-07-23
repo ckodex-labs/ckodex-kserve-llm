@@ -44,6 +44,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/gateway"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/governance"
+	kserveintegration "github.com/ckodex-labs/kserve-llm-operator/internal/kserve"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/security"
 )
@@ -64,7 +65,6 @@ type LLMInferenceServiceReconciler struct {
 	SPIRE                             *security.SPIREReconciler
 	SPIRERegistration                 *security.SPIRERegistrationReconciler // nil when EnableSecurity=false
 	Ebpf                              *security.EbpfReconciler
-	LWS                               *Reconciler // nil when LWS CRD not available
 	ToolSurface                       *security.ToolSurfaceReconciler
 	Audit                             *observability.AuditLogger
 	Inst                              *observability.Instrumentation // nil → no forbidden-tuple metrics emitted
@@ -78,12 +78,13 @@ type LLMInferenceServiceReconciler struct {
 	OTEL_Endpoint                     string // Contract: OTEL_EXPORTER_OTLP_ENDPOINT
 
 	// AirGap configuration
-	AirGappedMode      bool
-	LocalRegistry      string
-	LocalCosignKeyPath string
-	RuntimeImage       string
-	HFInitializerImage string
-	HFMirrorURL        string
+	AirGappedMode          bool
+	LocalRegistry          string
+	LocalCosignKeyPath     string
+	RuntimeImage           string
+	HFInitializerImage     string
+	HFMirrorURL            string
+	KServeMultiNodeRuntime string
 
 	// Modular sub-reconcilers
 	DeploymentBuilder    *deployment.Builder
@@ -96,6 +97,8 @@ type LLMInferenceServiceReconciler struct {
 	// HFCSIReconciler provisions PV+PVC for hf-mount:// URIs using the official hf-csi-driver.
 	// Must run before reconcileDeployment so the PVC exists when the pod is scheduled.
 	HFCSI *HFCSIReconciler
+	// KServeMultiNode delegates explicit multi-node workloads to KServe v0.19 workerSpec.
+	KServeMultiNode *kserveintegration.Reconciler
 
 	// M3 Vision: Real-time Metrics Query
 	Metrics observability.MetricsQuerier
@@ -115,6 +118,7 @@ type LLMInferenceServiceReconciler struct {
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;httproutes;grpcroutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=serving.kserve.io,resources=inferenceservices,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile implements the main reconcile loop.
 func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
@@ -195,8 +199,10 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		applyAIPackConfig(&llmSvc, earlyPacks)
 	}
 
-	// 3b. Reconcile Deployment
-	// Fetch associated LoRA adapters to inject volumes/args
+	// 3b. Select the single-node Deployment or KServe-native multi-node path.
+	multiNode := kserveintegration.RequiresMultiNode(&llmSvc)
+
+	// Fetch associated LoRA adapters to inject volumes/args.
 	var loraList servingv1alpha2.LLMLoraAdapterList
 	activeLoras := []servingv1alpha2.LLMLoraAdapter{}
 	if err := r.List(ctx, &loraList, client.InNamespace(llmSvc.Namespace)); err == nil {
@@ -205,23 +211,29 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 				activeLoras = append(activeLoras, lora)
 			}
 		}
+	}
+
+	if multiNode {
+		if r.KServeMultiNode == nil {
+			return ctrl.Result{}, fmt.Errorf("KServe multi-node reconciler is not configured")
+		}
+		if len(activeLoras) > 0 {
+			return ctrl.Result{}, fmt.Errorf("KServe v0.19 multi-node does not support CKodex LoRA adapters")
+		}
+		if err := r.KServeMultiNode.Reconcile(ctx, &llmSvc); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile KServe multi-node InferenceService: %w", err)
+		}
+	} else {
 		if err := r.reconcileDeployment(ctx, &llmSvc, activeLoras); err != nil {
 			return ctrl.Result{}, fmt.Errorf("reconcile deployment: %w", err)
 		}
-	} else {
-		if err := r.reconcileDeployment(ctx, &llmSvc, nil); err != nil {
-			return ctrl.Result{}, fmt.Errorf("reconcile deployment: %w", err)
+		// KServe owns the multi-node head/worker lifecycle and predictor Service.
+		if err := r.PDBReconciler.Reconcile(ctx, &llmSvc); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile pdb: %w", err)
 		}
-	}
-
-	// 3b. Reconcile PodDisruptionBudget
-	if err := r.PDBReconciler.Reconcile(ctx, &llmSvc); err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconcile pdb: %w", err)
-	}
-
-	// 4. Reconcile Service
-	if err := r.ServiceReconciler.Reconcile(ctx, &llmSvc); err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconcile service: %w", err)
+		if err := r.ServiceReconciler.Reconcile(ctx, &llmSvc); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile service: %w", err)
+		}
 	}
 
 	// 5. Reconcile Gateway API resources (HTTPRoute + GRPCRoute)
@@ -237,7 +249,7 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	}
 
 	// 6. Reconcile Autoscaler (HPA/KEDA/WVA)
-	if r.Autoscaler != nil {
+	if r.Autoscaler != nil && !multiNode {
 		if err := r.Autoscaler.Reconcile(ctx, &llmSvc); err != nil {
 			return ctrl.Result{}, fmt.Errorf("reconcile autoscaler: %w", err)
 		}
@@ -319,13 +331,6 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	// 12. Reconcile LeaderWorkerSet for multi-node GPU topology (when spec.parallelism is set)
-	if r.LWS != nil {
-		if err := r.LWS.Reconcile(ctx, &llmSvc); err != nil {
-			return ctrl.Result{}, fmt.Errorf("reconcile lws: %w", err)
-		}
-	}
-
 	// 13. Update status
 	isOptimized := GetWellKnownConfig(llmSvc.Spec.Model.URI) != nil
 	hwType := r.HardwareCache.Get(ctx, r.Client, r.APIReader)
@@ -337,8 +342,14 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		metrics = r.Metrics.GetAdaptiveMetrics(ctx, llmSvc.Namespace, llmSvc.Name)
 	}
 
-	if err := r.StatusReconciler.Update(ctx, &llmSvc, llmSvcBeforePatch, isOptimized, metrics); err != nil {
-		return ctrl.Result{}, fmt.Errorf("update status: %w", err)
+	var statusErr error
+	if multiNode {
+		statusErr = r.StatusReconciler.UpdateFromKServe(ctx, &llmSvc, llmSvcBeforePatch, isOptimized, metrics)
+	} else {
+		statusErr = r.StatusReconciler.Update(ctx, &llmSvc, llmSvcBeforePatch, isOptimized, metrics)
+	}
+	if statusErr != nil {
+		return ctrl.Result{}, fmt.Errorf("update status: %w", statusErr)
 	}
 
 	// 14. Audit event & Receipt (OIS v0.1)
@@ -372,6 +383,9 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		"ready", llmSvc.Status.ModelReady,
 	)
 
+	if multiNode && !llmSvc.Status.ModelReady {
+		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -481,6 +495,11 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	r.HFCSI = &HFCSIReconciler{
 		Client: mgr.GetClient(),
 		Scheme: r.Scheme,
+	}
+	r.KServeMultiNode = &kserveintegration.Reconciler{
+		Client:      mgr.GetClient(),
+		Scheme:      r.Scheme,
+		RuntimeName: r.KServeMultiNodeRuntime,
 	}
 	r.Recorder = mgr.GetEventRecorderFor("ckodex-llm-operator")
 

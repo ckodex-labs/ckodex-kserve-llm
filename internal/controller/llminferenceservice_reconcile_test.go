@@ -9,10 +9,12 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -33,6 +35,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/evidence"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
+	kserveintegration "github.com/ckodex-labs/kserve-llm-operator/internal/kserve"
 )
 
 func buildLLMScheme(t *testing.T) *runtime.Scheme {
@@ -40,11 +43,61 @@ func buildLLMScheme(t *testing.T) *runtime.Scheme {
 	s := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(s))
 	require.NoError(t, appsv1.AddToScheme(s))
+	require.NoError(t, autoscalingv2.AddToScheme(s))
 	require.NoError(t, policyv1.AddToScheme(s))
 	require.NoError(t, networkingv1.AddToScheme(s))
 	require.NoError(t, servingv1alpha2.AddToScheme(s))
 	require.NoError(t, gwapiv1.Install(s))
 	return s
+}
+
+func TestLLMInferenceService_ReconcileMultiNodeDelegatesToKServe(t *testing.T) {
+	s := buildLLMScheme(t)
+	llmSvc := makeLLMInferenceService("distributed", "default")
+	llmSvc.Spec.Model.URI = "pvc://model-weights"
+	llmSvc.Spec.Worker = &servingv1alpha2.WorkerSpec{
+		Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "worker"}},
+			},
+		},
+	}
+	llmSvc.Spec.Parallelism = &servingv1alpha2.ParallelismSpec{
+		Tensor:   ptr32(2),
+		Pipeline: ptr32(2),
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(llmSvc).
+		WithStatusSubresource(llmSvc).
+		Build()
+	r := setupReconciler(cl, s)
+	r.KServeMultiNode = &kserveintegration.Reconciler{
+		Client: cl,
+		Scheme: s,
+	}
+
+	result, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: k8stypes.NamespacedName{Name: llmSvc.Name, Namespace: llmSvc.Namespace},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 15*time.Second, result.RequeueAfter)
+
+	isvc := kserveintegration.NewInferenceService()
+	require.NoError(t, cl.Get(context.Background(), k8stypes.NamespacedName{
+		Name: llmSvc.Name, Namespace: llmSvc.Namespace,
+	}, isvc))
+
+	require.Error(t, cl.Get(context.Background(), k8stypes.NamespacedName{
+		Name: llmSvc.Name, Namespace: llmSvc.Namespace,
+	}, &appsv1.Deployment{}))
+	require.Error(t, cl.Get(context.Background(), k8stypes.NamespacedName{
+		Name: llmSvc.Name, Namespace: llmSvc.Namespace,
+	}, &corev1.Service{}))
+	require.Error(t, cl.Get(context.Background(), k8stypes.NamespacedName{
+		Name: llmSvc.Name, Namespace: llmSvc.Namespace,
+	}, &policyv1.PodDisruptionBudget{}))
 }
 
 func makeLLMInferenceService(name, namespace string) *servingv1alpha2.LLMInferenceService {

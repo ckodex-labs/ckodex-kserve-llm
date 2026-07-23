@@ -12,6 +12,7 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	kserveintegration "github.com/ckodex-labs/kserve-llm-operator/internal/kserve"
 )
 
 // BuildHTTPRoute generates an HTTPRoute with V2 protocol, OpenAI, and
@@ -22,6 +23,9 @@ func BuildHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters []serv
 	pathPrefix := gwapiv1.PathMatchPathPrefix
 	pathExact := gwapiv1.PathMatchExact
 	svcName := gwapiv1.ObjectName(llmSvc.Name)
+	if kserveintegration.RequiresMultiNode(llmSvc) {
+		svcName = gwapiv1.ObjectName(kserveintegration.PredictorServiceName(llmSvc))
+	}
 	svcPort := gwapiv1.PortNumber(80)
 
 	// Resilience preparation (M3 Phase 4)

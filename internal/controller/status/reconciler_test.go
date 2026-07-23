@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	kserveintegration "github.com/ckodex-labs/kserve-llm-operator/internal/kserve"
 )
 
 func TestReconciler_Update_Gating(t *testing.T) {
@@ -118,4 +119,41 @@ func TestReconciler_Update_Gating(t *testing.T) {
 		assert.Equal(t, "150ms", testLLM.Status.AdaptiveMetrics.P99Latency)
 		assert.Equal(t, "Light", testLLM.Status.AdaptiveMetrics.LoadLevel)
 	})
+}
+
+func TestReconciler_UpdateFromKServe_ProjectsReadyStatusAndURL(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = servingv1alpha2.AddToScheme(scheme)
+	llm := &servingv1alpha2.LLMInferenceService{
+		TypeMeta: metav1.TypeMeta{APIVersion: servingv1alpha2.GroupVersion, Kind: "LLMInferenceService"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "distributed", Namespace: "models",
+		},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{Name: "gemma", URI: "pvc://weights"},
+		},
+	}
+	isvc := kserveintegration.NewInferenceService()
+	isvc.SetName(llm.Name)
+	isvc.SetNamespace(llm.Namespace)
+	isvc.Object["status"] = map[string]interface{}{
+		"url": "http://distributed.models.example",
+		"conditions": []interface{}{
+			map[string]interface{}{"type": "Ready", "status": "True"},
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&servingv1alpha2.LLMInferenceService{}).
+		WithObjects(llm, isvc).
+		Build()
+
+	current := llm.DeepCopy()
+	err := (&Reconciler{Client: fakeClient}).UpdateFromKServe(
+		context.Background(), current, llm.DeepCopy(), false, nil,
+	)
+	assert.NoError(t, err)
+	assert.True(t, current.Status.ModelReady)
+	assert.Equal(t, int32(1), current.Status.Replicas)
+	assert.Equal(t, "http://distributed.models.example", current.Status.URL)
 }

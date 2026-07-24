@@ -15,8 +15,11 @@ autoscaling.
 This repository predates that upstream convergence and currently owns a CKodex
 API plus selected integrations. In particular, the presence of the llm-d EPP
 image does not mean the complete llm-d 0.8.1 architecture is installed.
-vLLM's in-process prefix cache is also not LMCache; this repository does not
-currently deploy or configure an LMCache service or connector.
+vLLM's in-process prefix cache is also not LMCache. The operator now exposes a
+version-neutral KV-transfer contract for NIXL, LMCache, and Mooncake and wires
+it into vLLM's `--kv-transfer-config` for disaggregated prefill/decode. It does
+not install or own the selected backend service; backend health, cache hits,
+tail latency, and failover remain live-cluster acceptance gates.
 
 ## Decision
 
@@ -35,6 +38,9 @@ currently deploy or configure an LMCache service or connector.
   health probes.
 - Runtime images and model paths remain explicit: the configured vLLM image is
   honored, and the mounted artifact is passed as `--model /mnt/models`.
+- KV-transfer configuration is explicit and backend-neutral: connector-specific
+  settings stay in `extraConfig`; the operator does not claim llm-d/LMCache
+  conformance until live evidence covers the enabled data path.
 
 ## Consequences
 

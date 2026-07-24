@@ -91,7 +91,9 @@ func (p *PrometheusMetricsQuerier) query(ctx context.Context, client *http.Clien
 	if err != nil {
 		return 0, false
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return 0, false
 	}

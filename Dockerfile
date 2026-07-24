@@ -20,13 +20,15 @@ COPY api/ api/
 COPY internal/ internal/
 RUN mkdir -p /workspace/.cache/go-build /workspace/.tmp
 
-# Build
+# Build serially. The hosted arm64 builder has intermittently crashed in the
+# native Go compiler while cross-compiling this image; limiting package
+# parallelism keeps the build within the runner's memory/CPU envelope.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o manager cmd/manager/main.go
+    go build -p=1 -trimpath -ldflags="-s -w" -o manager cmd/manager/main.go
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o storage-initializer cmd/storage-initializer/main.go
+    go build -p=1 -trimpath -ldflags="-s -w" -o storage-initializer cmd/storage-initializer/main.go
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o huggingface-initializer cmd/huggingface-initializer/main.go
+    go build -p=1 -trimpath -ldflags="-s -w" -o huggingface-initializer cmd/huggingface-initializer/main.go
 
 FROM gcr.io/projectsigstore/cosign:v3.1.1 AS cosign
 

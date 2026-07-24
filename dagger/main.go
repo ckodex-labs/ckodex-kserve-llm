@@ -451,7 +451,11 @@ func trivyBase() *dagger.Container {
 }
 
 func scanRootfs(rootfs *dagger.Directory) *dagger.Container {
-	return trivyBase().
+	return scanRootfsForArch(rootfs, "amd64")
+}
+
+func scanRootfsForArch(rootfs *dagger.Directory, arch string) *dagger.Container {
+	return trivyBaseForArch(arch).
 		WithMountedDirectory("/rootfs", rootfs).
 		WithExec([]string{
 			"trivy", "rootfs",
@@ -462,6 +466,16 @@ func scanRootfs(rootfs *dagger.Directory) *dagger.Container {
 			"--format", "table",
 			"/rootfs",
 		})
+}
+
+func trivyBaseForArch(arch string) *dagger.Container {
+	if arch != "amd64" && arch != "arm64" {
+		arch = "amd64"
+	}
+	return dag.Container(dagger.ContainerOpts{Platform: dagger.Platform("linux/" + arch)}).
+		From(fmt.Sprintf("aquasec/trivy:%s", trivyVersion)).
+		WithMountedCache("/root/.cache/trivy", dag.CacheVolume("trivy-db-"+arch)).
+		WithEnvVariable("TRIVY_CACHE_DIR", "/root/.cache/trivy")
 }
 
 func filteredSource(source *dagger.Directory) *dagger.Directory {

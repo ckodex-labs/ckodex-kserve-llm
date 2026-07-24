@@ -66,17 +66,16 @@ func (m *CkodexOperator) ScanHuggingFaceInitializerArch(
 	if arch != "amd64" && arch != "arm64" {
 		return "", fmt.Errorf("unsupported Hugging Face initializer architecture %q", arch)
 	}
-	g, groupCtx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return smokeTestHuggingFaceInitializer(groupCtx, source, arch)
-	})
-	var output string
-	g.Go(func() error {
-		var err error
-		output, err = scanHuggingFaceInitializerArch(groupCtx, source, arch)
-		return err
-	})
-	if err := g.Wait(); err != nil {
+	// Build once and run the checks sequentially. Each helper previously
+	// created an independent Docker build, which made native arm64 CI compile
+	// two copies concurrently and could exhaust the runner or crash the Go
+	// compiler.
+	container := buildHuggingFaceInitializerVariant(source, arch)
+	if err := smokeTestHuggingFaceInitializerContainer(ctx, container); err != nil {
+		return "", err
+	}
+	output, err := scanHuggingFaceInitializerContainer(ctx, container, arch)
+	if err != nil {
 		return "", err
 	}
 	return output, nil
@@ -86,7 +85,11 @@ func scanHuggingFaceInitializerArch(ctx context.Context, source *dagger.Director
 	if arch != "amd64" && arch != "arm64" {
 		return "", fmt.Errorf("unsupported Hugging Face initializer architecture %q", arch)
 	}
-	output, err := scanRootfs(buildHuggingFaceInitializerVariant(source, arch).Rootfs()).Stdout(ctx)
+	return scanHuggingFaceInitializerContainer(ctx, buildHuggingFaceInitializerVariant(source, arch), arch)
+}
+
+func scanHuggingFaceInitializerContainer(ctx context.Context, container *dagger.Container, arch string) (string, error) {
+	output, err := scanRootfsForArch(container.Rootfs(), arch).Stdout(ctx)
 	if err != nil {
 		return "", fmt.Errorf("scan %s Hugging Face initializer: %w", arch, err)
 	}
@@ -94,6 +97,10 @@ func scanHuggingFaceInitializerArch(ctx context.Context, source *dagger.Director
 }
 
 func smokeTestHuggingFaceInitializer(ctx context.Context, source *dagger.Directory, arch string) error {
+	return smokeTestHuggingFaceInitializerContainer(ctx, buildHuggingFaceInitializerVariant(source, arch))
+}
+
+func smokeTestHuggingFaceInitializerContainer(ctx context.Context, container *dagger.Container) error {
 	const destination = "/tmp/model"
 	const assertPayloadFilesAreNotLinks = `
 from pathlib import Path
@@ -107,7 +114,7 @@ links = [
 if links:
     raise SystemExit(f"downloaded model payload contains symlinks: {links}")
 `
-	container := buildHuggingFaceInitializerVariant(source, arch).
+	container = container.
 		WithExec([]string{"python", "-c", "import hf_xet"}).
 		WithMountedDirectory(destination, dag.Directory(), dagger.ContainerWithMountedDirectoryOpts{
 			Owner: "65532:65532",

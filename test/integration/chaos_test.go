@@ -22,7 +22,6 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/chaos"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller"
-	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 func TestResilience_PodKill_SelfHealing(t *testing.T) {
@@ -195,30 +194,29 @@ func TestResilience_LocalModelCache_NodeEviction(t *testing.T) {
 	pvcName := controller.PVCNameForNode(modelHash, nodeName)
 	var pvc corev1.PersistentVolumeClaim
 	require.NoError(t, suite.client.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: "default"}, &pvc))
+	oldPVCUID := pvc.UID
+	oldJobUID := job.UID
 
 	background := metav1.DeletePropagationBackground
 	require.NoError(t, suite.client.Delete(ctx, &pvc, &client.DeleteOptions{PropagationPolicy: &background}))
 	require.NoError(t, suite.client.Delete(ctx, &job, &client.DeleteOptions{PropagationPolicy: &background}))
 
-	// Enforce deletion in envtest by waiting until they are gone
-	require.Eventually(t, func() bool {
-		var j batchv1.Job
-		var p corev1.PersistentVolumeClaim
-		jobGone := errors.IsNotFound(suite.client.Get(ctx, client.ObjectKey{Name: jobName, Namespace: "default"}, &j))
-		pvcGone := errors.IsNotFound(suite.client.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: "default"}, &p))
-		return jobGone && pvcGone
-	}, 20*time.Second, 1*time.Second, "PVC and Job should be deleted from API server")
-
-	// 4. Verify the Operator re-creates both resources to restore the cache
+	// 4. Verify the operator re-creates both resources to restore the cache.
+	// The reconciler intentionally repairs the cache as soon as the PVC is
+	// deleted, so there is no reliable absence window to observe in envtest.
 	require.Eventually(t, func() bool {
 		var newJob batchv1.Job
-		err := suite.client.Get(ctx, client.ObjectKey{Name: jobName, Namespace: "default"}, &newJob)
-		if err != nil {
+		if err := suite.client.Get(ctx, client.ObjectKey{Name: jobName, Namespace: "default"}, &newJob); err != nil {
 			return false
 		}
-		// In envtest, a new Job will have a new UID immediately after the old one is gone.
-		// We use UID change to confirm re-creation.
-		return newJob.UID != job.UID && newJob.DeletionTimestamp == nil
+		var newPVC corev1.PersistentVolumeClaim
+		if err := suite.client.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: "default"}, &newPVC); err != nil {
+			return false
+		}
+		// A new UID proves the controller replaced the evicted objects rather
+		// than merely observing the old objects during deletion.
+		return newJob.UID != oldJobUID && newJob.DeletionTimestamp == nil &&
+			newPVC.UID != oldPVCUID && newPVC.DeletionTimestamp == nil
 	}, eventuallyTimeout, 500*time.Millisecond, "New Job should be re-created after PVC and Job deletion")
 }
 

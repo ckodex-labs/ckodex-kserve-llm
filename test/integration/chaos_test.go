@@ -196,6 +196,8 @@ func TestResilience_LocalModelCache_NodeEviction(t *testing.T) {
 	require.NoError(t, suite.client.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: "default"}, &pvc))
 	oldPVCUID := pvc.UID
 	oldJobUID := job.UID
+	oldPVCCreation := pvc.CreationTimestamp
+	oldJobCreation := job.CreationTimestamp
 
 	background := metav1.DeletePropagationBackground
 	require.NoError(t, suite.client.Delete(ctx, &pvc, &client.DeleteOptions{PropagationPolicy: &background}))
@@ -213,10 +215,12 @@ func TestResilience_LocalModelCache_NodeEviction(t *testing.T) {
 		if err := suite.client.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: "default"}, &newPVC); err != nil {
 			return false
 		}
-		// A new UID proves the controller replaced the evicted objects rather
-		// than merely observing the old objects during deletion.
-		return newJob.UID != oldJobUID && newJob.DeletionTimestamp == nil &&
-			newPVC.UID != oldPVCUID && newPVC.DeletionTimestamp == nil
+		// The API server normally assigns a new UID. Some envtest versions leave
+		// UIDs empty on replacement, so creation time is the portable fallback.
+		jobReplaced := newJob.UID != oldJobUID || newJob.CreationTimestamp.After(oldJobCreation.Time)
+		pvcReplaced := newPVC.UID != oldPVCUID || newPVC.CreationTimestamp.After(oldPVCCreation.Time)
+		return jobReplaced && newJob.DeletionTimestamp == nil &&
+			pvcReplaced && newPVC.DeletionTimestamp == nil
 	}, eventuallyTimeout, 500*time.Millisecond, "New Job should be re-created after PVC and Job deletion")
 }
 

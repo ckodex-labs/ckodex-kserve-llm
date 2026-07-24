@@ -200,6 +200,13 @@ func TestResilience_LocalModelCache_NodeEviction(t *testing.T) {
 	oldJobCreation := job.CreationTimestamp
 
 	background := metav1.DeletePropagationBackground
+	// envtest does not run the PVC protection controller. Clear any injected
+	// protection finalizer so the eviction request reaches the API server's
+	// deleted state and the reconciler can create the replacement PVC.
+	if len(pvc.Finalizers) > 0 {
+		pvc.Finalizers = nil
+		require.NoError(t, suite.client.Update(ctx, &pvc))
+	}
 	require.NoError(t, suite.client.Delete(ctx, &pvc, &client.DeleteOptions{PropagationPolicy: &background}))
 	require.NoError(t, suite.client.Delete(ctx, &job, &client.DeleteOptions{PropagationPolicy: &background}))
 

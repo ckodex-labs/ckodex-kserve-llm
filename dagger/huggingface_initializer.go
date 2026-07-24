@@ -89,7 +89,7 @@ func scanHuggingFaceInitializerArch(ctx context.Context, source *dagger.Director
 }
 
 func scanHuggingFaceInitializerContainer(ctx context.Context, container *dagger.Container, arch string) (string, error) {
-	output, err := scanRootfs(container.Rootfs()).Stdout(ctx)
+	output, err := scanRootfsForArch(container.Rootfs(), arch).Stdout(ctx)
 	if err != nil {
 		return "", fmt.Errorf("scan %s Hugging Face initializer: %w", arch, err)
 	}

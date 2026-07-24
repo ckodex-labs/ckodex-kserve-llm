@@ -218,7 +218,25 @@ func TestBuilder_BuildWithRole_ConfiguresLMCacheTransfer(t *testing.T) {
 	assert.Contains(t, joined, "LMCacheConnectorV1")
 	assert.Contains(t, joined, "kv_consumer")
 	assert.Equal(t, "/etc/lmcache/config.yaml", cEnv(dep, "LMCACHE_CONFIG_FILE"))
+	assert.Equal(t, "True", cEnv(dep, "LMCACHE_USE_EXPERIMENTAL"))
 	assert.Contains(t, joined, `"chunk_size":256`)
+}
+
+func TestBuilder_BuildWithRole_LMCachePreservesExplicitExperimentalFlag(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.25.1"}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "chat", Namespace: "default"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{URI: "pvc://weights"},
+			KVCache: &servingv1alpha2.KVCacheSpec{Transfer: &servingv1alpha2.KVTransferSpec{
+				Connector: "lmcache",
+				Env:       []corev1.EnvVar{{Name: "LMCACHE_USE_EXPERIMENTAL", Value: "False"}},
+			}},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "vllm"}}}},
+		},
+	}
+	dep := builder.BuildWithRole(context.Background(), llmSvc, 1, HardwareNVIDIA, nil, "kv_both")
+	assert.Equal(t, "False", cEnv(dep, "LMCACHE_USE_EXPERIMENTAL"))
 }
 
 func cEnv(dep *appsv1.Deployment, name string) string {

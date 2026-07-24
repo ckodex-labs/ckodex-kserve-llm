@@ -217,6 +217,23 @@ func (b *Builder) applyKVTransfer(llmSvc *servingv1alpha2.LLMInferenceService, p
 			c.Env = append(c.Env, *env.DeepCopy())
 		}
 	}
+	if strings.EqualFold(t.Connector, "lmcache") {
+		// KServe's LMCache integration requires the experimental vLLM adapter
+		// flag on the supported runtime line. Keep it as a default, while
+		// preserving an explicit pod-template or transfer.env override.
+		if !hasEnv(c.Env, "LMCACHE_USE_EXPERIMENTAL") {
+			c.Env = append(c.Env, corev1.EnvVar{Name: "LMCACHE_USE_EXPERIMENTAL", Value: "True"})
+		}
+	}
+}
+
+func hasEnv(env []corev1.EnvVar, name string) bool {
+	for _, item := range env {
+		if item.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // parseKVExtraConfig keeps the portable CRD string map while emitting the

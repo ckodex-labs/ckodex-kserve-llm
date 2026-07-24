@@ -91,6 +91,12 @@ remain in `extraConfig` so the CRD does not hard-code a backend version. Live
 validation must still prove cache hits, transfer tail latency, and failover on
 the target cluster before this feature is treated as production-ready.
 
+For `lmcache`, the operator adds `LMCACHE_USE_EXPERIMENTAL=True` unless the
+pod template or `transfer.env` already defines that variable. This follows
+KServe's documented Hugging Face/vLLM integration; the remote backend remains
+an operator-managed or externally managed dependency and must be configured
+through `LMCACHE_CONFIG_FILE` or the connector environment.
+
 `env` is copied to both prefill and decode containers when the pod template does
 not already define the same variable. Use `valueFrom.secretKeyRef` for backend
 credentials; do not place passwords in `extraConfig` or literal environment

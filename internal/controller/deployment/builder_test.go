@@ -206,6 +206,7 @@ func TestBuilder_BuildWithRole_ConfiguresLMCacheTransfer(t *testing.T) {
 			Model: servingv1alpha2.ModelSpec{URI: "pvc://weights"},
 			KVCache: &servingv1alpha2.KVCacheSpec{Transfer: &servingv1alpha2.KVTransferSpec{
 				Connector: "lmcache", ExtraConfig: map[string]string{"chunk_size": "256"},
+				Env: []corev1.EnvVar{{Name: "LMCACHE_CONFIG_FILE", Value: "/etc/lmcache/config.yaml"}},
 			}},
 			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "vllm"}}}},
 		},
@@ -216,6 +217,17 @@ func TestBuilder_BuildWithRole_ConfiguresLMCacheTransfer(t *testing.T) {
 	joined := strings.Join(args, " ")
 	assert.Contains(t, joined, "LMCacheConnectorV1")
 	assert.Contains(t, joined, "kv_consumer")
+	assert.Equal(t, "/etc/lmcache/config.yaml", cEnv(dep, "LMCACHE_CONFIG_FILE"))
+	assert.Contains(t, joined, `"chunk_size":256`)
+}
+
+func cEnv(dep *appsv1.Deployment, name string) string {
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == name {
+			return env.Value
+		}
+	}
+	return ""
 }
 
 func TestBuilder_BuildPrefillCreatesProducerDeployment(t *testing.T) {

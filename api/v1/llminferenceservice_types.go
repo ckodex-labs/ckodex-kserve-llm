@@ -134,6 +134,9 @@ type KVTransferSpec struct {
 	Connector   string            `json:"connector"`
 	Role        string            `json:"role,omitempty"`
 	ExtraConfig map[string]string `json:"extraConfig,omitempty"`
+	// Env adds connector-specific runtime environment variables to every
+	// producer/consumer pod. Existing template values take precedence.
+	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 // ModelSpec defines the model to serve.

@@ -401,6 +401,13 @@ type KVTransferSpec struct {
 	// versions and clusters.
 	// +optional
 	ExtraConfig map[string]string `json:"extraConfig,omitempty"`
+
+	// Env adds connector-specific runtime environment variables to every
+	// producer/consumer pod. This is primarily used by LMCache for
+	// LMCACHE_CONFIG_FILE or backend credentials supplied through SecretKeyRef;
+	// values already present in the pod template take precedence.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 // QuantizationSpec configures weight quantization for reduced memory footprint.

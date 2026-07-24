@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -190,10 +191,7 @@ func (b *Builder) applyKVTransfer(llmSvc *servingv1alpha2.LLMInferenceService, p
 	if connector == "" {
 		return
 	}
-	extra := t.ExtraConfig
-	if extra == nil {
-		extra = map[string]string{}
-	}
+	extra := parseKVExtraConfig(t.ExtraConfig)
 	cfg, err := json.Marshal(map[string]interface{}{
 		"kv_connector": connector, "kv_role": role, "kv_connector_extra_config": extra,
 	})
@@ -204,6 +202,52 @@ func (b *Builder) applyKVTransfer(llmSvc *servingv1alpha2.LLMInferenceService, p
 	if !hasArg(c.Args, "--kv-transfer-config") {
 		c.Args = append(c.Args, "--kv-transfer-config", string(cfg))
 	}
+	// Connector configuration such as LMCache's LMCACHE_CONFIG_FILE belongs
+	// in the runtime environment, not in a command-line secret. Preserve an
+	// explicit pod-template value and only add missing names.
+	for _, env := range t.Env {
+		found := false
+		for _, existing := range c.Env {
+			if existing.Name == env.Name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			c.Env = append(c.Env, *env.DeepCopy())
+		}
+	}
+}
+
+// parseKVExtraConfig keeps the portable CRD string map while emitting the
+// scalar types expected by vLLM connector implementations. JSON literals are
+// accepted for structured values; unparseable values remain strings.
+func parseKVExtraConfig(src map[string]string) map[string]interface{} {
+	dst := make(map[string]interface{}, len(src))
+	for key, value := range src {
+		if parsed, err := strconv.ParseBool(value); err == nil {
+			dst[key] = parsed
+			continue
+		}
+		if parsed, err := strconv.ParseInt(value, 10, 64); err == nil {
+			dst[key] = parsed
+			continue
+		}
+		if parsed, err := strconv.ParseFloat(value, 64); err == nil {
+			dst[key] = parsed
+			continue
+		}
+		var structured interface{}
+		if json.Unmarshal([]byte(value), &structured) == nil {
+			switch structured.(type) {
+			case map[string]interface{}, []interface{}:
+				dst[key] = structured
+				continue
+			}
+		}
+		dst[key] = value
+	}
+	return dst
 }
 
 func deploymentStrategyForReplicas(replicas int32) appsv1.DeploymentStrategy {

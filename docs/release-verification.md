@@ -25,7 +25,7 @@ The summary artifact is written to `bin/release-readiness.json`.
 
 ## Hosted Release Contract
 
-On a real tag such as `v0.18.0-beta.7`, GitHub Actions is expected to:
+On a real tag such as `v0.18.0-beta.8`, GitHub Actions is expected to:
 
 1. build and push container images through the Dagger release pipeline,
 2. build GitHub release binaries and checksums through GoReleaser,
@@ -40,9 +40,9 @@ Local green checks are not enough to claim public release readiness unless that 
 
 ## Current Published Release
 
-The current public release is `v0.18.0-beta.7`.
+The current public release is `v0.18.0-beta.8`.
 
-- GitHub release: <https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.7>
+- GitHub release: <https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.8>
 - Source commit: `634a79b7fb91f2fbf95cb5fe17caf9061b0998aa`
 - Hosted release run: <https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/28995564785>
 - Published assets include manager archives, storage-initializer archives, `checksums.txt`, `checksums.txt.sigstore.json`, binary provenance, image provenance, container image signature, SBOM output, and the Helm chart package.

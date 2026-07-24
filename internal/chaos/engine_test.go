@@ -56,41 +56,41 @@ func TestNewEngine_NotNil(t *testing.T) {
 	require.NotNil(t, e)
 }
 
-// ---- selectRandom ----------------------------------------------------------
+// ---- selectTargets ---------------------------------------------------------
 
-func TestSelectRandom_CountGTLen_ReturnsAll(t *testing.T) {
+func TestSelectTargets_AllPodsSelected_ReturnsAll(t *testing.T) {
 	pods := []corev1.Pod{
 		{ObjectMeta: metav1.ObjectMeta{Name: "p1"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "p2"}},
 	}
-	result := selectRandom(pods, 10)
+	result := selectTargets(pods, 100, 0)
 	assert.Len(t, result, 2)
 }
 
-func TestSelectRandom_CountEqualLen_ReturnsAll(t *testing.T) {
+func TestSelectTargets_AllPodsSelected_ReturnsAllInOrder(t *testing.T) {
 	pods := []corev1.Pod{
 		{ObjectMeta: metav1.ObjectMeta{Name: "p1"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "p2"}},
 	}
-	result := selectRandom(pods, 2)
+	result := selectTargets(pods, 100, 0)
 	assert.Len(t, result, 2)
 }
 
-func TestSelectRandom_SubsetReturned(t *testing.T) {
+func TestSelectTargets_SubsetReturned(t *testing.T) {
 	pods := make([]corev1.Pod, 5)
 	for i := range pods {
 		pods[i] = corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p"}}
 	}
-	result := selectRandom(pods, 2)
+	result := selectTargets(pods, 40, 7)
 	assert.Len(t, result, 2)
 }
 
-func TestSelectRandom_Zero_Empty(t *testing.T) {
+func TestSelectTargets_MinimumPercentage_SelectsOne(t *testing.T) {
 	pods := []corev1.Pod{
 		{ObjectMeta: metav1.ObjectMeta{Name: "p1"}},
 	}
-	result := selectRandom(pods, 0)
-	assert.Empty(t, result)
+	result := selectTargets(pods, 1, 0)
+	assert.Len(t, result, 1)
 }
 
 // ---- listTargetPods --------------------------------------------------------
@@ -140,31 +140,26 @@ func TestRunExperiment_UnsupportedType_Error(t *testing.T) {
 	e := NewEngine(fake.NewClientBuilder().WithScheme(scheme).Build())
 
 	_, err := e.RunExperiment(context.Background(), Experiment{
-		Name: "test",
-		Type: ExperimentCPUStress, // not implemented
+		Name:      "test",
+		Namespace: "default",
+		Selector:  map[string]string{"app": "test"},
+		Type:      ExperimentType("unsupported"),
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported experiment type")
 }
 
-func TestRunExperiment_MemoryStress_Unsupported(t *testing.T) {
-	scheme := chaosScheme(t)
-	e := NewEngine(fake.NewClientBuilder().WithScheme(scheme).Build())
-
-	_, err := e.RunExperiment(context.Background(), Experiment{
-		Type: ExperimentMemoryStress,
-	})
-	require.Error(t, err)
-}
-
-func TestRunExperiment_DiskPressure_Unsupported(t *testing.T) {
-	scheme := chaosScheme(t)
-	e := NewEngine(fake.NewClientBuilder().WithScheme(scheme).Build())
-
-	_, err := e.RunExperiment(context.Background(), Experiment{
-		Type: ExperimentDiskPressure,
-	})
-	require.Error(t, err)
+func TestValidateExperiment_RejectsUnboundedTargets(t *testing.T) {
+	tests := []Experiment{
+		{Name: "missing-namespace", Type: ExperimentPodKill, Selector: map[string]string{"app": "llm"}, Parameters: ExperimentParams{KillPercentage: 1}},
+		{Name: "missing-selector", Type: ExperimentPodKill, Namespace: "default", Parameters: ExperimentParams{KillPercentage: 1}},
+		{Name: "invalid-percentage", Type: ExperimentPodKill, Namespace: "default", Selector: map[string]string{"app": "llm"}, Parameters: ExperimentParams{KillPercentage: 0}},
+	}
+	for _, exp := range tests {
+		t.Run(exp.Name, func(t *testing.T) {
+			require.Error(t, ValidateExperiment(exp))
+		})
+	}
 }
 
 // ---- runPodKill ------------------------------------------------------------
@@ -212,8 +207,7 @@ func TestRunPodKill_OnePod_Killed(t *testing.T) {
 	assert.Contains(t, result.Observations[0], "killed pod")
 }
 
-func TestRunPodKill_ZeroPercent_StillKillsOne(t *testing.T) {
-	// killCount = 0 but pods > 0 → clamp to 1
+func TestRunPodKill_ZeroPercentIsRejected(t *testing.T) {
 	scheme := chaosScheme(t)
 	labels := map[string]string{"app": "llm"}
 
@@ -230,50 +224,8 @@ func TestRunPodKill_ZeroPercent_StillKillsOne(t *testing.T) {
 	}
 
 	result, err := e.RunExperiment(context.Background(), exp)
-	require.NoError(t, err)
-	assert.Equal(t, 1, result.AffectedPods, "should kill at least 1 even at 0%")
-}
-
-// ---- runNetworkLatency -----------------------------------------------------
-
-func TestRunNetworkLatency_AnnotatesPods(t *testing.T) {
-	scheme := chaosScheme(t)
-	labels := map[string]string{"app": "llm"}
-
-	e := NewEngine(fake.NewClientBuilder().WithScheme(scheme).WithObjects(
-		runningPod("p1", "default", labels),
-	).Build())
-
-	exp := Experiment{
-		Name:       "latency-inject",
-		Type:       ExperimentNetworkLatency,
-		Namespace:  "default",
-		Selector:   labels,
-		Parameters: ExperimentParams{LatencyMs: 100, JitterMs: 10},
-	}
-
-	result, err := e.RunExperiment(context.Background(), exp)
-	require.NoError(t, err)
-	assert.Equal(t, "completed", result.Status)
-	assert.Equal(t, 1, result.AffectedPods)
-	assert.Contains(t, result.Observations[0], "100ms")
-}
-
-func TestRunNetworkLatency_NoPods_ZeroAffected(t *testing.T) {
-	scheme := chaosScheme(t)
-	e := NewEngine(fake.NewClientBuilder().WithScheme(scheme).Build())
-
-	exp := Experiment{
-		Name:       "latency-no-pods",
-		Type:       ExperimentNetworkLatency,
-		Namespace:  "default",
-		Selector:   map[string]string{"app": "absent"},
-		Parameters: ExperimentParams{LatencyMs: 50},
-	}
-
-	result, err := e.RunExperiment(context.Background(), exp)
-	require.NoError(t, err)
-	assert.Equal(t, 0, result.AffectedPods)
+	require.Error(t, err)
+	assert.Equal(t, "failed", result.Status)
 }
 
 // ---- runNetworkPartition ---------------------------------------------------
@@ -319,6 +271,30 @@ func TestRunNetworkPartition_DuplicateCreate_Error(t *testing.T) {
 	result, err := e.RunExperiment(context.Background(), exp)
 	require.Error(t, err)
 	assert.Equal(t, "failed", result.Status)
+}
+
+func TestCleanupExperiment_RemovesNetworkPartition(t *testing.T) {
+	scheme := chaosScheme(t)
+	policy := &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{
+		Name:      "chaos-partition-test-partition",
+		Namespace: "default",
+	}}
+	e := NewEngine(fake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).Build())
+	exp := Experiment{Name: "partition-test", Type: ExperimentNetworkPartition, Namespace: "default", Selector: map[string]string{"app": "llm"}}
+
+	require.NoError(t, e.CleanupExperiment(context.Background(), exp))
+	require.NoError(t, e.CleanupExperiment(context.Background(), exp), "cleanup must be retry-safe")
+}
+
+func TestSelectTargets_IsReproducible(t *testing.T) {
+	pods := []corev1.Pod{
+		{ObjectMeta: metav1.ObjectMeta{Name: "a"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "b"}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "c"}},
+	}
+	first := selectTargets(pods, 34, 42)
+	second := selectTargets(pods, 34, 42)
+	require.Equal(t, first, second)
 }
 
 // ---- runPodFailure ---------------------------------------------------------

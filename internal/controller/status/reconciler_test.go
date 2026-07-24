@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -120,7 +121,6 @@ func TestReconciler_Update_Gating(t *testing.T) {
 		assert.Equal(t, "Light", testLLM.Status.AdaptiveMetrics.LoadLevel)
 	})
 }
-
 func TestReconciler_UpdateFromKServe_ProjectsReadyStatusAndURL(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = servingv1alpha2.AddToScheme(scheme)
@@ -156,4 +156,30 @@ func TestReconciler_UpdateFromKServe_ProjectsReadyStatusAndURL(t *testing.T) {
 	assert.True(t, current.Status.ModelReady)
 	assert.Equal(t, int32(1), current.Status.Replicas)
 	assert.Equal(t, "http://distributed.models.example", current.Status.URL)
+}
+
+func TestReconciler_Update_DistributedConditions(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = servingv1alpha2.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	replicas := int32(2)
+	llm := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "distributed", Namespace: "default"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model:   servingv1alpha2.ModelSpec{Name: "model"},
+			KVCache: &servingv1alpha2.KVCacheSpec{Transfer: &servingv1alpha2.KVTransferSpec{Connector: "lmcache"}},
+			Prefill: &servingv1alpha2.PrefillSpec{Replicas: &replicas},
+		},
+	}
+	prefill := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "distributed-prefill", Namespace: "default"}, Status: appsv1.DeploymentStatus{ReadyReplicas: 2}}
+	primary := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "distributed", Namespace: "default"}, Status: appsv1.DeploymentStatus{ReadyReplicas: 1}}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&servingv1alpha2.LLMInferenceService{}).WithObjects(llm, primary, prefill).Build()
+	testLLM := llm.DeepCopy()
+	require.NoError(t, (&Reconciler{Client: client}).Update(context.Background(), testLLM, llm, false, nil))
+	conditions := map[string]metav1.ConditionStatus{}
+	for _, condition := range testLLM.Status.Conditions {
+		conditions[condition.Type] = condition.Status
+	}
+	assert.Equal(t, metav1.ConditionTrue, conditions[servingv1alpha2.ConditionKVTransferConfigured])
+	assert.Equal(t, metav1.ConditionTrue, conditions[servingv1alpha2.ConditionPrefillReady])
 }

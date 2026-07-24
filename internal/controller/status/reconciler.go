@@ -135,6 +135,54 @@ func (r *Reconciler) finishUpdate(ctx context.Context, llmSvc *servingv1alpha2.L
 	}
 	r.setCondition(&llmSvc.Status.Conditions, optCondition)
 
+	// Distributed inference conditions deliberately separate configuration from
+	// runtime readiness. A configured connector is not evidence of cache hits.
+	kvStatus := metav1.ConditionFalse
+	kvReason := "KVTransferNotConfigured"
+	kvMessage := "No distributed KV-transfer connector is configured"
+	if llmSvc.Spec.KVCache != nil && llmSvc.Spec.KVCache.Transfer != nil && llmSvc.Spec.KVCache.Transfer.Connector != "" {
+		kvStatus = metav1.ConditionTrue
+		kvReason = "KVTransferConfigured"
+		kvMessage = fmt.Sprintf("KV-transfer connector %q is configured; runtime health requires live validation", llmSvc.Spec.KVCache.Transfer.Connector)
+	}
+	r.setCondition(&llmSvc.Status.Conditions, metav1.Condition{
+		Type:               servingv1alpha2.ConditionKVTransferConfigured,
+		Status:             kvStatus,
+		Reason:             kvReason,
+		Message:            kvMessage,
+		ObservedGeneration: llmSvc.Generation,
+	})
+
+	prefillStatus := metav1.ConditionTrue
+	prefillReason := "PrefillDisabled"
+	prefillMessage := "No dedicated prefill deployment configured"
+	if llmSvc.Spec.Prefill != nil {
+		prefillStatus = metav1.ConditionFalse
+		prefillReason = "PrefillUnavailable"
+		prefillMessage = "Waiting for prefill replicas to become ready"
+		var prefill appsv1.Deployment
+		if err := r.Client.Get(ctx, types.NamespacedName{Name: llmSvc.Name + "-prefill", Namespace: llmSvc.Namespace}, &prefill); err == nil {
+			required := int32(1)
+			if llmSvc.Spec.Prefill.Replicas != nil {
+				required = *llmSvc.Spec.Prefill.Replicas
+			}
+			if prefill.Status.ReadyReplicas >= required {
+				prefillStatus = metav1.ConditionTrue
+				prefillReason = "PrefillAvailable"
+				prefillMessage = fmt.Sprintf("%d prefill replicas are ready", prefill.Status.ReadyReplicas)
+			}
+		} else if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("get prefill deployment for status: %w", err)
+		}
+	}
+	r.setCondition(&llmSvc.Status.Conditions, metav1.Condition{
+		Type:               servingv1alpha2.ConditionPrefillReady,
+		Status:             prefillStatus,
+		Reason:             prefillReason,
+		Message:            prefillMessage,
+		ObservedGeneration: llmSvc.Generation,
+	})
+
 	// 5. Set Adaptive Metrics (M3 Vision)
 	if metrics != nil {
 		llmSvc.Status.AdaptiveMetrics = metrics

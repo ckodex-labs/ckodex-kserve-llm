@@ -122,6 +122,30 @@ spec:
                   in v1 for workloads that need them, but are not part of the stable surface.
                   Fields in this sub-struct may change or be removed in future versions.
                 properties:
+                  kvCache:
+                    description: |-
+                      KVCache configures distributed KV transfer for prefill/decode serving.
+                      It remains experimental until connector APIs stabilize across runtimes.
+                    properties:
+                      dtype:
+                        type: string
+                      swapSpaceGB:
+                        format: int32
+                        type: integer
+                      transfer:
+                        properties:
+                          connector:
+                            type: string
+                          extraConfig:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          role:
+                            type: string
+                        required:
+                        - connector
+                        type: object
+                    type: object
                   prefill:
                     description: |-
                       Prefill configures disaggregated prefill workers.
@@ -26378,6 +26402,39 @@ spec:
                     format: int32
                     minimum: 0
                     type: integer
+                  transfer:
+                    description: |-
+                      Transfer configures distributed KV-cache transfer for prefill/decode
+                      disaggregation. The connector is passed to vLLM through
+                      --kv-transfer-config and must be backed by a cluster-local data path.
+                    properties:
+                      connector:
+                        description: Connector selects the transfer implementation.
+                        enum:
+                        - nixl
+                        - lmcache
+                        - mooncake
+                        type: string
+                      extraConfig:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          ExtraConfig is connector-specific JSON-compatible configuration. Values
+                          are intentionally strings so the CRD remains portable across connector
+                          versions and clusters.
+                        type: object
+                      role:
+                        description: |-
+                          Role is kv_producer for prefill, kv_consumer for decode, or kv_both for
+                          a combined worker. When omitted, the operator uses kv_both.
+                        enum:
+                        - kv_producer
+                        - kv_consumer
+                        - kv_both
+                        type: string
+                    required:
+                    - connector
+                    type: object
                 type: object
               model:
                 description: Model specifies the model to serve.

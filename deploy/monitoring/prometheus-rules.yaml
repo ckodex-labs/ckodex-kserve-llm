@@ -53,6 +53,15 @@ spec:
               )
             )
 
+        # P95 inference latency per model
+        - record: ckodex:inference_latency_p95
+          expr: |
+            histogram_quantile(0.95,
+              sum by (model, le) (
+                rate(ckodex_inference_duration_seconds_bucket[5m])
+              )
+            )
+
         # Reconcile success rate (5-min window)
         - record: ckodex:reconcile_success_rate
           expr: |

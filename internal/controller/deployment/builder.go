@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -46,6 +47,12 @@ type Builder struct {
 
 // Build constructs the desired Deployment spec.
 func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32, hwType HardwareType, loras []servingv1alpha2.LLMLoraAdapter) *appsv1.Deployment {
+	return b.BuildWithRole(ctx, llmSvc, replicas, hwType, loras, "")
+}
+
+// BuildWithRole builds a model Deployment and, when configured, assigns its
+// distributed KV-transfer role (producer, consumer, or both) to vLLM.
+func (b *Builder) BuildWithRole(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32, hwType HardwareType, loras []servingv1alpha2.LLMLoraAdapter, kvRole string) *appsv1.Deployment {
 	labels := map[string]string{
 		"app.kubernetes.io/name":       "llminferenceservice",
 		"app.kubernetes.io/instance":   llmSvc.Name,
@@ -93,6 +100,7 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 	}
 
 	b.applyEngineSelection(llmSvc, podSpec, hwType)
+	b.applyKVTransfer(llmSvc, podSpec, kvRole)
 
 	b.ensureVLLMEnv(llmSvc, podSpec)
 
@@ -107,7 +115,7 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 		labels["ckodex.cost/"+strings.ReplaceAll(k, ".", "-")] = v
 	}
 
-	annotations := b.buildAnnotations(llmSvc)
+	annotations := b.buildAnnotations(llmSvc, podSpec, kvRole)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -133,6 +141,68 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 				Spec: *podSpec,
 			},
 		},
+	}
+}
+
+// BuildPrefill builds the dedicated prefill side of a PD deployment. It uses
+// the user-provided prefill template while retaining the model/storage wiring
+// of the primary service.
+func (b *Builder) BuildPrefill(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, hwType HardwareType) *appsv1.Deployment {
+	if llmSvc.Spec.Prefill == nil {
+		return nil
+	}
+	clone := llmSvc.DeepCopy()
+	clone.Spec.Template = *llmSvc.Spec.Prefill.Template.DeepCopy()
+	clone.Spec.Replicas = llmSvc.Spec.Prefill.Replicas
+	clone.Spec.Prefill = nil
+	d := b.BuildWithRole(ctx, clone, replicaCount(clone.Spec.Replicas), hwType, nil, "kv_producer")
+	d.Name = llmSvc.Name + "-prefill"
+	if d.Annotations == nil {
+		d.Annotations = map[string]string{}
+	}
+	d.Annotations["serving.ckodex.com/pd-disaggregation"] = "true"
+	d.Spec.Selector.MatchLabels["serving.ckodex.com/role"] = "prefill"
+	d.Spec.Template.Labels["serving.ckodex.com/role"] = "prefill"
+	return d
+}
+
+func replicaCount(replicas *int32) int32 {
+	if replicas == nil {
+		return 1
+	}
+	return *replicas
+}
+
+func (b *Builder) applyKVTransfer(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec, role string) {
+	if len(podSpec.Containers) == 0 || llmSvc.Spec.KVCache == nil || llmSvc.Spec.KVCache.Transfer == nil {
+		return
+	}
+	t := llmSvc.Spec.KVCache.Transfer
+	if role == "" {
+		role = t.Role
+	}
+	if role == "" {
+		role = "kv_both"
+	}
+	connector := map[string]string{
+		"nixl": "NixlConnector", "lmcache": "LMCacheConnectorV1", "mooncake": "MooncakeConnector",
+	}[t.Connector]
+	if connector == "" {
+		return
+	}
+	extra := t.ExtraConfig
+	if extra == nil {
+		extra = map[string]string{}
+	}
+	cfg, err := json.Marshal(map[string]interface{}{
+		"kv_connector": connector, "kv_role": role, "kv_connector_extra_config": extra,
+	})
+	if err != nil {
+		return
+	}
+	c := &podSpec.Containers[0]
+	if !hasArg(c.Args, "--kv-transfer-config") {
+		c.Args = append(c.Args, "--kv-transfer-config", string(cfg))
 	}
 }
 
@@ -743,8 +813,24 @@ func (b *Builder) injectVector(llmSvc *servingv1alpha2.LLMInferenceService, podS
 	}
 }
 
-func (b *Builder) buildAnnotations(llmSvc *servingv1alpha2.LLMInferenceService) map[string]string {
+func (b *Builder) buildAnnotations(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec, kvRole string) map[string]string {
 	ann := make(map[string]string)
+	if len(podSpec.Containers) > 0 {
+		ann["serving.ckodex.com/runtime-image"] = podSpec.Containers[0].Image
+	}
+	if llmSvc.Spec.KVCache != nil && llmSvc.Spec.KVCache.Transfer != nil {
+		ann["serving.ckodex.com/kv-connector"] = llmSvc.Spec.KVCache.Transfer.Connector
+		if kvRole == "" {
+			kvRole = llmSvc.Spec.KVCache.Transfer.Role
+		}
+		if kvRole == "" {
+			kvRole = "kv_both"
+		}
+		ann["serving.ckodex.com/kv-role"] = kvRole
+	}
+	if llmSvc.Spec.Prefill != nil {
+		ann["serving.ckodex.com/pd-disaggregation"] = "true"
+	}
 	if llmSvc.Spec.Canary != nil {
 		ann["ckodex.com/canary-weight"] = fmt.Sprintf("%d", llmSvc.Spec.Canary.Weight)
 	}

@@ -234,6 +234,9 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		if err := r.ServiceReconciler.Reconcile(ctx, &llmSvc); err != nil {
 			return ctrl.Result{}, fmt.Errorf("reconcile service: %w", err)
 		}
+		if err := r.reconcilePrefillDeployment(ctx, &llmSvc); err != nil {
+			return ctrl.Result{}, fmt.Errorf("reconcile prefill deployment: %w", err)
+		}
 	}
 
 	// 5. Reconcile Gateway API resources (HTTPRoute + GRPCRoute)
@@ -404,7 +407,11 @@ func (r *LLMInferenceServiceReconciler) reconcileDeployment(ctx context.Context,
 	}
 
 	hwType := r.HardwareCache.Get(ctx, r.Client, r.APIReader)
-	desired := r.DeploymentBuilder.Build(ctx, llmSvc, replicas, hwType, loras)
+	role := ""
+	if llmSvc.Spec.Prefill != nil {
+		role = "kv_consumer"
+	}
+	desired := r.DeploymentBuilder.BuildWithRole(ctx, llmSvc, replicas, hwType, loras, role)
 
 	// Set owner reference for garbage collection
 	if err := controllerutil.SetControllerReference(llmSvc, desired, r.Scheme); err != nil {
@@ -438,6 +445,39 @@ func (r *LLMInferenceServiceReconciler) reconcileDeployment(ctx context.Context,
 		}
 	}
 
+	return nil
+}
+
+func (r *LLMInferenceServiceReconciler) reconcilePrefillDeployment(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
+	name := llmSvc.Name + "-prefill"
+	var existing appsv1.Deployment
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: llmSvc.Namespace}, &existing)
+	if llmSvc.Spec.Prefill == nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return r.Delete(ctx, &existing)
+	}
+	desired := r.DeploymentBuilder.BuildPrefill(ctx, llmSvc, r.HardwareCache.Get(ctx, r.Client, r.APIReader))
+	if err := controllerutil.SetControllerReference(llmSvc, desired, r.Scheme); err != nil {
+		return fmt.Errorf("set prefill owner reference: %w", err)
+	}
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+	replicas := int32(1)
+	if desired.Spec.Replicas != nil {
+		replicas = *desired.Spec.Replicas
+	}
+	if reconciler.SyncDeployment(ctx, &existing, desired, replicas, false) {
+		return r.Update(ctx, &existing)
+	}
 	return nil
 }
 

@@ -102,6 +102,20 @@ reported as `not-satisfied`.
 
 ## Coverage Thresholds
 
+## Required Integration Evidence
+
+`dagger call integration --source=.` installs the pinned envtest helper, obtains
+Kubernetes 1.35 test assets, and runs `test/integration/...` with
+`REQUIRE_ENVTEST=1`. The gate fails when those assets cannot be obtained; it does
+not convert a skipped envtest suite into a successful CI result.
+
+## Nightly KIND Chaos
+
+`.github/workflows/nightly-chaos.yml` runs daily and on demand in a disposable
+KIND cluster. It uses `run/e2e.sh`, executes the E2E lifecycle suite, deletes the
+operator pod, and proves the Deployment supplies a new ready pod. Failed runs retain
+cluster resources, events, and controller logs for 14 days; the cluster is always torn down.
+
 | Package | Threshold | Rationale |
 |---------|-----------|-----------|
 | `internal/controller` | 27% | envtest (Kubernetes API) required for full path coverage |

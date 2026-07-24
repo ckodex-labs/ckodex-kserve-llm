@@ -15,11 +15,13 @@ import (
 )
 
 const (
-	goBuilderImage    = "golang:1.26.5-bookworm"
-	golangciLintImage = "golangci/golangci-lint:v2.12.2"
-	trivyVersion      = "0.72.0"
-	cosignVersion     = "v3.1.1"
-	distrolessImage   = "gcr.io/distroless/static:nonroot"
+	goBuilderImage     = "golang:1.26.5-bookworm"
+	golangciLintImage  = "golangci/golangci-lint:v2.12.2"
+	trivyVersion       = "0.72.0"
+	cosignVersion      = "v3.1.1"
+	distrolessImage    = "gcr.io/distroless/static:nonroot"
+	envtestToolVersion = "v0.0.0-20260318145839-6c9615a2a166"
+	envtestK8sVersion  = "1.35.x!"
 
 	// Coverage thresholds enforced by the Dagger test gate.
 	coverageController = 27 // envtest required for full coverage; see ADR-008
@@ -162,6 +164,42 @@ func (m *CkodexOperator) Coverage(
 ) *dagger.File {
 	return testBase(source, coverageTestArgs()).
 		File("coverage.out")
+}
+
+// Conformance runs the specification-backed tests without requiring a Kubernetes cluster.
+//
+// Usage: dagger call conformance --source=.
+func (m *CkodexOperator) Conformance(
+	ctx context.Context,
+	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
+	source *dagger.Directory,
+) (string, error) {
+	out, err := testBase(source, []string{"go", "test", "-race", "./test/conformance/..."}).Stdout(ctx)
+	if err != nil {
+		return out, fmt.Errorf("conformance: %w", err)
+	}
+	return "conformance passed", nil
+}
+
+// Integration runs the controller integration suite against a real envtest API server.
+//
+// Usage: dagger call integration --source=.
+func (m *CkodexOperator) Integration(
+	ctx context.Context,
+	// +defaultPath="/"
+	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
+	source *dagger.Directory,
+) (string, error) {
+	const script = `set -eu
+go install sigs.k8s.io/controller-runtime/tools/setup-envtest@` + envtestToolVersion + `
+assets="$("$(go env GOPATH)/bin/setup-envtest" use -p path "` + envtestK8sVersion + `")"
+REQUIRE_ENVTEST=1 KUBEBUILDER_ASSETS="$assets" go test -race -count=1 -p 1 ./test/integration/...`
+	out, err := goBase(source).WithExec([]string{"sh", "-ec", script}).Stdout(ctx)
+	if err != nil {
+		return out, fmt.Errorf("integration: %w", err)
+	}
+	return "integration passed", nil
 }
 
 // Build builds the operator image container (amd64).

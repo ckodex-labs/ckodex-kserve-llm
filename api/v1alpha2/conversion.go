@@ -13,6 +13,7 @@ package v1alpha2
 
 import (
 	servingv1 "github.com/ckodex-labs/kserve-llm-operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 )
 
@@ -111,7 +112,7 @@ func convertKVCacheToV1(src *KVCacheSpec) *servingv1.KVCacheSpec {
 	}
 	dst := &servingv1.KVCacheSpec{Dtype: src.Dtype, SwapSpaceGB: src.SwapSpaceGB}
 	if src.Transfer != nil {
-		dst.Transfer = &servingv1.KVTransferSpec{Connector: src.Transfer.Connector, Role: src.Transfer.Role, ExtraConfig: src.Transfer.ExtraConfig}
+		dst.Transfer = &servingv1.KVTransferSpec{Connector: src.Transfer.Connector, Role: src.Transfer.Role, ExtraConfig: src.Transfer.ExtraConfig, Env: deepCopyEnv(src.Transfer.Env)}
 	}
 	return dst
 }
@@ -122,7 +123,18 @@ func convertKVCacheFromV1(src *servingv1.KVCacheSpec) *KVCacheSpec {
 	}
 	dst := &KVCacheSpec{Dtype: src.Dtype, SwapSpaceGB: src.SwapSpaceGB}
 	if src.Transfer != nil {
-		dst.Transfer = &KVTransferSpec{Connector: src.Transfer.Connector, Role: src.Transfer.Role, ExtraConfig: src.Transfer.ExtraConfig}
+		dst.Transfer = &KVTransferSpec{Connector: src.Transfer.Connector, Role: src.Transfer.Role, ExtraConfig: src.Transfer.ExtraConfig, Env: deepCopyEnv(src.Transfer.Env)}
+	}
+	return dst
+}
+
+func deepCopyEnv(src []corev1.EnvVar) []corev1.EnvVar {
+	if src == nil {
+		return nil
+	}
+	dst := make([]corev1.EnvVar, len(src))
+	for i := range src {
+		src[i].DeepCopyInto(&dst[i])
 	}
 	return dst
 }

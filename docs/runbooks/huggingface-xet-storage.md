@@ -70,6 +70,9 @@ spec:
       extraConfig:
         chunk_size: "256"
         remote_url: "redis://lmcache.cache.svc:6379"
+      env:
+        - name: LMCACHE_CONFIG_FILE
+          value: /etc/lmcache/config.yaml
   prefill:
     replicas: 2
     template:
@@ -87,3 +90,10 @@ connectors are `nixl`, `lmcache`, and `mooncake`; connector-specific settings
 remain in `extraConfig` so the CRD does not hard-code a backend version. Live
 validation must still prove cache hits, transfer tail latency, and failover on
 the target cluster before this feature is treated as production-ready.
+
+`env` is copied to both prefill and decode containers when the pod template does
+not already define the same variable. Use `valueFrom.secretKeyRef` for backend
+credentials; do not place passwords in `extraConfig` or literal environment
+values. For LMCache remote backends, the referenced config file should define
+the backend (`remote_url`, `remote_serde`, and any connector-specific options)
+and be mounted by the pod template or an injected Secret/ConfigMap.

@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -195,6 +196,50 @@ func TestBuilder_Build_RuntimeImageAndMountedModelOverride(t *testing.T) {
 	assert.Equal(t, "registry.example/vllm:v0.25.1", c.Image)
 	assert.Equal(t, []string{"--model", api.ModelMountPath}, c.Args[:2])
 	assert.Contains(t, c.Args, "--max-model-len")
+}
+
+func TestBuilder_BuildWithRole_ConfiguresLMCacheTransfer(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.25.1"}
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "chat", Namespace: "default"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{URI: "pvc://weights"},
+			KVCache: &servingv1alpha2.KVCacheSpec{Transfer: &servingv1alpha2.KVTransferSpec{
+				Connector: "lmcache", ExtraConfig: map[string]string{"chunk_size": "256"},
+			}},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "vllm"}}}},
+		},
+	}
+	dep := builder.BuildWithRole(context.Background(), llmSvc, 1, HardwareNVIDIA, nil, "kv_consumer")
+	args := dep.Spec.Template.Spec.Containers[0].Args
+	assert.Contains(t, args, "--kv-transfer-config")
+	joined := strings.Join(args, " ")
+	assert.Contains(t, joined, "LMCacheConnectorV1")
+	assert.Contains(t, joined, "kv_consumer")
+}
+
+func TestBuilder_BuildPrefillCreatesProducerDeployment(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.25.1"}
+	workers := int32(2)
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "chat", Namespace: "default"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model:    servingv1alpha2.ModelSpec{URI: "pvc://weights"},
+			Prefill:  &servingv1alpha2.PrefillSpec{Replicas: &workers, Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "prefill"}}}}},
+			KVCache:  &servingv1alpha2.KVCacheSpec{Transfer: &servingv1alpha2.KVTransferSpec{Connector: "nixl"}},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "vllm"}}}},
+		},
+	}
+	dep := builder.BuildPrefill(context.Background(), llmSvc, HardwareNVIDIA)
+	require.NotNil(t, dep)
+	assert.Equal(t, "chat-prefill", dep.Name)
+	assert.Equal(t, workers, *dep.Spec.Replicas)
+	assert.Equal(t, "prefill", dep.Spec.Template.Labels["serving.ckodex.com/role"])
+	assert.Contains(t, strings.Join(dep.Spec.Template.Spec.Containers[0].Args, " "), "NixlConnector")
+	assert.Equal(t, "vllm:v0.25.1", dep.Annotations["serving.ckodex.com/runtime-image"])
+	assert.Equal(t, "nixl", dep.Annotations["serving.ckodex.com/kv-connector"])
+	assert.Equal(t, "kv_producer", dep.Annotations["serving.ckodex.com/kv-role"])
+	assert.Equal(t, "true", dep.Annotations["serving.ckodex.com/pd-disaggregation"])
 }
 
 func TestBuilder_Build_RuntimeImageOverridePrecedesCPUFallback(t *testing.T) {

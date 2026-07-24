@@ -155,6 +155,9 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 		if len(llmSvc.Spec.Prefill.Template.Spec.Containers) == 0 {
 			errs = append(errs, "spec.prefill.template.spec.containers must have at least one container")
 		}
+		if llmSvc.Spec.KVCache == nil || llmSvc.Spec.KVCache.Transfer == nil || llmSvc.Spec.KVCache.Transfer.Connector == "" {
+			errs = append(errs, "spec.prefill requires spec.kvCache.transfer.connector (nixl, lmcache, or mooncake)")
+		}
 	}
 
 	if len(errs) > 0 {

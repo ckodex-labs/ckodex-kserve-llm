@@ -35,7 +35,7 @@ func (src *LLMInferenceService) ConvertTo(dstRaw conversion.Hub) error {
 	dst.Spec.SLO = convertSLOToV1(src.Spec.SLO)
 	dst.Spec.Canary = convertCanaryToV1(src.Spec.Canary)
 
-	if src.Spec.Prefill != nil || src.Spec.Worker != nil {
+	if src.Spec.Prefill != nil || src.Spec.Worker != nil || src.Spec.KVCache != nil {
 		dst.Spec.Experimental = &servingv1.ExperimentalSpec{}
 		if src.Spec.Prefill != nil {
 			dst.Spec.Experimental.Prefill = &servingv1.PrefillSpec{
@@ -47,6 +47,9 @@ func (src *LLMInferenceService) ConvertTo(dstRaw conversion.Hub) error {
 			dst.Spec.Experimental.Worker = &servingv1.WorkerSpec{
 				Template: src.Spec.Worker.Template,
 			}
+		}
+		if src.Spec.KVCache != nil {
+			dst.Spec.Experimental.KVCache = convertKVCacheToV1(src.Spec.KVCache)
 		}
 	}
 
@@ -89,6 +92,9 @@ func (dst *LLMInferenceService) ConvertFrom(srcRaw conversion.Hub) error {
 				Template: src.Spec.Experimental.Worker.Template,
 			}
 		}
+		if src.Spec.Experimental.KVCache != nil {
+			dst.Spec.KVCache = convertKVCacheFromV1(src.Spec.Experimental.KVCache)
+		}
 	}
 
 	dst.Status.Conditions = src.Status.Conditions
@@ -97,6 +103,28 @@ func (dst *LLMInferenceService) ConvertFrom(srcRaw conversion.Hub) error {
 	dst.Status.ModelReady = src.Status.ModelReady
 	dst.Status.ObservedGeneration = src.Status.ObservedGeneration
 	return nil
+}
+
+func convertKVCacheToV1(src *KVCacheSpec) *servingv1.KVCacheSpec {
+	if src == nil {
+		return nil
+	}
+	dst := &servingv1.KVCacheSpec{Dtype: src.Dtype, SwapSpaceGB: src.SwapSpaceGB}
+	if src.Transfer != nil {
+		dst.Transfer = &servingv1.KVTransferSpec{Connector: src.Transfer.Connector, Role: src.Transfer.Role, ExtraConfig: src.Transfer.ExtraConfig}
+	}
+	return dst
+}
+
+func convertKVCacheFromV1(src *servingv1.KVCacheSpec) *KVCacheSpec {
+	if src == nil {
+		return nil
+	}
+	dst := &KVCacheSpec{Dtype: src.Dtype, SwapSpaceGB: src.SwapSpaceGB}
+	if src.Transfer != nil {
+		dst.Transfer = &KVTransferSpec{Connector: src.Transfer.Connector, Role: src.Transfer.Role, ExtraConfig: src.Transfer.ExtraConfig}
+	}
+	return dst
 }
 
 // ----- helpers -----

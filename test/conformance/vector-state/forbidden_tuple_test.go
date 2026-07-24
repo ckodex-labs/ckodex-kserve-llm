@@ -22,14 +22,20 @@ package vectorstate
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	"github.com/ckodex-labs/kserve-llm-operator/internal/auth"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/config"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 )
 
@@ -176,19 +182,34 @@ func TestForbiddenTupleCounter_AttributeKeyIsTupleType(t *testing.T) {
 // in the anti (denied) state. This is a structural proof: the middleware
 // returns 403 and does NOT call next.ServeHTTP.
 func TestForbiddenTuple_AntiExecute_Unreachable_ViaAuthMiddleware(t *testing.T) {
-	// The middleware returns 403 and does NOT call next when scope is missing.
-	// We verify this by confirming the handler is never invoked.
-	// (Full middleware test lives in internal/auth — this is the spec claim.)
-	//
-	// Claim: anti ∧ execute is unreachable because the auth layer always
-	// returns before delegating to the handler on deny.
-	//
-	// Conformance evidence: internal/auth.TestAuthenticate_MissingScope_Returns403
-	// proves the handler is not called when scope check fails.
-	t.Log("SPEC CLAIM: anti∧execute is unreachable — auth middleware halts before handler invocation")
-	t.Log("EVIDENCE:   internal/auth TestAuthenticate_MissingScope_Returns403")
-	// If this test is reached, the claim is asserted to be true by design.
-	// A violation would require changing the auth middleware to call next on deny.
+	inst, reader := newTestInstrumentation(t)
+	cfg := auth.OIDCConfig{
+		ClientID:       "conformance-secret",
+		Audience:       "conformance",
+		RequiredScopes: []string{"admin"},
+		CacheTTL:       time.Hour,
+	}
+	claims := &auth.InferenceClaims{
+		RegisteredClaims: jwt.RegisteredClaims{Audience: jwt.ClaimStrings{"conformance"}},
+		Scope:            "inference",
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(cfg.ClientID))
+	require.NoError(t, err)
+
+	called := false
+	handler := auth.NewMiddleware(cfg).WithInstrumentation(inst).Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/v1/completions", nil)
+	req.Header.Set("Authorization", "Bearer "+signed)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+
+	assert.False(t, called, "a denied request must not reach execution")
+	assert.Equal(t, http.StatusForbidden, response.Code)
+	assert.Equal(t, int64(1), collectCounterValue(t, reader, tupleAntiExecute))
 }
 
 // TestForbiddenTuple_EmptyHighDAL_Unreachable_ViaStartupValidation verifies
@@ -196,11 +217,8 @@ func TestForbiddenTuple_AntiExecute_Unreachable_ViaAuthMiddleware(t *testing.T) 
 // ensuring DAL ≥ 3 operations (cross-boundary storage pulls) cannot proceed
 // in an empty (unconfigured) state.
 func TestForbiddenTuple_EmptyHighDAL_Unreachable_ViaStartupValidation(t *testing.T) {
-	// Claim: empty ∧ DAL≥3 is unreachable because ValidateStorageCredentials
-	// returns an error (causing os.Exit(1) in main.go) when VAULT_PATH is set
-	// without VAULT_ADDR/VAULT_TOKEN, preventing the controller from starting.
-	//
-	// Conformance evidence: internal/config TestValidateStorageCredentials_VaultPath_BothMissing_ErrorContainsBoth
-	t.Log("SPEC CLAIM: empty∧DAL≥3 is unreachable — startup validation exits before manager starts")
-	t.Log("EVIDENCE:   internal/config TestValidateStorageCredentials_VaultPath_BothMissing_ErrorContainsBoth")
+	t.Setenv("VAULT_PATH", "secret/data/models")
+	t.Setenv("VAULT_ADDR", "")
+	t.Setenv("VAULT_TOKEN", "")
+	require.Error(t, config.ValidateStorageCredentials(&config.OperatorConfig{}))
 }

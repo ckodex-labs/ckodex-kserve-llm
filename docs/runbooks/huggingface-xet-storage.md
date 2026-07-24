@@ -52,3 +52,38 @@ The CKodex `serving.ckodex.com/v1alpha2 LocalModelCache` is a compatibility API,
 not the KServe resource with the same kind name. Migration to the upstream
 KServe cache API must be explicit; the two controllers do not share status,
 PVC ownership, or download-job configuration.
+
+## Distributed prefill/decode and KV transfer
+
+The operator materializes `spec.prefill` as a separate Deployment named
+`<service>-prefill`. The primary Deployment is assigned `kv_consumer` and the
+prefill Deployment is assigned `kv_producer`. A prefill block without a KV
+connector is rejected by admission.
+
+Example using LMCache:
+
+```yaml
+spec:
+  kvCache:
+    transfer:
+      connector: lmcache
+      extraConfig:
+        chunk_size: "256"
+        remote_url: "redis://lmcache.cache.svc:6379"
+  prefill:
+    replicas: 2
+    template:
+      spec:
+        containers:
+          - name: vllm-prefill
+            image: registry.example/vllm@sha256:<validated-digest>
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
+```
+
+The connector is rendered into vLLM's `--kv-transfer-config` JSON. Supported
+connectors are `nixl`, `lmcache`, and `mooncake`; connector-specific settings
+remain in `extraConfig` so the CRD does not hard-code a backend version. Live
+validation must still prove cache hits, transfer tail latency, and failover on
+the target cluster before this feature is treated as production-ready.

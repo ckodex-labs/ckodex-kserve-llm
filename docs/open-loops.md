@@ -51,9 +51,9 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-OP-006 — Integrate LMCache without conflating it with vLLM prefix caching
 
-- **Status:** open
+- **Status:** in-progress
 - **Priority:** P1
-- **Context:** EPP routing is present, but no LMCache service, connector, or lifecycle is reconciled. vLLM in-process prefix caching is not evidence of LMCache integration. Implement against the KServe 0.19 and llm-d 0.8.1 contracts selected in ADR-009, with live cache-hit and failover evidence.
+- **Context:** Connector configuration and prefill/decode Deployment lifecycle are now reconciled. The operator renders vLLM `--kv-transfer-config` for NIXL, LMCache, or Mooncake and rejects PD configurations without a connector. A live cache-hit, transfer-tail-latency, and failover run remains required before promotion.
 - **Reference:** ADR-009, `internal/scheduler/epp_manager.go`
 
 ### L-OP-005 — Align LoRA cache ownership with cluster-scoped LocalModelCache

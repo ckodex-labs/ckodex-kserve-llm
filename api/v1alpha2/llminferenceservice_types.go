@@ -374,6 +374,33 @@ type KVCacheSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	SwapSpaceGB *int32 `json:"swapSpaceGB,omitempty"`
+
+	// Transfer configures distributed KV-cache transfer for prefill/decode
+	// disaggregation. The connector is passed to vLLM through
+	// --kv-transfer-config and must be backed by a cluster-local data path.
+	// +optional
+	Transfer *KVTransferSpec `json:"transfer,omitempty"`
+}
+
+// KVTransferSpec configures the vLLM KV connector used by distributed serving.
+// Connector names match the vLLM connector implementations: NixlConnector,
+// LMCacheConnectorV1, or MooncakeConnector.
+type KVTransferSpec struct {
+	// Connector selects the transfer implementation.
+	// +kubebuilder:validation:Enum=nixl;lmcache;mooncake
+	Connector string `json:"connector"`
+
+	// Role is kv_producer for prefill, kv_consumer for decode, or kv_both for
+	// a combined worker. When omitted, the operator uses kv_both.
+	// +kubebuilder:validation:Enum=kv_producer;kv_consumer;kv_both
+	// +optional
+	Role string `json:"role,omitempty"`
+
+	// ExtraConfig is connector-specific JSON-compatible configuration. Values
+	// are intentionally strings so the CRD remains portable across connector
+	// versions and clusters.
+	// +optional
+	ExtraConfig map[string]string `json:"extraConfig,omitempty"`
 }
 
 // QuantizationSpec configures weight quantization for reduced memory footprint.
@@ -698,6 +725,14 @@ const (
 
 	// ConditionModelOptimized indicates model-specific optimizations (WellKnown) were applied.
 	ConditionModelOptimized = "ModelOptimized"
+
+	// ConditionKVTransferConfigured indicates that a distributed KV connector
+	// is declared and rendered into the runtime configuration. It does not
+	// claim that the connector is reachable or producing cache hits.
+	ConditionKVTransferConfigured = "KVTransferConfigured"
+
+	// ConditionPrefillReady indicates that all declared prefill replicas are ready.
+	ConditionPrefillReady = "PrefillReady"
 )
 
 func init() {

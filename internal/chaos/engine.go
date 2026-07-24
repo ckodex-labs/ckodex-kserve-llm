@@ -10,11 +10,14 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -27,10 +30,6 @@ const (
 	ExperimentPodKill          ExperimentType = "pod-kill"
 	ExperimentPodFailure       ExperimentType = "pod-failure"
 	ExperimentNetworkPartition ExperimentType = "network-partition"
-	ExperimentNetworkLatency   ExperimentType = "network-latency"
-	ExperimentCPUStress        ExperimentType = "cpu-stress"
-	ExperimentMemoryStress     ExperimentType = "memory-stress"
-	ExperimentDiskPressure     ExperimentType = "disk-pressure"
 )
 
 // Experiment defines a chaos experiment specification.
@@ -45,6 +44,8 @@ type Experiment struct {
 	Selector map[string]string
 	// Duration of the experiment.
 	Duration time.Duration
+	// Seed selects targets reproducibly. A zero seed is deterministic.
+	Seed int64
 	// Parameters are experiment-specific settings.
 	Parameters ExperimentParams
 }
@@ -53,14 +54,6 @@ type Experiment struct {
 type ExperimentParams struct {
 	// PodKill: percentage of matching pods to kill.
 	KillPercentage int `json:"killPercentage,omitempty"`
-	// NetworkLatency: delay to inject in milliseconds.
-	LatencyMs int `json:"latencyMs,omitempty"`
-	// NetworkLatency: jitter in milliseconds.
-	JitterMs int `json:"jitterMs,omitempty"`
-	// CPUStress: number of workers.
-	CPUWorkers int `json:"cpuWorkers,omitempty"`
-	// MemoryStress: bytes to allocate.
-	MemoryBytes int64 `json:"memoryBytes,omitempty"`
 }
 
 // ExperimentResult records the outcome of a chaos experiment.
@@ -89,6 +82,10 @@ func NewEngine(c client.Client) *Engine {
 
 // RunExperiment executes a chaos experiment.
 func (e *Engine) RunExperiment(ctx context.Context, exp Experiment) (*ExperimentResult, error) {
+	if err := ValidateExperiment(exp); err != nil {
+		return failedResult(exp, err)
+	}
+
 	logger := log.FromContext(ctx).WithValues("experiment", exp.Name, "type", exp.Type)
 	logger.Info("starting chaos experiment")
 
@@ -104,13 +101,45 @@ func (e *Engine) RunExperiment(ctx context.Context, exp Experiment) (*Experiment
 		return e.runPodKill(ctx, exp, result)
 	case ExperimentPodFailure:
 		return e.runPodFailure(ctx, exp, result)
-	case ExperimentNetworkLatency:
-		return e.runNetworkLatency(ctx, exp, result)
 	case ExperimentNetworkPartition:
 		return e.runNetworkPartition(ctx, exp, result)
 	default:
-		return nil, fmt.Errorf("unsupported experiment type: %s", exp.Type)
+		return fail(result, fmt.Errorf("unsupported experiment type: %s", exp.Type))
 	}
+}
+
+// ValidateExperiment rejects unbounded or ambiguous destructive experiments.
+func ValidateExperiment(exp Experiment) error {
+	if strings.TrimSpace(exp.Name) == "" {
+		return fmt.Errorf("experiment name is required")
+	}
+	if strings.TrimSpace(exp.Namespace) == "" {
+		return fmt.Errorf("experiment namespace is required")
+	}
+	if len(exp.Selector) == 0 {
+		return fmt.Errorf("experiment selector is required")
+	}
+	if exp.Type == ExperimentPodKill || exp.Type == ExperimentPodFailure {
+		if exp.Parameters.KillPercentage < 1 || exp.Parameters.KillPercentage > 100 {
+			return fmt.Errorf("kill percentage must be between 1 and 100")
+		}
+	}
+	return nil
+}
+
+// CleanupExperiment removes resources created by an experiment. It is safe to retry.
+func (e *Engine) CleanupExperiment(ctx context.Context, exp Experiment) error {
+	if exp.Type != ExperimentNetworkPartition {
+		return nil
+	}
+	policy := &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{
+		Name:      fmt.Sprintf("chaos-%s-partition", exp.Name),
+		Namespace: exp.Namespace,
+	}}
+	if err := e.Delete(ctx, policy); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete network partition policy: %w", err)
+	}
+	return nil
 }
 
 // runPodKill kills a percentage of matching pods.
@@ -125,18 +154,11 @@ func (e *Engine) runPodKill(ctx context.Context, exp Experiment, result *Experim
 	}
 
 	result.TargetPods = len(pods)
-	killCount := len(pods) * exp.Parameters.KillPercentage / 100
-	if killCount < 1 && len(pods) > 0 {
-		killCount = 1
-	}
-
-	// Select random pods to kill
-	selected := selectRandom(pods, killCount)
+	selected := selectTargets(pods, exp.Parameters.KillPercentage, exp.Seed)
 	for _, pod := range selected {
 		logger.Info("killing pod", "pod", pod.Name)
 		if err := e.Delete(ctx, &pod); err != nil {
-			result.Observations = append(result.Observations,
-				fmt.Sprintf("failed to kill pod %s: %v", pod.Name, err))
+			return fail(result, fmt.Errorf("delete pod %s: %w", pod.Name, err))
 		} else {
 			result.AffectedPods++
 			result.Observations = append(result.Observations,
@@ -144,10 +166,7 @@ func (e *Engine) runPodKill(ctx context.Context, exp Experiment, result *Experim
 		}
 	}
 
-	result.Status = "completed"
-	result.EndTime = time.Now()
-	result.Duration = result.EndTime.Sub(result.StartTime)
-	return result, nil
+	return complete(result)
 }
 
 // runPodFailure evicts pods via the Eviction API.
@@ -161,12 +180,7 @@ func (e *Engine) runPodFailure(ctx context.Context, exp Experiment, result *Expe
 	}
 
 	result.TargetPods = len(pods)
-	killCount := len(pods) * exp.Parameters.KillPercentage / 100
-	if killCount < 1 && len(pods) > 0 {
-		killCount = 1
-	}
-
-	selected := selectRandom(pods, killCount)
+	selected := selectTargets(pods, exp.Parameters.KillPercentage, exp.Seed)
 	for _, pod := range selected {
 		eviction := &policyv1.Eviction{
 			ObjectMeta: metav1.ObjectMeta{
@@ -175,9 +189,8 @@ func (e *Engine) runPodFailure(ctx context.Context, exp Experiment, result *Expe
 			},
 		}
 		if err := e.SubResource("eviction").Create(ctx, &pod, eviction); err != nil {
-			logger.Info("eviction failed", "pod", pod.Name, "error", err)
-			result.Observations = append(result.Observations,
-				fmt.Sprintf("eviction failed for %s: %v", pod.Name, err))
+			logger.Error(err, "eviction failed", "pod", pod.Name)
+			return fail(result, fmt.Errorf("evict pod %s: %w", pod.Name, err))
 		} else {
 			result.AffectedPods++
 			result.Observations = append(result.Observations,
@@ -185,45 +198,7 @@ func (e *Engine) runPodFailure(ctx context.Context, exp Experiment, result *Expe
 		}
 	}
 
-	result.Status = "completed"
-	result.EndTime = time.Now()
-	result.Duration = result.EndTime.Sub(result.StartTime)
-	return result, nil
-}
-
-// runNetworkLatency annotates pods with latency injection metadata.
-// Requires a CNI plugin (e.g., Cilium, Istio) that reads these annotations.
-func (e *Engine) runNetworkLatency(ctx context.Context, exp Experiment, result *ExperimentResult) (*ExperimentResult, error) {
-	logger := log.FromContext(ctx)
-	pods, err := e.listTargetPods(ctx, exp.Namespace, exp.Selector)
-	if err != nil {
-		result.Status = "failed"
-		result.Error = err.Error()
-		return result, err
-	}
-
-	result.TargetPods = len(pods)
-	for _, pod := range pods {
-		patch := client.MergeFrom(pod.DeepCopy())
-		if pod.Annotations == nil {
-			pod.Annotations = make(map[string]string)
-		}
-		pod.Annotations["chaos.ckodex.org/network-latency-ms"] = fmt.Sprintf("%d", exp.Parameters.LatencyMs)
-		pod.Annotations["chaos.ckodex.org/network-jitter-ms"] = fmt.Sprintf("%d", exp.Parameters.JitterMs)
-		pod.Annotations["chaos.ckodex.org/experiment"] = exp.Name
-		if err := e.Patch(ctx, &pod, patch); err != nil {
-			logger.Info("failed to annotate pod for latency", "pod", pod.Name, "error", err)
-		} else {
-			result.AffectedPods++
-			result.Observations = append(result.Observations,
-				fmt.Sprintf("injected %dms latency on %s", exp.Parameters.LatencyMs, pod.Name))
-		}
-	}
-
-	result.Status = "completed"
-	result.EndTime = time.Now()
-	result.Duration = result.EndTime.Sub(result.StartTime)
-	return result, nil
+	return complete(result)
 }
 
 // runNetworkPartition creates a deny-all NetworkPolicy to simulate partition.
@@ -258,10 +233,7 @@ func (e *Engine) runNetworkPartition(ctx context.Context, exp Experiment, result
 	result.AffectedPods = 1 // policy-level
 	result.Observations = append(result.Observations,
 		fmt.Sprintf("created deny-all NetworkPolicy %s for partition", policy.Name))
-	result.Status = "completed"
-	result.EndTime = time.Now()
-	result.Duration = result.EndTime.Sub(result.StartTime)
-	return result, nil
+	return complete(result)
 }
 
 func (e *Engine) listTargetPods(ctx context.Context, namespace string, selector map[string]string) ([]corev1.Pod, error) {
@@ -284,18 +256,38 @@ func (e *Engine) listTargetPods(ctx context.Context, namespace string, selector 
 	return running, nil
 }
 
-func selectRandom(pods []corev1.Pod, count int) []corev1.Pod {
+func selectTargets(pods []corev1.Pod, percentage int, seed int64) []corev1.Pod {
+	count := len(pods) * percentage / 100
+	if count == 0 && len(pods) > 0 {
+		count = 1
+	}
 	if count >= len(pods) {
 		return pods
 	}
-	shuffled := make([]corev1.Pod, len(pods))
-	copy(shuffled, pods)
-	rand.Shuffle(len(shuffled), func(i, j int) {
+	shuffled := append([]corev1.Pod(nil), pods...)
+	sort.Slice(shuffled, func(i, j int) bool { return shuffled[i].Name < shuffled[j].Name })
+	rand.New(rand.NewSource(seed)).Shuffle(len(shuffled), func(i, j int) {
 		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
 	})
 	return shuffled[:count]
 }
 
-func init() {
-	_ = metav1.Now // keep import
+func complete(result *ExperimentResult) (*ExperimentResult, error) {
+	result.Status = "completed"
+	result.EndTime = time.Now()
+	result.Duration = result.EndTime.Sub(result.StartTime)
+	return result, nil
+}
+
+func fail(result *ExperimentResult, err error) (*ExperimentResult, error) {
+	result.Status = "failed"
+	result.Error = err.Error()
+	result.EndTime = time.Now()
+	result.Duration = result.EndTime.Sub(result.StartTime)
+	return result, err
+}
+
+func failedResult(exp Experiment, err error) (*ExperimentResult, error) {
+	result := &ExperimentResult{Name: exp.Name, Type: exp.Type, StartTime: time.Now()}
+	return fail(result, err)
 }

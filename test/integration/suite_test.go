@@ -87,8 +87,11 @@ func TestMain(m *testing.M) {
 		// Attempt the default location used by controller-runtime's Makefile
 		defaultAssets := filepath.Join(repoRoot(), "bin", "k8s")
 		if _, err := os.Stat(defaultAssets); os.IsNotExist(err) {
-			// FACT: envtest binaries absent — skip gracefully rather than fail.
-			// Operators can still gate on this in CI by setting KUBEBUILDER_ASSETS.
+			if os.Getenv("REQUIRE_ENVTEST") == "1" {
+				fmt.Fprintln(os.Stderr, "KUBEBUILDER_ASSETS is required for this integration gate")
+				os.Exit(1)
+			}
+			// Local unit-test runs may omit envtest assets.
 			os.Exit(0)
 		}
 	}

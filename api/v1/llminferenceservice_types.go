@@ -117,6 +117,23 @@ type ExperimentalSpec struct {
 	// Moved from spec.worker in v1alpha2.
 	// +optional
 	Worker *WorkerSpec `json:"worker,omitempty"`
+
+	// KVCache configures distributed KV transfer for prefill/decode serving.
+	// It remains experimental until connector APIs stabilize across runtimes.
+	// +optional
+	KVCache *KVCacheSpec `json:"kvCache,omitempty"`
+}
+
+type KVCacheSpec struct {
+	Dtype       string          `json:"dtype,omitempty"`
+	SwapSpaceGB *int32          `json:"swapSpaceGB,omitempty"`
+	Transfer    *KVTransferSpec `json:"transfer,omitempty"`
+}
+
+type KVTransferSpec struct {
+	Connector   string            `json:"connector"`
+	Role        string            `json:"role,omitempty"`
+	ExtraConfig map[string]string `json:"extraConfig,omitempty"`
 }
 
 // ModelSpec defines the model to serve.

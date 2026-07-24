@@ -110,6 +110,28 @@ jobs:
           args: scan-hugging-face-initializer-arch --source=. --arch=amd64
           dagger-flags: --progress plain
 
+      - name: Run bidirectional conformance vectors
+        uses: dagger/dagger-for-github@v8.4.0
+        timeout-minutes: 5
+        env:
+          DAGGER_NO_NAG: "1"
+        with:
+          version: v0.21.7
+          verb: call
+          args: conformance --source=.
+          dagger-flags: --progress plain
+
+      - name: Run envtest integration suite
+        uses: dagger/dagger-for-github@v8.4.0
+        timeout-minutes: 10
+        env:
+          DAGGER_NO_NAG: "1"
+        with:
+          version: v0.21.7
+          verb: call
+          args: integration --source=.
+          dagger-flags: --progress plain
+
       - name: Rehearse release artifacts
         run: make release-readiness
 

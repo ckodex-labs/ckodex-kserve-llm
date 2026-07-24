@@ -42,6 +42,14 @@ test: generate manifests envtest ## Run unit + integration tests
 e2e-test: ## Run E2E tests (requires KIND cluster)
 	go test ./test/e2e/... -v -timeout 600s -tags=e2e
 
+.PHONY: conformance
+conformance: ## Run specification-backed conformance vectors
+	go test -race ./test/conformance/...
+
+.PHONY: integration-test
+integration-test: envtest ## Run envtest integration suite; fails if assets are unavailable
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use -p path '1.35.x!')" REQUIRE_ENVTEST=1 go test -race -count=1 -p 1 ./test/integration/...
+
 ##@ Build
 
 .PHONY: build

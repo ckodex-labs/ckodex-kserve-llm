@@ -49,6 +49,9 @@ func (r *HFCSIReconciler) Reconcile(ctx context.Context, llmSvc *servingv1alpha2
 	}
 	logger := log.FromContext(ctx).WithValues("component", "hfcsi")
 	repo, revision := parseHFMountURI(llmSvc.Spec.Model.URI)
+	if llmSvc.Spec.Model.Revision != "" {
+		revision = llmSvc.Spec.Model.Revision
+	}
 	pvName := HFPVName(llmSvc)
 
 	if err := r.reconcilePV(ctx, logger, llmSvc, pvName, repo, revision); err != nil {

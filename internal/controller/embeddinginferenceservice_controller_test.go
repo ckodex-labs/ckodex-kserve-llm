@@ -353,3 +353,17 @@ func TestEmbeddingReconcile_SyncStatus(t *testing.T) {
 	require.NotNil(t, cond)
 	assert.Equal(t, metav1.ConditionTrue, cond.Status)
 }
+
+func TestEmbeddingContainer_NVIDIAAccelerator(t *testing.T) {
+	svc := newEmbSvc("gpu", "ns")
+	svc.Spec.Runtime = servingv1alpha2.EmbeddingRuntimeTextEmbeddingsInference
+	svc.Spec.Accelerator = &servingv1alpha2.AcceleratorSpec{Type: servingv1alpha2.AcceleratorTypeNVIDIA, Count: ptr.To(int32(2))}
+	c := (&EmbeddingInferenceServiceReconciler{}).buildEmbeddingContainer(svc)
+	assert.Contains(t, c.Image, "@sha256:")
+	limit := c.Resources.Limits["nvidia.com/gpu"]
+	request := c.Resources.Requests["nvidia.com/gpu"]
+	assert.Equal(t, int64(2), limit.Value())
+	assert.Equal(t, int64(2), request.Value())
+	svc.Spec.RuntimeImage = "registry.example/tei:approved"
+	assert.Equal(t, svc.Spec.RuntimeImage, (&EmbeddingInferenceServiceReconciler{}).buildEmbeddingContainer(svc).Image)
+}

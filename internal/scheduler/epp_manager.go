@@ -29,7 +29,7 @@ const (
 	// EPPImage is the Endpoint Picker Pod container image.
 	// Pinned — :latest is a supply chain risk and air-gapped deployment blocker.
 	// Must match OperatorConfig.Scheduler.Image default.
-	EPPImage = "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0"
+	EPPImage = "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc"
 	// EPPPort is the EPP gRPC port (Gateway ExtensionRef).
 	EPPPort int32 = 9002
 	// EPPMetricsPort is the metrics/health port.
@@ -43,6 +43,7 @@ const (
 type EPPManager struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Image  string
 }
 
 // Reconcile creates/updates the EPP Deployment and Service.
@@ -50,6 +51,9 @@ func (m *EPPManager) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMI
 	logger := log.FromContext(ctx).WithValues("component", "epp")
 
 	replicas := int32(1)
+	if llmSvc.Spec.Router.Scheduler == nil {
+		return fmt.Errorf("scheduler is not configured")
+	}
 	if llmSvc.Spec.Router.Scheduler.Replicas != nil {
 		replicas = *llmSvc.Spec.Router.Scheduler.Replicas
 	}
@@ -71,6 +75,10 @@ func (m *EPPManager) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMI
 func (m *EPPManager) reconcileDeployment(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32) error {
 	labels := eppLabels(llmSvc)
 	name := llmSvc.Name + "-epp"
+	image := m.Image
+	if image == "" {
+		image = EPPImage
+	}
 
 	desired := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -87,21 +95,27 @@ func (m *EPPManager) reconcileDeployment(ctx context.Context, llmSvc *servingv1a
 					Containers: []corev1.Container{
 						{
 							Name:  "epp",
-							Image: EPPImage,
+							Image: image,
 							Args: []string{
 								"--pool-name=" + llmSvc.Name,
 								"--pool-namespace=" + llmSvc.Namespace,
+								"--pool-group=inference.networking.k8s.io",
+								"--config-file=/config/scheduler.yaml",
 								fmt.Sprintf("--grpc-port=%d", EPPPort),
 								fmt.Sprintf("--metrics-port=%d", EPPMetricsPort),
 								fmt.Sprintf("--grpc-health-port=%d", EPPHealthPort),
 								"--secure-serving=false",
 								"--metrics-endpoint-auth=false",
+								"--tracing=false",
 							},
 							Ports: []corev1.ContainerPort{
 								{Name: "grpc", ContainerPort: EPPPort, Protocol: corev1.ProtocolTCP},
 								{Name: "metrics", ContainerPort: EPPMetricsPort, Protocol: corev1.ProtocolTCP},
 								{Name: "health", ContainerPort: EPPHealthPort, Protocol: corev1.ProtocolTCP},
 							},
+							VolumeMounts: []corev1.VolumeMount{{
+								Name: "plugins-config-volume", MountPath: "/config", ReadOnly: true,
+							}},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									GRPC: &corev1.GRPCAction{Port: EPPHealthPort},
@@ -125,6 +139,12 @@ func (m *EPPManager) reconcileDeployment(ctx context.Context, llmSvc *servingv1a
 							},
 						},
 					},
+					Volumes: []corev1.Volume{{
+						Name: "plugins-config-volume",
+						VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{Name: llmSvc.Name + "-scheduler-config"},
+						}},
+					}},
 				},
 			},
 		},

@@ -13,8 +13,9 @@ workload APIs, disaggregated prefill/decode, shared caches, and variant
 autoscaling.
 
 This repository predates that upstream convergence and currently owns a CKodex
-API plus selected integrations. In particular, the presence of the llm-d EPP
-image does not mean the complete llm-d 0.8.1 architecture is installed.
+API plus selected integrations. The scheduler path targets the GA Gateway API
+Inference Extension v1 `InferencePool` and its v1.5.0 EPP; it does not imply
+complete llm-d conformance.
 vLLM's in-process prefix cache is also not LMCache. The operator now exposes a
 version-neutral KV-transfer contract for NIXL, LMCache, and Mooncake and wires
 it into vLLM's `--kv-transfer-config` for disaggregated prefill/decode. It does
@@ -27,8 +28,10 @@ tail latency, and failover remain live-cluster acceptance gates.
   of upstream storage, routing, or workload primitives.
 - Keep the CKodex controller focused on governance, policy, evidence, and the
   compatibility surface that is not yet migrated.
-- Describe EPP routing as a component integration, not as full llm-d 0.8.1
-  conformance.
+- Reconcile scheduler configuration, the digest-pinned v1.5.0 EPP, its Service,
+  and the GA `inference.networking.k8s.io/v1` `InferencePool` only after the
+  user explicitly supplies `router.scheduler`. Missing CRDs and EPP readiness
+  fail closed.
 - Preserve the current API while a separate, tested migration maps CKodex
   fields to upstream KServe resources. This repair does not silently replace
   existing CRDs.
@@ -38,9 +41,9 @@ tail latency, and failover remain live-cluster acceptance gates.
   health probes.
 - Runtime images and model paths remain explicit: the configured vLLM image is
   honored, and the mounted artifact is passed as `--model /mnt/models`.
-- KV-transfer configuration is explicit and backend-neutral: connector-specific
-  settings stay in `extraConfig`; the operator does not claim llm-d/LMCache
-  conformance until live evidence covers the enabled data path.
+- KV-transfer configuration remains backend-neutral at the low level. Typed
+  LMCache configuration adds equal in-process and upstream multiprocess paths,
+  while cache-hit and failover claims remain gated on live evidence.
 
 ## Consequences
 
@@ -55,5 +58,6 @@ producing incomplete worker pods.
 ## References
 
 - [KServe v0.19.0](https://github.com/kserve/kserve/releases/tag/v0.19.0)
-- [llm-d v0.8.1](https://github.com/llm-d/llm-d/releases/tag/v0.8.1)
+- [Gateway API Inference Extension v1.5.0](https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/tag/v1.5.0)
+- [LMCache operator-v0.1.1](https://github.com/LMCache/LMCache/releases/tag/operator-v0.1.1)
 - [vLLM v0.25.1](https://github.com/vllm-project/vllm/releases/tag/v0.25.1)

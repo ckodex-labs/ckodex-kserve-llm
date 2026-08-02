@@ -49,11 +49,11 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ## Operator
 
-### L-OP-006 — Integrate LMCache without conflating it with vLLM prefix caching
+### L-OP-006 — Validate LMCache live behavior without conflating it with model-weight caching
 
-- **Status:** in-progress
+- **Status:** implementation-complete; live acceptance open
 - **Priority:** P1
-- **Context:** Connector configuration and prefill/decode Deployment lifecycle are now reconciled. The operator renders vLLM `--kv-transfer-config` for NIXL, LMCache, or Mooncake and rejects PD configurations without a connector. A live cache-hit, transfer-tail-latency, and failover run remains required before promotion.
+- **Context:** Typed in-process and upstream `LMCacheEngine` multiprocess configuration are reconciled while the original low-level connector contract remains compatible. A live cache-hit, transfer-tail-latency, image/ABI, and failover run remains required before promotion. `LocalModelCache` continues to own model-weight placement.
 - **Reference:** ADR-009, `internal/scheduler/epp_manager.go`
 
 ### L-OP-005 — Align LoRA cache ownership with cluster-scoped LocalModelCache

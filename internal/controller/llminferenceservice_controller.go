@@ -7,6 +7,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -46,6 +48,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/governance"
 	kserveintegration "github.com/ckodex-labs/kserve-llm-operator/internal/kserve"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/scheduler"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/security"
 )
 
@@ -56,6 +59,7 @@ type LLMInferenceServiceReconciler struct {
 	client.Client
 	Scheme                            *runtime.Scheme
 	Gateway                           *gateway.Reconciler
+	Scheduler                         *scheduler.Reconciler
 	Autoscaler                        *autoscaler.Reconciler
 	OPA                               *security.OPAReconciler // nil when EnableSecurity=false
 	OPAConfig                         security.OPAConfig      // populated from OperatorConfig.Security when OPA != nil
@@ -116,6 +120,7 @@ type LLMInferenceServiceReconciler struct {
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;httproutes;grpcroutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=inference.networking.k8s.io,resources=inferencepools,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=serving.kserve.io,resources=inferenceservices,verbs=get;list;watch;create;update;patch;delete
@@ -236,6 +241,64 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 		if err := r.reconcilePrefillDeployment(ctx, &llmSvc); err != nil {
 			return ctrl.Result{}, fmt.Errorf("reconcile prefill deployment: %w", err)
+		}
+	}
+
+	if llmSvc.Spec.Router.Scheduler != nil {
+		if r.Scheduler == nil {
+			err := fmt.Errorf("scheduler is requested but the scheduler feature is disabled")
+			condition := metav1.Condition{
+				Type: servingv1alpha2.ConditionSchedulerReady, Status: metav1.ConditionFalse,
+				Reason: "SchedulerFeatureDisabled", Message: err.Error(), ObservedGeneration: llmSvc.Generation,
+			}
+			meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
+			setSchedulerGateReadyCondition(&llmSvc, condition.Message)
+			if r.Gateway != nil {
+				err = errors.Join(err, r.Gateway.Reconcile(ctx, &llmSvc))
+			}
+			err = errors.Join(err, r.Status().Patch(ctx, &llmSvc, client.MergeFrom(llmSvcBeforePatch)))
+			return ctrl.Result{}, err
+		}
+		ready, err := r.Scheduler.Reconcile(ctx, &llmSvc)
+		condition := metav1.Condition{
+			Type: servingv1alpha2.ConditionSchedulerReady, Status: metav1.ConditionFalse,
+			Reason: "EndpointPickerUnavailable", Message: "Waiting for the GA InferencePool and EPP readiness",
+			ObservedGeneration: llmSvc.Generation,
+		}
+		if err != nil {
+			condition.Reason = "SchedulerReconcileFailed"
+			condition.Message = err.Error()
+			meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
+			setSchedulerGateReadyCondition(&llmSvc, condition.Message)
+			if r.Gateway != nil {
+				err = errors.Join(err, r.Gateway.Reconcile(ctx, &llmSvc))
+			}
+			err = errors.Join(err, r.Status().Patch(ctx, &llmSvc, client.MergeFrom(llmSvcBeforePatch)))
+			return ctrl.Result{}, fmt.Errorf("reconcile scheduler: %w", err)
+		}
+		if !ready {
+			meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
+			setSchedulerGateReadyCondition(&llmSvc, condition.Message)
+			if r.Gateway != nil {
+				if err := r.Gateway.Reconcile(ctx, &llmSvc); err != nil {
+					return ctrl.Result{}, fmt.Errorf("route scheduler fail-closed backend: %w", err)
+				}
+			}
+			if err := r.Status().Patch(ctx, &llmSvc, client.MergeFrom(llmSvcBeforePatch)); err != nil {
+				return ctrl.Result{}, fmt.Errorf("update scheduler readiness: %w", err)
+			}
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		condition.Status = metav1.ConditionTrue
+		condition.Reason = "EndpointPickerReady"
+		condition.Message = "GA InferencePool and EPP are ready"
+		meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
+	} else {
+		meta.RemoveStatusCondition(&llmSvc.Status.Conditions, servingv1alpha2.ConditionSchedulerReady)
+		if r.Scheduler != nil {
+			if err := r.Scheduler.Cleanup(ctx, &llmSvc); err != nil {
+				return ctrl.Result{}, fmt.Errorf("cleanup disabled scheduler: %w", err)
+			}
 		}
 	}
 
@@ -390,6 +453,13 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+func setSchedulerGateReadyCondition(llmSvc *servingv1alpha2.LLMInferenceService, message string) {
+	meta.SetStatusCondition(&llmSvc.Status.Conditions, metav1.Condition{
+		Type: servingv1alpha2.ConditionReady, Status: metav1.ConditionFalse,
+		Reason: "SchedulerUnavailable", Message: message, ObservedGeneration: llmSvc.Generation,
+	})
 }
 
 // reconcileDeployment creates or updates the vLLM Deployment.

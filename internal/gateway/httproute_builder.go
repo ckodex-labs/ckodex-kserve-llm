@@ -27,6 +27,16 @@ func BuildHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters []serv
 		svcName = gwapiv1.ObjectName(kserveintegration.PredictorServiceName(llmSvc))
 	}
 	svcPort := gwapiv1.PortNumber(80)
+	var backendGroup *gwapiv1.Group
+	var backendKind *gwapiv1.Kind
+	if llmSvc.Spec.Router.Scheduler != nil {
+		group := gwapiv1.Group("inference.networking.k8s.io")
+		kind := gwapiv1.Kind("InferencePool")
+		backendGroup = &group
+		backendKind = &kind
+		svcName = gwapiv1.ObjectName(llmSvc.Name)
+		svcPort = gwapiv1.PortNumber(8000)
+	}
 
 	// Resilience preparation (M3 Phase 4)
 	var timeouts *gwapiv1.HTTPRouteTimeouts
@@ -48,8 +58,10 @@ func BuildHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters []serv
 	backendRef := gwapiv1.HTTPBackendRef{
 		BackendRef: gwapiv1.BackendRef{
 			BackendObjectReference: gwapiv1.BackendObjectReference{
-				Name: svcName,
-				Port: &svcPort,
+				Group: backendGroup,
+				Kind:  backendKind,
+				Name:  svcName,
+				Port:  &svcPort,
 			},
 		},
 	}

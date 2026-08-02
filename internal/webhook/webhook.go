@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -106,6 +107,15 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 		if !valid {
 			errs = append(errs, fmt.Sprintf("spec.model.uri must start with one of: %v", validSchemes))
 		}
+
+		if llmSvc.Spec.Model.Revision != "" {
+			if !isHuggingFaceURI(uriLower) {
+				errs = append(errs, "spec.model.revision is supported only for hf://, hf-mount://, or hf-mirror:// URIs")
+			}
+			if uriHasRevision(llmSvc.Spec.Model.URI) {
+				errs = append(errs, "spec.model.revision cannot be combined with @revision URI syntax")
+			}
+		}
 	}
 
 	// Validate model name
@@ -158,6 +168,36 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 		if llmSvc.Spec.KVCache == nil || llmSvc.Spec.KVCache.Transfer == nil || llmSvc.Spec.KVCache.Transfer.Connector == "" {
 			errs = append(errs, "spec.prefill requires spec.kvCache.transfer.connector (nixl, lmcache, or mooncake)")
 		}
+	}
+
+	if llmSvc.Spec.KVCache != nil && llmSvc.Spec.KVCache.Transfer != nil {
+		t := llmSvc.Spec.KVCache.Transfer
+		if t.LMCache != nil {
+			if t.Connector != "lmcache" {
+				errs = append(errs, "spec.kvCache.transfer.lmcache requires connector=lmcache")
+			}
+			mode := t.LMCache.Mode
+			if mode == "" {
+				mode = servingv1alpha2.LMCacheModeInProcess
+			}
+			switch mode {
+			case servingv1alpha2.LMCacheModeInProcess:
+				if t.LMCache.EngineRef != nil {
+					errs = append(errs, "spec.kvCache.transfer.lmcache.engineRef is valid only in multiprocess mode")
+				}
+			case servingv1alpha2.LMCacheModeMultiprocess:
+				if t.LMCache.EngineRef == nil || t.LMCache.EngineRef.Name == "" {
+					errs = append(errs, "spec.kvCache.transfer.lmcache.engineRef.name is required in multiprocess mode")
+				}
+			}
+		}
+	}
+
+	if llmSvc.Spec.Router.Scheduler != nil && llmSvc.Spec.Canary != nil {
+		errs = append(errs, "spec.router.scheduler cannot be combined with spec.canary until both InferencePools are explicitly modeled")
+	}
+	if llmSvc.Spec.Router.Scheduler != nil && llmSvc.Spec.Worker != nil {
+		errs = append(errs, "spec.router.scheduler is not supported with KServe multi-node workerSpec")
 	}
 
 	if len(errs) > 0 {
@@ -279,11 +319,38 @@ func (d *LLMInferenceServiceDefaulter) Default(_ context.Context, llmSvc *servin
 		}
 	}
 
-	// Default scheduler replicas
-	if llmSvc.Spec.Router.Scheduler.Replicas == nil {
+	// Default scheduler replicas only after the user explicitly opts in.
+	if llmSvc.Spec.Router.Scheduler != nil && llmSvc.Spec.Router.Scheduler.Replicas == nil {
 		one := int32(1)
 		llmSvc.Spec.Router.Scheduler.Replicas = &one
 	}
 
+	if llmSvc.Spec.KVCache != nil && llmSvc.Spec.KVCache.Transfer != nil && llmSvc.Spec.KVCache.Transfer.LMCache != nil {
+		lmcache := llmSvc.Spec.KVCache.Transfer.LMCache
+		if lmcache.Mode == "" {
+			lmcache.Mode = servingv1alpha2.LMCacheModeInProcess
+		}
+		if lmcache.Mode == servingv1alpha2.LMCacheModeInProcess {
+			if lmcache.ChunkSize == nil {
+				lmcache.ChunkSize = ptr.To(int32(256))
+			}
+			if lmcache.LocalCPU == nil {
+				lmcache.LocalCPU = ptr.To(true)
+			}
+			if lmcache.LocalCPUSizeGiB == nil {
+				lmcache.LocalCPUSizeGiB = ptr.To(int32(20))
+			}
+		}
+	}
+
 	return nil
+}
+
+func isHuggingFaceURI(uri string) bool {
+	return strings.HasPrefix(uri, "hf://") || strings.HasPrefix(uri, "hf-mount://") || strings.HasPrefix(uri, "hf-mirror://")
+}
+
+func uriHasRevision(uri string) bool {
+	parts := strings.SplitN(uri, "://", 2)
+	return len(parts) == 2 && strings.Contains(parts[1], "@")
 }

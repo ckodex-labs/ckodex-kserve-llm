@@ -65,6 +65,11 @@ spec:
                   name:
                     description: Name is the model identifier used in inference requests.
                     type: string
+                  revision:
+                    description: |-
+                      Revision pins a Hugging Face branch, tag, or commit. It is valid only
+                      with hf://, hf-mount://, or hf-mirror:// URIs.
+                    type: string
                   storage:
                     description: Storage configures credentials for model download.
                     properties:
@@ -265,6 +270,11 @@ spec:
                     description: |-
                       Name is the model identifier used in inference requests.
                       This is the value clients use in the "model" field of chat/completion requests.
+                    type: string
+                  revision:
+                    description: |-
+                      Revision pins a Hugging Face branch, tag, or commit. It is valid only
+                      with hf://, hf-mount://, or hf-mirror:// URIs.
                     type: string
                   storage:
                     description: |-

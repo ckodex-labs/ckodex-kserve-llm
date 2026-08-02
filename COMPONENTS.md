@@ -25,10 +25,10 @@ Components responsible for model distribution and observability.
 | **KServe** | `v0.19.0` | `ghcr.io/kserve/charts/kserve-resources:v0.19.0` | Local integration baseline. |
 | **KServe Storage Init** | `v0.19.0` | `kserve/storage-initializer:v0.19.0` | Standard S3/OCI model download. |
 | **llm-d** | `v0.8.1` | Release bundle | Orchestration compatibility baseline. |
-| **llm-d Router EPP** | `v0.9.0` | `ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0` | KV-aware endpoint selection. |
+| **Gateway API Inference Extension EPP** | `v1.5.0` | `registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679…810bc` | GA `InferencePool` KV-aware endpoint selection. |
 | **Hugging Face CSI** | `v0.11.1` | `ghcr.io/huggingface/charts/hf-csi-driver:0.11.1` | Lazy `hf-mount://` model access. |
 | **SeaweedFS** | `4.40` | `chrislusf/seaweedfs:4.40` | External S3/filer integration target; not installed by this chart. |
-| **LMCache** | `operator-v0.5.1` | External KServe/vLLM integration | Not reconciled by this operator; see L-OP-006. |
+| **LMCache** | `operator-v0.1.1` | Typed in-process and upstream multiprocess integration | `LMCacheEngine` remains owned by the upstream operator; see L-OP-006. |
 | **CKodex Storage Init** | `v0.1.0` | `ckodex/storage-initializer:v0.1.0` | Optimized swfs:// and hf:// downloads. |
 | **Vector Sidecar** | `0.54.0` | `timberio/vector:0.54.0-distroless-libc` | OIS Signal translation & OTel routing. |
 | **SeaweedFS Client** | `v3.x` | Go SDK (integrated) | High-speed model weight distribution. |
@@ -73,8 +73,8 @@ The release tags above were checked against the upstream GitHub release APIs:
 - [llm-d v0.8.1](https://github.com/llm-d/llm-d/releases/tag/v0.8.1)
 - [vLLM v0.25.1](https://github.com/vllm-project/vllm/releases/tag/v0.25.1)
 - [SeaweedFS 4.40](https://github.com/seaweedfs/seaweedfs/releases/tag/4.40)
-- [LMCache operator-v0.5.1](https://github.com/LMCache/LMCache/releases/tag/operator-v0.5.1)
+- [LMCache operator-v0.1.1](https://github.com/LMCache/LMCache/releases/tag/operator-v0.1.1)
 
-LMCache is an intentional non-dependency today: enabling it requires a
-`LMCacheConnectorV1` vLLM configuration and a separately operated backing
-store. A router image alone is not LMCache support.
+LMCache remains an optional dependency. CKodex renders the in-process connector
+or consumes the upstream operator's multiprocess connection ConfigMap; live
+cache-hit and failover evidence remains a separate promotion gate.

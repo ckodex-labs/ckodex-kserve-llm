@@ -33,6 +33,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/gateway"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/health"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/scheduler"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/security"
 	appversion "github.com/ckodex-labs/kserve-llm-operator/internal/version"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/webhook"
@@ -162,6 +163,15 @@ func main() {
 			EnableGRPC: cfg.Features.EnableGRPC,
 		}
 		setupLog.Info("gateway reconciler enabled", "grpc", cfg.Features.EnableGRPC)
+	}
+
+	if cfg.Features.EnableScheduler {
+		reconciler.Scheduler = &scheduler.Reconciler{
+			Config: &scheduler.ConfigReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},
+			EPP:    &scheduler.EPPManager{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Image: cfg.Scheduler.Image},
+			Pool:   &scheduler.InferencePoolManager{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},
+		}
+		setupLog.Info("scheduler reconciler enabled")
 	}
 
 	// Autoscaler

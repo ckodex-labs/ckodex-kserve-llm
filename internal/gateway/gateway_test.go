@@ -70,6 +70,22 @@ func TestBuildHTTPRoute_BackendRef(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPRoute_SchedulerUsesInferencePool(t *testing.T) {
+	llmSvc := baseLLMSvc("scheduled")
+	llmSvc.Spec.Router.Scheduler = &servingv1alpha2.SchedulerSpec{}
+	route := BuildHTTPRoute(llmSvc, nil)
+	ref := route.Spec.Rules[0].BackendRefs[0].BackendRef.BackendObjectReference
+	if ref.Group == nil || string(*ref.Group) != "inference.networking.k8s.io" {
+		t.Fatalf("backend group = %v", ref.Group)
+	}
+	if ref.Kind == nil || string(*ref.Kind) != "InferencePool" {
+		t.Fatalf("backend kind = %v", ref.Kind)
+	}
+	if ref.Port == nil || *ref.Port != 8000 {
+		t.Fatalf("backend port = %v", ref.Port)
+	}
+}
+
 func TestBuildHTTPRoute_MultiNodeUsesKServePredictorService(t *testing.T) {
 	llmSvc := baseLLMSvc("distributed")
 	llmSvc.Spec.Model.URI = "pvc://weights"

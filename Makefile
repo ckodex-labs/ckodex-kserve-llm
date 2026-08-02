@@ -18,7 +18,7 @@ generate: controller-gen ## Generate deepcopy, client, informer, lister code
 
 .PHONY: manifests
 manifests: controller-gen ## Generate CRD manifests, RBAC, webhook configs
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:allowDangerousTypes=true webhook paths="./..." output:crd:artifacts:config=config/crd output:rbac:artifacts:config=config/rbac output:webhook:artifacts:config=config/webhook
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:allowDangerousTypes=true,generateEmbeddedObjectMeta=true webhook paths="./..." output:crd:artifacts:config=config/crd output:rbac:artifacts:config=config/rbac output:webhook:artifacts:config=config/webhook
 
 .PHONY: fmt
 fmt: ## Run go fmt
@@ -185,6 +185,10 @@ console-build: ## Build console production bundle
 
 .PHONY: console-check
 console-check: console-build ## CI-visible console production gate
+
+.PHONY: crd-bundle
+crd-bundle: manifests ## Build a checksummed, installable CRD release bundle
+	bash hack/crd-bundle.sh
 
 .PHONY: release-readiness
 release-readiness: ## Rehearse local release artifacts and fail on hidden repo mutations

@@ -39,6 +39,7 @@ func eppSvc(name, ns string) *servingv1alpha2.LLMInferenceService {
 				Name: name,
 				URI:  "hf://meta-llama/Llama-3.2-1B",
 			},
+			Router: servingv1alpha2.RouterSpec{Scheduler: &servingv1alpha2.SchedulerSpec{}},
 		},
 	}
 }
@@ -129,9 +130,13 @@ func TestReconcileDeployment_ContainsPoolArgs(t *testing.T) {
 	args := dep.Spec.Template.Spec.Containers[0].Args
 	assert.Contains(t, args, "--pool-name=mistral")
 	assert.Contains(t, args, "--pool-namespace=prod")
+	assert.Contains(t, args, "--pool-group=inference.networking.k8s.io")
+	assert.Contains(t, args, "--config-file=/config/scheduler.yaml")
 	assert.Contains(t, args, "--grpc-health-port=9003")
 	assert.Contains(t, args, "--secure-serving=false")
 	assert.Equal(t, EPPHealthPort, dep.Spec.Template.Spec.Containers[0].ReadinessProbe.GRPC.Port)
+	require.Len(t, dep.Spec.Template.Spec.Volumes, 1)
+	assert.Equal(t, "mistral-scheduler-config", dep.Spec.Template.Spec.Volumes[0].ConfigMap.Name)
 }
 
 func TestReconcileDeployment_SecurityContextSet(t *testing.T) {

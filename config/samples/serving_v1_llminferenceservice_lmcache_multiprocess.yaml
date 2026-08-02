@@ -1,0 +1,22 @@
+apiVersion: serving.ckodex.com/v1
+kind: LLMInferenceService
+metadata:
+  name: lmcache-multiprocess
+spec:
+  model:
+    uri: hf://Qwen/Qwen3-4B-Instruct-2507
+    name: qwen3-4b
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: lmcache/vllm-openai:nightly-2026-04-06
+  router: {}
+  experimental:
+    kvCache:
+      transfer:
+        connector: lmcache
+        lmcache:
+          mode: multiprocess
+          engineRef:
+            name: ckodex-lmcache

@@ -54,11 +54,15 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 // BuildWithRole builds a model Deployment and, when configured, assigns its
 // distributed KV-transfer role (producer, consumer, or both) to vLLM.
 func (b *Builder) BuildWithRole(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32, hwType HardwareType, loras []servingv1alpha2.LLMLoraAdapter, kvRole string) *appsv1.Deployment {
-	labels := map[string]string{
+	selectorLabels := map[string]string{
 		"app.kubernetes.io/name":       "llminferenceservice",
 		"app.kubernetes.io/instance":   llmSvc.Name,
 		"app.kubernetes.io/managed-by": "ckodex-kserve-llm-operator",
 		"serving.ckodex.com/model":     strings.ReplaceAll(llmSvc.Spec.Model.Name, "/", "."),
+	}
+	labels := copyStringMap(llmSvc.Spec.Template.Labels)
+	for key, value := range selectorLabels {
+		labels[key] = value
 	}
 
 	podSpec := llmSvc.Spec.Template.Spec.DeepCopy()
@@ -94,7 +98,7 @@ func (b *Builder) BuildWithRole(ctx context.Context, llmSvc *servingv1alpha2.LLM
 	b.ensureModelVolumeMount(llmSvc, podSpec)
 	b.ensureHealthProbes(podSpec)
 	b.ensureSecurityContext(podSpec)
-	b.ensureTopologySpreadConstraints(podSpec, labels)
+	b.ensureTopologySpreadConstraints(podSpec, selectorLabels)
 
 	if len(loras) > 0 {
 		b.applyLoraAdapters(loras, podSpec)
@@ -115,8 +119,17 @@ func (b *Builder) BuildWithRole(ctx context.Context, llmSvc *servingv1alpha2.LLM
 	for k, v := range llmSvc.Spec.CostAllocationTags {
 		labels["ckodex.cost/"+strings.ReplaceAll(k, ".", "-")] = v
 	}
+	if isMultiprocessLMCache(llmSvc) {
+		labels["serving.ckodex.com/lmcache-mode"] = "multiprocess"
+	}
 
 	annotations := b.buildAnnotations(llmSvc, podSpec, kvRole)
+	podAnnotations := copyStringMap(llmSvc.Spec.Template.Annotations)
+	podAnnotations["prometheus.io/scrape"] = "true"
+	podAnnotations["prometheus.io/port"] = "8000"
+	if isMultiprocessLMCache(llmSvc) {
+		podAnnotations["serving.ckodex.com/lmcache-engine"] = llmSvc.Spec.KVCache.Transfer.LMCache.EngineRef.Name
+	}
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -129,15 +142,12 @@ func (b *Builder) BuildWithRole(ctx context.Context, llmSvc *servingv1alpha2.LLM
 			Replicas: &replicas,
 			Strategy: deploymentStrategyForReplicas(replicas),
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selectorLabels,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-					Annotations: map[string]string{
-						"prometheus.io/scrape": "true",
-						"prometheus.io/port":   "8000",
-					},
+					Labels:      labels,
+					Annotations: podAnnotations,
 				},
 				Spec: *podSpec,
 			},
@@ -192,13 +202,48 @@ func (b *Builder) applyKVTransfer(llmSvc *servingv1alpha2.LLMInferenceService, p
 		return
 	}
 	extra := parseKVExtraConfig(t.ExtraConfig)
+	if t.LMCache != nil && t.LMCache.Mode != servingv1alpha2.LMCacheModeMultiprocess {
+		if t.LMCache.ChunkSize != nil {
+			if _, exists := extra["chunk_size"]; !exists {
+				extra["chunk_size"] = *t.LMCache.ChunkSize
+			}
+		}
+		if t.LMCache.LocalCPU != nil {
+			if _, exists := extra["local_cpu"]; !exists {
+				extra["local_cpu"] = *t.LMCache.LocalCPU
+			}
+		}
+		if t.LMCache.LocalCPUSizeGiB != nil {
+			if _, exists := extra["max_local_cpu_size"]; !exists {
+				extra["max_local_cpu_size"] = *t.LMCache.LocalCPUSizeGiB
+			}
+		}
+	}
+	c := &podSpec.Containers[0]
+	if t.LMCache != nil && t.LMCache.Mode == servingv1alpha2.LMCacheModeMultiprocess && t.LMCache.EngineRef != nil {
+		configEnv := "CKODEX_LMCACHE_KV_TRANSFER_CONFIG"
+		if !hasEnv(c.Env, configEnv) {
+			c.Env = append(c.Env, corev1.EnvVar{
+				Name: configEnv,
+				ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: t.LMCache.EngineRef.Name + "-connection"},
+					Key:                  "kv-transfer-config",
+				}},
+			})
+		}
+		if !hasArg(c.Args, "--kv-transfer-config") {
+			c.Args = append(c.Args, "--kv-transfer-config", "$("+configEnv+")")
+		}
+		podSpec.HostIPC = true
+		setEnvDefault(c, "PYTHONHASHSEED", "0")
+		return
+	}
 	cfg, err := json.Marshal(map[string]interface{}{
 		"kv_connector": connector, "kv_role": role, "kv_connector_extra_config": extra,
 	})
 	if err != nil {
 		return
 	}
-	c := &podSpec.Containers[0]
 	if !hasArg(c.Args, "--kv-transfer-config") {
 		c.Args = append(c.Args, "--kv-transfer-config", string(cfg))
 	}
@@ -224,7 +269,40 @@ func (b *Builder) applyKVTransfer(llmSvc *servingv1alpha2.LLMInferenceService, p
 		if !hasEnv(c.Env, "LMCACHE_USE_EXPERIMENTAL") {
 			c.Env = append(c.Env, corev1.EnvVar{Name: "LMCACHE_USE_EXPERIMENTAL", Value: "True"})
 		}
+		if t.LMCache != nil {
+			setEnvDefault(c, "PYTHONHASHSEED", "0")
+			if t.LMCache.ChunkSize != nil {
+				setEnvDefault(c, "LMCACHE_CHUNK_SIZE", strconv.FormatInt(int64(*t.LMCache.ChunkSize), 10))
+			}
+			if t.LMCache.LocalCPU != nil {
+				setEnvDefault(c, "LMCACHE_LOCAL_CPU", strconv.FormatBool(*t.LMCache.LocalCPU))
+			}
+			if t.LMCache.LocalCPUSizeGiB != nil {
+				setEnvDefault(c, "LMCACHE_MAX_LOCAL_CPU_SIZE", strconv.FormatInt(int64(*t.LMCache.LocalCPUSizeGiB), 10))
+			}
+		}
 	}
+}
+
+func setEnvDefault(c *corev1.Container, name, value string) {
+	if !hasEnv(c.Env, name) {
+		c.Env = append(c.Env, corev1.EnvVar{Name: name, Value: value})
+	}
+}
+
+func isMultiprocessLMCache(llmSvc *servingv1alpha2.LLMInferenceService) bool {
+	return llmSvc.Spec.KVCache != nil && llmSvc.Spec.KVCache.Transfer != nil &&
+		llmSvc.Spec.KVCache.Transfer.LMCache != nil &&
+		llmSvc.Spec.KVCache.Transfer.LMCache.Mode == servingv1alpha2.LMCacheModeMultiprocess &&
+		llmSvc.Spec.KVCache.Transfer.LMCache.EngineRef != nil
+}
+
+func copyStringMap(src map[string]string) map[string]string {
+	dst := make(map[string]string, len(src)+4)
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
 }
 
 func hasEnv(env []corev1.EnvVar, name string) bool {
@@ -301,7 +379,7 @@ func isNilSPIREInjector(injector SPIREInjector) bool {
 // Returns nil if a ready LocalModelCache is found (enabling zero-copy bypass).
 // activeLMC is optional; if provided, it take precedence over listing from the client.
 func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, hwType HardwareType, activeLMC *servingv1alpha2.LocalModelCache) *corev1.Container {
-	uri := llmSvc.Spec.Model.URI
+	uri := effectiveModelURI(llmSvc.Spec.Model)
 	if uri == "" || strings.HasPrefix(uri, "modelpack://") || strings.HasPrefix(uri, "hf-mount://") || strings.HasPrefix(uri, "pvc://") {
 		return nil
 	}
@@ -426,6 +504,13 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 	b.applyRestrictedSecurityContext(container)
 
 	return container
+}
+
+func effectiveModelURI(model servingv1alpha2.ModelSpec) string {
+	if model.Revision == "" {
+		return model.URI
+	}
+	return model.URI + "@" + model.Revision
 }
 
 func (b *Builder) copyMatchingVolumeMounts(container *corev1.Container, podSpec *corev1.PodSpec, filePath string) {

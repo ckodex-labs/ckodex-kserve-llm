@@ -219,6 +219,11 @@ type ModelSpec struct {
 	// +kubebuilder:validation:Pattern=`^(hf|hf-mount|hf-mirror|s3|swfs|seaweedfs|gs|pvc|oci|ocis|modelpack|https?)://.*$`
 	URI string `json:"uri"`
 
+	// Revision pins a Hugging Face branch, tag, or commit. It is valid only
+	// with hf://, hf-mount://, or hf-mirror:// URIs.
+	// +optional
+	Revision string `json:"revision,omitempty"`
+
 	// Name is the model identifier used in inference requests.
 	// This is the value clients use in the "model" field of chat/completion requests.
 	Name string `json:"name"`
@@ -408,6 +413,51 @@ type KVTransferSpec struct {
 	// values already present in the pod template take precedence.
 	// +optional
 	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// LMCache provides a typed setup path. When omitted, the legacy connector,
+	// extraConfig, and env behavior is unchanged.
+	// +optional
+	LMCache *LMCacheSpec `json:"lmcache,omitempty"`
+}
+
+// LMCacheMode selects the LMCache integration topology.
+// +kubebuilder:validation:Enum=inProcess;multiprocess
+type LMCacheMode string
+
+const (
+	LMCacheModeInProcess    LMCacheMode = "inProcess"
+	LMCacheModeMultiprocess LMCacheMode = "multiprocess"
+)
+
+// LMCacheSpec configures either the in-process connector or an upstream
+// LMCacheEngine multiprocess server.
+type LMCacheSpec struct {
+	// Mode defaults to inProcess when the typed block is present.
+	// +kubebuilder:default=inProcess
+	// +optional
+	Mode LMCacheMode `json:"mode,omitempty"`
+
+	// ChunkSize is the token chunk size used by the in-process connector.
+	// +kubebuilder:default=256
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	ChunkSize *int32 `json:"chunkSize,omitempty"`
+
+	// LocalCPU enables the in-process local CPU cache.
+	// +kubebuilder:default=true
+	// +optional
+	LocalCPU *bool `json:"localCPU,omitempty"`
+
+	// LocalCPUSizeGiB bounds the in-process local CPU cache.
+	// +kubebuilder:default=20
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	LocalCPUSizeGiB *int32 `json:"localCPUSizeGiB,omitempty"`
+
+	// EngineRef names the LMCacheEngine whose <name>-connection ConfigMap is
+	// consumed in multiprocess mode.
+	// +optional
+	EngineRef *corev1.LocalObjectReference `json:"engineRef,omitempty"`
 }
 
 // QuantizationSpec configures weight quantization for reduced memory footprint.
@@ -536,7 +586,8 @@ type RouterSpec struct {
 	Route RouteSpec `json:"route"`
 
 	// Scheduler configures the KV-cache aware scheduler (EPP).
-	Scheduler SchedulerSpec `json:"scheduler"`
+	// +optional
+	Scheduler *SchedulerSpec `json:"scheduler,omitempty"`
 }
 
 // GatewaySpec configures Gateway resource creation.
@@ -681,6 +732,10 @@ type LLMInferenceServiceStatus struct {
 	// Determined by V2 protocol GET /v2/health/ready.
 	// +optional
 	ModelReady bool `json:"modelReady,omitempty"`
+
+	// ModelRevision is the declared Hugging Face revision.
+	// +optional
+	ModelRevision string `json:"modelRevision,omitempty"`
 
 	// ObservedGeneration is the most recent generation observed.
 	// +optional

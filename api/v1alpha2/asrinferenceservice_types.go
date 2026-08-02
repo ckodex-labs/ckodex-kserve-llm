@@ -44,6 +44,15 @@ func DefaultASRRuntimeImage(r ASRRuntime) string {
 	}
 }
 
+// DefaultASRAcceleratorImage returns a registry-verified CUDA image pinned by
+// OCI digest. Transformers still requires an explicit runtimeImage.
+func DefaultASRAcceleratorImage(r ASRRuntime) string {
+	if r == ASRRuntimeFasterWhisper {
+		return "ghcr.io/speaches-ai/speaches@sha256:6ec12ebf890a17e0d4b242a8ba9e0eb1fb836e60e8a3c857aea9838d541579ac"
+	}
+	return ""
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=asrsvc
@@ -96,6 +105,11 @@ type ASRInferenceServiceSpec struct {
 	// When omitted for faster-whisper the operator uses the built-in default.
 	// +optional
 	RuntimeImage string `json:"runtimeImage,omitempty"`
+
+	// Accelerator requests GPU resources and selects a digest-pinned CUDA image
+	// when runtimeImage is omitted.
+	// +optional
+	Accelerator *AcceleratorSpec `json:"accelerator,omitempty"`
 
 	// Languages lists the BCP-47 / ISO 639-1 language codes passed to custom
 	// transformers runtimes. Speaches selects language per transcription request,

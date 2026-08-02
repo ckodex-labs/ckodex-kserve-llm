@@ -264,6 +264,9 @@ func (r *EmbeddingInferenceServiceReconciler) buildEmbeddingContainer(
 	embSvc *servingv1alpha2.EmbeddingInferenceService,
 ) corev1.Container {
 	img := embSvc.Spec.RuntimeImage
+	if img == "" && embSvc.Spec.Accelerator != nil {
+		img = servingv1alpha2.DefaultEmbeddingAcceleratorImage(embSvc.Spec.Runtime)
+	}
 	if img == "" {
 		img = servingv1alpha2.DefaultEmbeddingRuntimeImage(embSvc.Spec.Runtime)
 	}
@@ -327,7 +330,7 @@ func (r *EmbeddingInferenceServiceReconciler) buildEmbeddingContainer(
 	}
 
 	port := int32(servingv1alpha2.EmbeddingServerPort)
-	return corev1.Container{
+	container := corev1.Container{
 		Name:  embeddingContainerName,
 		Image: img,
 		Args:  args,
@@ -358,6 +361,8 @@ func (r *EmbeddingInferenceServiceReconciler) buildEmbeddingContainer(
 			FailureThreshold:    6,
 		},
 	}
+	applyAcceleratorResources(&container, embSvc.Spec.Accelerator)
+	return container
 }
 
 // buildEmbeddingService constructs the desired ClusterIP Service.

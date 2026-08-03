@@ -41,6 +41,19 @@ func DefaultEmbeddingRuntimeImage(r EmbeddingRuntime) string {
 	}
 }
 
+// DefaultEmbeddingAcceleratorImage returns registry-verified CUDA images,
+// pinned by OCI digest. Explicit spec.runtimeImage values still take precedence.
+func DefaultEmbeddingAcceleratorImage(r EmbeddingRuntime) string {
+	switch r {
+	case EmbeddingRuntimeTextEmbeddingsInference:
+		return "ghcr.io/huggingface/text-embeddings-inference@sha256:249a0bc87522bfe2f1012b4d194f0225878f47079115ada3aeb0b1ef257b402a"
+	case EmbeddingRuntimeInfinity:
+		return "michaelf34/infinity@sha256:11e8b3921b9f1a58965afaad4a844c435c9807cbc82c51e47cb147b7d977fc88"
+	default:
+		return ""
+	}
+}
+
 // EmbeddingServerPort is the port on which both runtimes expose the /v1/embeddings endpoint.
 // Infinity defaults to 7997; TEI is configured to use the same port via --port flag.
 const EmbeddingServerPort = 7997
@@ -95,6 +108,11 @@ type EmbeddingInferenceServiceSpec struct {
 	// When omitted, the operator uses the built-in default for the selected runtime.
 	// +optional
 	RuntimeImage string `json:"runtimeImage,omitempty"`
+
+	// Accelerator requests GPU resources and selects a digest-pinned CUDA image
+	// when runtimeImage is omitted.
+	// +optional
+	Accelerator *AcceleratorSpec `json:"accelerator,omitempty"`
 
 	// Replicas is the desired number of serving pods.
 	// +kubebuilder:default=1

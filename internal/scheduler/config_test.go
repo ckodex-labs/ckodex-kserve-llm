@@ -62,7 +62,8 @@ func TestBuildDefaultConfig_ContainsExpectedPlugins(t *testing.T) {
 	assert.Contains(t, yaml, "prefix-cache-scorer")
 	assert.Contains(t, yaml, "queue-scorer")
 	assert.Contains(t, yaml, "kv-cache-utilization-scorer")
-	assert.Contains(t, yaml, "max-score-picker")
+	assert.Contains(t, yaml, "metrics-data-source")
+	assert.Contains(t, yaml, "core-metrics-extractor")
 }
 
 func TestBuildDefaultConfig_PluginWeights(t *testing.T) {
@@ -71,9 +72,8 @@ func TestBuildDefaultConfig_PluginWeights(t *testing.T) {
 	data := r.buildDefaultConfig(svc)
 	yaml := data["scheduler.yaml"]
 
-	// Count weight: "2.0" occurrences (3 high-weight plugins + 1 picker at "1.0")
-	assert.Equal(t, 3, strings.Count(yaml, `weight: "2.0"`))
-	assert.Equal(t, 1, strings.Count(yaml, `weight: "1.0"`))
+	assert.Equal(t, 2, strings.Count(yaml, `weight: 2`))
+	assert.Equal(t, 1, strings.Count(yaml, `weight: 3`))
 }
 
 func TestBuildDefaultConfig_ValidYAMLProfile(t *testing.T) {
@@ -82,7 +82,8 @@ func TestBuildDefaultConfig_ValidYAMLProfile(t *testing.T) {
 	data := r.buildDefaultConfig(svc)
 	yaml := data["scheduler.yaml"]
 
-	assert.Contains(t, yaml, "profiles:")
+	assert.Contains(t, yaml, "schedulingProfiles:")
+	assert.Contains(t, yaml, "apiVersion: inference.networking.x-k8s.io/v1alpha1")
 	assert.Contains(t, yaml, "- name: default")
 	assert.Contains(t, yaml, "plugins:")
 }

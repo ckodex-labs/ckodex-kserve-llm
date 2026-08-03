@@ -58,6 +58,7 @@ func (src *LLMInferenceService) ConvertTo(dstRaw conversion.Hub) error {
 	dst.Status.URL = src.Status.URL
 	dst.Status.Replicas = src.Status.Replicas
 	dst.Status.ModelReady = src.Status.ModelReady
+	dst.Status.ModelRevision = src.Status.ModelRevision
 	dst.Status.ObservedGeneration = src.Status.ObservedGeneration
 	return nil
 }
@@ -102,6 +103,7 @@ func (dst *LLMInferenceService) ConvertFrom(srcRaw conversion.Hub) error {
 	dst.Status.URL = src.Status.URL
 	dst.Status.Replicas = src.Status.Replicas
 	dst.Status.ModelReady = src.Status.ModelReady
+	dst.Status.ModelRevision = src.Status.ModelRevision
 	dst.Status.ObservedGeneration = src.Status.ObservedGeneration
 	return nil
 }
@@ -113,6 +115,17 @@ func convertKVCacheToV1(src *KVCacheSpec) *servingv1.KVCacheSpec {
 	dst := &servingv1.KVCacheSpec{Dtype: src.Dtype, SwapSpaceGB: src.SwapSpaceGB}
 	if src.Transfer != nil {
 		dst.Transfer = &servingv1.KVTransferSpec{Connector: src.Transfer.Connector, Role: src.Transfer.Role, ExtraConfig: src.Transfer.ExtraConfig, Env: deepCopyEnv(src.Transfer.Env)}
+		if src.Transfer.LMCache != nil {
+			dst.Transfer.LMCache = &servingv1.LMCacheSpec{
+				Mode:            servingv1.LMCacheMode(src.Transfer.LMCache.Mode),
+				ChunkSize:       src.Transfer.LMCache.ChunkSize,
+				LocalCPU:        src.Transfer.LMCache.LocalCPU,
+				LocalCPUSizeGiB: src.Transfer.LMCache.LocalCPUSizeGiB,
+			}
+			if src.Transfer.LMCache.EngineRef != nil {
+				dst.Transfer.LMCache.EngineRef = src.Transfer.LMCache.EngineRef.DeepCopy()
+			}
+		}
 	}
 	return dst
 }
@@ -124,6 +137,17 @@ func convertKVCacheFromV1(src *servingv1.KVCacheSpec) *KVCacheSpec {
 	dst := &KVCacheSpec{Dtype: src.Dtype, SwapSpaceGB: src.SwapSpaceGB}
 	if src.Transfer != nil {
 		dst.Transfer = &KVTransferSpec{Connector: src.Transfer.Connector, Role: src.Transfer.Role, ExtraConfig: src.Transfer.ExtraConfig, Env: deepCopyEnv(src.Transfer.Env)}
+		if src.Transfer.LMCache != nil {
+			dst.Transfer.LMCache = &LMCacheSpec{
+				Mode:            LMCacheMode(src.Transfer.LMCache.Mode),
+				ChunkSize:       src.Transfer.LMCache.ChunkSize,
+				LocalCPU:        src.Transfer.LMCache.LocalCPU,
+				LocalCPUSizeGiB: src.Transfer.LMCache.LocalCPUSizeGiB,
+			}
+			if src.Transfer.LMCache.EngineRef != nil {
+				dst.Transfer.LMCache.EngineRef = src.Transfer.LMCache.EngineRef.DeepCopy()
+			}
+		}
 	}
 	return dst
 }
@@ -142,7 +166,7 @@ func deepCopyEnv(src []corev1.EnvVar) []corev1.EnvVar {
 // ----- helpers -----
 
 func convertModelSpecToV1(src ModelSpec) servingv1.ModelSpec {
-	dst := servingv1.ModelSpec{URI: src.URI, Name: src.Name}
+	dst := servingv1.ModelSpec{URI: src.URI, Name: src.Name, Revision: src.Revision}
 	if src.Storage != nil {
 		dst.Storage = &servingv1.StorageSpec{
 			ServiceAccountName:  src.Storage.ServiceAccountName,
@@ -158,7 +182,7 @@ func convertModelSpecToV1(src ModelSpec) servingv1.ModelSpec {
 }
 
 func convertModelSpecFromV1(src servingv1.ModelSpec) ModelSpec {
-	dst := ModelSpec{URI: src.URI, Name: src.Name}
+	dst := ModelSpec{URI: src.URI, Name: src.Name, Revision: src.Revision}
 	if src.Storage != nil {
 		dst.Storage = &StorageSpec{
 			ServiceAccountName:  src.Storage.ServiceAccountName,
@@ -245,8 +269,10 @@ func convertScalingFromV1(src *servingv1.ScalingSpec) *ScalingSpec {
 
 func convertRouterToV1(src RouterSpec) servingv1.RouterSpec {
 	dst := servingv1.RouterSpec{
-		Gateway:   servingv1.GatewaySpec{},
-		Scheduler: convertSchedulerToV1(src.Scheduler),
+		Gateway: servingv1.GatewaySpec{},
+	}
+	if src.Scheduler != nil {
+		dst.Scheduler = convertSchedulerToV1(src.Scheduler)
 	}
 	if src.Gateway.Managed != nil {
 		dst.Gateway.Managed = &servingv1.ManagedGatewaySpec{GatewayClassName: src.Gateway.Managed.GatewayClassName}
@@ -262,8 +288,10 @@ func convertRouterToV1(src RouterSpec) servingv1.RouterSpec {
 
 func convertRouterFromV1(src servingv1.RouterSpec) RouterSpec {
 	dst := RouterSpec{
-		Gateway:   GatewaySpec{},
-		Scheduler: convertSchedulerFromV1(src.Scheduler),
+		Gateway: GatewaySpec{},
+	}
+	if src.Scheduler != nil {
+		dst.Scheduler = convertSchedulerFromV1(src.Scheduler)
 	}
 	if src.Gateway.Managed != nil {
 		dst.Gateway.Managed = &ManagedGatewaySpec{GatewayClassName: src.Gateway.Managed.GatewayClassName}
@@ -277,8 +305,8 @@ func convertRouterFromV1(src servingv1.RouterSpec) RouterSpec {
 	return dst
 }
 
-func convertSchedulerToV1(src SchedulerSpec) servingv1.SchedulerSpec {
-	dst := servingv1.SchedulerSpec{
+func convertSchedulerToV1(src *SchedulerSpec) *servingv1.SchedulerSpec {
+	dst := &servingv1.SchedulerSpec{
 		Replicas: src.Replicas,
 		Pool:     servingv1.InferencePoolSpec{Selector: src.Pool.Selector},
 	}
@@ -290,8 +318,8 @@ func convertSchedulerToV1(src SchedulerSpec) servingv1.SchedulerSpec {
 	return dst
 }
 
-func convertSchedulerFromV1(src servingv1.SchedulerSpec) SchedulerSpec {
-	dst := SchedulerSpec{
+func convertSchedulerFromV1(src *servingv1.SchedulerSpec) *SchedulerSpec {
+	dst := &SchedulerSpec{
 		Replicas: src.Replicas,
 		Pool:     InferencePoolSpec{Selector: src.Pool.Selector},
 	}

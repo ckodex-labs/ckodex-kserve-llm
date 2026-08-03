@@ -74,6 +74,7 @@ func (r *Reconciler) UpdateFromKServe(ctx context.Context, llmSvc *servingv1alph
 
 func (r *Reconciler) finishUpdate(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, llmSvcBeforePatch *servingv1alpha2.LLMInferenceService, isOptimized bool, metrics *servingv1alpha2.AdaptiveMetrics) error {
 	llmSvc.Status.ObservedGeneration = llmSvc.Generation
+	llmSvc.Status.ModelRevision = llmSvc.Spec.Model.Revision
 
 	// 2. DeploymentReady Condition (Experimental)
 	if r.EnableHardening {

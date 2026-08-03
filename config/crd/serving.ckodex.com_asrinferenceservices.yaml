@@ -64,6 +64,25 @@ spec:
           spec:
             description: ASRInferenceServiceSpec defines the desired state of an ASRInferenceService.
             properties:
+              accelerator:
+                description: |-
+                  Accelerator requests GPU resources and selects a digest-pinned CUDA image
+                  when runtimeImage is omitted.
+                properties:
+                  count:
+                    default: 1
+                    description: Count defaults to one device.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  type:
+                    description: Type is the accelerator vendor.
+                    enum:
+                    - nvidia
+                    type: string
+                required:
+                - type
+                type: object
               languages:
                 description: |-
                   Languages lists the BCP-47 / ISO 639-1 language codes passed to custom
@@ -91,6 +110,11 @@ spec:
                     description: |-
                       Name is the model identifier used in inference requests.
                       This is the value clients use in the "model" field of chat/completion requests.
+                    type: string
+                  revision:
+                    description: |-
+                      Revision pins a Hugging Face branch, tag, or commit. It is valid only
+                      with hf://, hf-mount://, or hf-mirror:// URIs.
                     type: string
                   storage:
                     description: |-
@@ -326,6 +350,23 @@ spec:
                     description: |-
                       Standard object's metadata.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      finalizers:
+                        items:
+                          type: string
+                        type: array
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      name:
+                        type: string
+                      namespace:
+                        type: string
                     type: object
                   spec:
                     description: |-
@@ -7323,6 +7364,23 @@ spec:
                                         May contain labels and annotations that will be copied into the PVC
                                         when creating it. No other fields are allowed and will be rejected during
                                         validation.
+                                      properties:
+                                        annotations:
+                                          additionalProperties:
+                                            type: string
+                                          type: object
+                                        finalizers:
+                                          items:
+                                            type: string
+                                          type: array
+                                        labels:
+                                          additionalProperties:
+                                            type: string
+                                          type: object
+                                        name:
+                                          type: string
+                                        namespace:
+                                          type: string
                                       type: object
                                     spec:
                                       description: |-

@@ -390,11 +390,58 @@ func TestDefaulter_Default_ExistingPortsNotOverwritten(t *testing.T) {
 func TestDefaulter_Default_SchedulerReplicasDefaultedToOne(t *testing.T) {
 	d := &webhook.LLMInferenceServiceDefaulter{}
 	svc := minimalValidSvc()
+	svc.Spec.Router.Scheduler = &servingv1alpha2.SchedulerSpec{}
 	svc.Spec.Router.Scheduler.Replicas = nil
 	err := d.Default(context.Background(), svc)
 	require.NoError(t, err)
 	require.NotNil(t, svc.Spec.Router.Scheduler.Replicas)
 	assert.Equal(t, int32(1), *svc.Spec.Router.Scheduler.Replicas)
+}
+
+func TestDefaulter_Default_OmittedSchedulerRemainsDisabled(t *testing.T) {
+	d := &webhook.LLMInferenceServiceDefaulter{}
+	svc := minimalValidSvc()
+	svc.Spec.Router.Scheduler = nil
+	require.NoError(t, d.Default(context.Background(), svc))
+	assert.Nil(t, svc.Spec.Router.Scheduler)
+}
+
+func TestValidator_ModelRevisionRules(t *testing.T) {
+	v := &webhook.LLMInferenceServiceValidator{}
+	valid := minimalValidSvc()
+	valid.Spec.Model.Revision = "refs/pr/42"
+	_, err := v.ValidateCreate(context.Background(), valid)
+	require.NoError(t, err)
+
+	nonHF := minimalValidSvc()
+	nonHF.Spec.Model.URI = "s3://bucket/model"
+	nonHF.Spec.Model.Revision = "v1"
+	_, err = v.ValidateCreate(context.Background(), nonHF)
+	require.ErrorContains(t, err, "supported only")
+
+	ambiguous := minimalValidSvc()
+	ambiguous.Spec.Model.URI = "hf://org/model@main"
+	ambiguous.Spec.Model.Revision = "v1"
+	_, err = v.ValidateCreate(context.Background(), ambiguous)
+	require.ErrorContains(t, err, "cannot be combined")
+}
+
+func TestValidator_TypedLMCacheRules(t *testing.T) {
+	v := &webhook.LLMInferenceServiceValidator{}
+	svc := minimalValidSvc()
+	svc.Spec.KVCache = &servingv1alpha2.KVCacheSpec{Transfer: &servingv1alpha2.KVTransferSpec{
+		Connector: "lmcache", LMCache: &servingv1alpha2.LMCacheSpec{Mode: servingv1alpha2.LMCacheModeMultiprocess},
+	}}
+	_, err := v.ValidateCreate(context.Background(), svc)
+	require.ErrorContains(t, err, "engineRef.name is required")
+
+	svc.Spec.KVCache.Transfer.LMCache.EngineRef = &corev1.LocalObjectReference{Name: "shared-kv"}
+	_, err = v.ValidateCreate(context.Background(), svc)
+	require.NoError(t, err)
+
+	svc.Spec.KVCache.Transfer.Connector = "nixl"
+	_, err = v.ValidateCreate(context.Background(), svc)
+	require.ErrorContains(t, err, "requires connector=lmcache")
 }
 
 func TestDefaulter_Default_NoContainers_NoOp(t *testing.T) {

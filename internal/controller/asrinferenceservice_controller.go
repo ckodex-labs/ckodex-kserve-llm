@@ -341,7 +341,7 @@ func (r *ASRInferenceServiceReconciler) buildASRDeployment(
 func (r *ASRInferenceServiceReconciler) buildASRContainer(
 	asrSvc *servingv1alpha2.ASRInferenceService,
 ) corev1.Container {
-	return corev1.Container{
+	container := corev1.Container{
 		Name:  asrContainerName,
 		Image: asrRuntimeImage(asrSvc),
 		Ports: []corev1.ContainerPort{
@@ -362,11 +362,18 @@ func (r *ASRInferenceServiceReconciler) buildASRContainer(
 			},
 		},
 	}
+	applyAcceleratorResources(&container, asrSvc.Spec.Accelerator)
+	return container
 }
 
 func asrRuntimeImage(asrSvc *servingv1alpha2.ASRInferenceService) string {
 	if asrSvc.Spec.RuntimeImage != "" {
 		return asrSvc.Spec.RuntimeImage
+	}
+	if asrSvc.Spec.Accelerator != nil {
+		if image := servingv1alpha2.DefaultASRAcceleratorImage(asrSvc.Spec.Runtime); image != "" {
+			return image
+		}
 	}
 	if image := servingv1alpha2.DefaultASRRuntimeImage(asrSvc.Spec.Runtime); image != "" {
 		return image

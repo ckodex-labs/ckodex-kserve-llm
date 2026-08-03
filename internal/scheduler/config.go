@@ -7,6 +7,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -34,8 +35,10 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, llmSvc *servingv1alpha
 
 	configName := llmSvc.Name + "-scheduler-config"
 
-	// Build default scheduler config if no EndpointPickerConfig ref
-	data := r.buildDefaultConfig(llmSvc)
+	data, err := r.effectiveConfig(ctx, llmSvc)
+	if err != nil {
+		return err
+	}
 
 	desired := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -65,22 +68,67 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, llmSvc *servingv1alpha
 	return r.Update(ctx, &existing)
 }
 
+func (r *ConfigReconciler) effectiveConfig(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) (map[string]string, error) {
+	if llmSvc.Spec.Router.Scheduler == nil || llmSvc.Spec.Router.Scheduler.Config == nil {
+		return r.buildDefaultConfig(llmSvc), nil
+	}
+	config := llmSvc.Spec.Router.Scheduler.Config
+	if config.Inline != nil {
+		data, err := json.Marshal(map[string]interface{}{
+			"apiVersion":         "inference.networking.x-k8s.io/v1alpha1",
+			"kind":               "EndpointPickerConfig",
+			"plugins":            config.Inline.Plugins,
+			"schedulingProfiles": config.Inline.SchedulingProfiles,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("marshal inline scheduler config: %w", err)
+		}
+		return map[string]string{"scheduler.yaml": string(data)}, nil
+	}
+	if config.Ref != nil {
+		var source corev1.ConfigMap
+		if err := r.Get(ctx, types.NamespacedName{Name: config.Ref.Name, Namespace: llmSvc.Namespace}, &source); err != nil {
+			return nil, fmt.Errorf("get scheduler configmap %s: %w", config.Ref.Name, err)
+		}
+		key := config.Ref.Key
+		if key == "" {
+			key = "endpoint-picker-config.yaml"
+		}
+		value, ok := source.Data[key]
+		if !ok {
+			return nil, fmt.Errorf("scheduler configmap %s is missing key %s", config.Ref.Name, key)
+		}
+		return map[string]string{"scheduler.yaml": value}, nil
+	}
+	return r.buildDefaultConfig(llmSvc), nil
+}
+
 // buildDefaultConfig generates the default EPP scheduler plugin pipeline.
 // Matches KServe v0.17: prefix-cache-scorer, queue-scorer, kv-cache-utilization-scorer, max-score-picker.
 func (r *ConfigReconciler) buildDefaultConfig(llmSvc *servingv1alpha2.LLMInferenceService) map[string]string {
 	return map[string]string{
 		"scheduler.yaml": fmt.Sprintf(`# Auto-generated scheduler config for %s
-profiles:
-  - name: default
-    plugins:
-      - pluginRef: prefix-cache-scorer
-        weight: "2.0"
-      - pluginRef: queue-scorer
-        weight: "2.0"
-      - pluginRef: kv-cache-utilization-scorer
-        weight: "2.0"
-      - pluginRef: max-score-picker
-        weight: "1.0"
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+- type: queue-scorer
+- type: kv-cache-utilization-scorer
+- type: prefix-cache-scorer
+- type: metrics-data-source
+  parameters:
+    scheme: "http"
+    path: "/metrics"
+    insecureSkipVerify: true
+- type: core-metrics-extractor
+schedulingProfiles:
+- name: default
+  plugins:
+  - pluginRef: queue-scorer
+    weight: 2
+  - pluginRef: kv-cache-utilization-scorer
+    weight: 2
+  - pluginRef: prefix-cache-scorer
+    weight: 3
 `, llmSvc.Name),
 	}
 }

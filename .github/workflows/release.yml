@@ -239,6 +239,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload checksummed CRD bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash hack/crd-bundle.sh dist/ckodex-crds.yaml
+          gh release upload "${GITHUB_REF_NAME}" \
+            dist/ckodex-crds.yaml dist/ckodex-crds.yaml.sha256 --clobber
+
       - name: Collect checksum hashes for SLSA
         id: hashes
         shell: bash

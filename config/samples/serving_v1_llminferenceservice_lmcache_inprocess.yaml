@@ -1,0 +1,23 @@
+apiVersion: serving.ckodex.com/v1
+kind: LLMInferenceService
+metadata:
+  name: lmcache-inprocess
+spec:
+  model:
+    uri: hf://Qwen/Qwen3-4B-Instruct-2507
+    name: qwen3-4b
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: lmcache/vllm-openai:nightly-2026-04-06
+  router: {}
+  experimental:
+    kvCache:
+      transfer:
+        connector: lmcache
+        lmcache:
+          mode: inProcess
+          chunkSize: 256
+          localCPU: true
+          localCPUSizeGiB: 20

@@ -326,13 +326,13 @@ func DefaultOperatorConfig() OperatorConfig {
 			// Pinned to a specific version — :latest is a supply chain risk and air-gapped blocker.
 			RuntimeImage:                "vllm/vllm-openai:v0.25.1",
 			KServeMultiNodeRuntime:      "kserve-huggingfaceserver-multinode",
-			SchedulerImage:              "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0",
+			SchedulerImage:              "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc",
 			StorageInitializerImage:     "kserve/storage-initializer:v0.19.0",
 			HuggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.7",
 			DefaultReplicas:             1,
 		},
 		Scheduler: SchedulerDefaults{
-			Image: "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0",
+			Image: "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc",
 			DefaultPlugins: []string{
 				"prefix-cache-scorer",
 				"queue-scorer",

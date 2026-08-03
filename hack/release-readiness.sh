@@ -105,6 +105,14 @@ else
   run_full_snapshot
 fi
 
+echo "==> building checksummed CRD bundle"
+bash "${ROOT_DIR}/hack/crd-bundle.sh" "${DIST_DIR}/ckodex-crds.yaml"
+if [[ "${checksum_cmd}" == "sha256sum" ]]; then
+  (cd "${DIST_DIR}" && sha256sum -c ckodex-crds.yaml.sha256)
+else
+  (cd "${DIST_DIR}" && shasum -a 256 -c ckodex-crds.yaml.sha256)
+fi
+
 echo "==> packaging helm chart"
 rm -rf "${HELM_OUT_DIR}"
 mkdir -p "${HELM_OUT_DIR}"
@@ -149,6 +157,7 @@ rm -rf "${SCRATCH_DIR}"
 jq -n \
   --arg checksum_file "${checksum_file#${ROOT_DIR}/}" \
   --arg helm_package "${helm_package#${ROOT_DIR}/}" \
+  --arg crd_bundle "dist/ckodex-crds.yaml" \
   --argjson archive_count "${archive_count}" \
   --arg mode "${READINESS_MODE}" \
   '{
@@ -156,7 +165,8 @@ jq -n \
     mode: $mode,
     checksum_file: $checksum_file,
     helm_package: $helm_package,
-    archive_count: $archive_count
+    archive_count: $archive_count,
+    crd_bundle: $crd_bundle
   }' > "${SUMMARY_FILE}"
 
 echo "release readiness snapshot complete"

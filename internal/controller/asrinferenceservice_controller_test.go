@@ -484,3 +484,16 @@ func TestASRSyncStatus_NotFound(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(0), svc.Status.Replicas)
 }
+
+func TestASRContainer_NVIDIAAccelerator(t *testing.T) {
+	svc := newASRSvc("gpu", "ns")
+	svc.Spec.Accelerator = &servingv1alpha2.AcceleratorSpec{Type: servingv1alpha2.AcceleratorTypeNVIDIA, Count: ptr.To(int32(1))}
+	c := (&ASRInferenceServiceReconciler{}).buildASRContainer(svc)
+	assert.Contains(t, c.Image, "@sha256:")
+	limit := c.Resources.Limits["nvidia.com/gpu"]
+	request := c.Resources.Requests["nvidia.com/gpu"]
+	assert.Equal(t, int64(1), limit.Value())
+	assert.Equal(t, int64(1), request.Value())
+	svc.Spec.RuntimeImage = "registry.example/speaches:approved"
+	assert.Equal(t, svc.Spec.RuntimeImage, (&ASRInferenceServiceReconciler{}).buildASRContainer(svc).Image)
+}

@@ -38,3 +38,14 @@ func TestParseHFMountURIWithRevision(t *testing.T) {
 	assert.Equal(t, "openai-community/gpt2", repo)
 	assert.Equal(t, "refs/pr/1", revision)
 }
+
+func TestHFCSIPVUsesDeclaredRevision(t *testing.T) {
+	svc := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Name: "gpt2", Namespace: "inference"},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{Model: servingv1alpha2.ModelSpec{
+			URI: "hf-mount://openai-community/gpt2", Revision: "refs/pr/42",
+		}},
+	}
+	pv := (&HFCSIReconciler{}).buildPV(svc, HFPVName(svc), "openai-community/gpt2", svc.Spec.Model.Revision)
+	require.Equal(t, "refs/pr/42", pv.Spec.CSI.VolumeAttributes["revision"])
+}

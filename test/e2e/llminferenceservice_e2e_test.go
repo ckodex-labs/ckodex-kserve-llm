@@ -85,7 +85,7 @@ func newGPT2Service(name string) *servingv1alpha2.LLMInferenceService {
 					Containers: []corev1.Container{
 						{
 							Name:  "vllm",
-                            Image: "vllm/vllm-openai-cpu:v0.25.1",
+							Image: "vllm/vllm-openai-cpu:v0.25.1",
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    mustQuantity(cpuLimit),
@@ -114,7 +114,7 @@ func newGPT2Service(name string) *servingv1alpha2.LLMInferenceService {
 						Hostnames: []string{name + ".local"},
 					},
 				},
-				Scheduler: servingv1alpha2.SchedulerSpec{
+				Scheduler: &servingv1alpha2.SchedulerSpec{
 					Pool: servingv1alpha2.InferencePoolSpec{
 						Selector: map[string]string{
 							"app.kubernetes.io/instance": name,
@@ -235,7 +235,7 @@ func TestE2E_LLMInferenceService_StatusConditions(t *testing.T) {
 					Containers: []corev1.Container{
 						{
 							Name:  "vllm",
-                            Image: "vllm/vllm-openai-cpu:v0.25.1",
+							Image: "vllm/vllm-openai-cpu:v0.25.1",
 						},
 					},
 				},
@@ -249,7 +249,7 @@ func TestE2E_LLMInferenceService_StatusConditions(t *testing.T) {
 						Hostnames: []string{name + ".local"},
 					},
 				},
-				Scheduler: servingv1alpha2.SchedulerSpec{
+				Scheduler: &servingv1alpha2.SchedulerSpec{
 					Pool: servingv1alpha2.InferencePoolSpec{
 						Selector: map[string]string{"app.kubernetes.io/instance": name},
 					},

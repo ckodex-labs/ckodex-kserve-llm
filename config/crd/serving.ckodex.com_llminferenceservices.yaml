@@ -301,6 +301,55 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          lmcache:
+                            description: |-
+                              LMCache provides a typed setup path. When omitted, the legacy connector,
+                              extraConfig, and env behavior is unchanged.
+                            properties:
+                              chunkSize:
+                                default: 256
+                                description: ChunkSize is the token chunk size used
+                                  by the in-process connector.
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              engineRef:
+                                description: |-
+                                  EngineRef names the LMCacheEngine whose <name>-connection ConfigMap is
+                                  consumed in multiprocess mode.
+                                properties:
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              localCPU:
+                                default: true
+                                description: LocalCPU enables the in-process local
+                                  CPU cache.
+                                type: boolean
+                              localCPUSizeGiB:
+                                default: 20
+                                description: LocalCPUSizeGiB bounds the in-process
+                                  local CPU cache.
+                                format: int32
+                                minimum: 1
+                                type: integer
+                              mode:
+                                default: inProcess
+                                description: Mode defaults to inProcess when the typed
+                                  block is present.
+                                enum:
+                                - inProcess
+                                - multiprocess
+                                type: string
+                            type: object
                           role:
                             type: string
                         required:
@@ -326,6 +375,23 @@ spec:
                             description: |-
                               Standard object's metadata.
                               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              finalizers:
+                                items:
+                                  type: string
+                                type: array
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              name:
+                                type: string
+                              namespace:
+                                type: string
                             type: object
                           spec:
                             description: |-
@@ -7446,6 +7512,23 @@ spec:
                                                 May contain labels and annotations that will be copied into the PVC
                                                 when creating it. No other fields are allowed and will be rejected during
                                                 validation.
+                                              properties:
+                                                annotations:
+                                                  additionalProperties:
+                                                    type: string
+                                                  type: object
+                                                finalizers:
+                                                  items:
+                                                    type: string
+                                                  type: array
+                                                labels:
+                                                  additionalProperties:
+                                                    type: string
+                                                  type: object
+                                                name:
+                                                  type: string
+                                                namespace:
+                                                  type: string
                                               type: object
                                             spec:
                                               description: |-
@@ -8961,6 +9044,23 @@ spec:
                             description: |-
                               Standard object's metadata.
                               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              finalizers:
+                                items:
+                                  type: string
+                                type: array
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              name:
+                                type: string
+                              namespace:
+                                type: string
                             type: object
                           spec:
                             description: |-
@@ -16081,6 +16181,23 @@ spec:
                                                 May contain labels and annotations that will be copied into the PVC
                                                 when creating it. No other fields are allowed and will be rejected during
                                                 validation.
+                                              properties:
+                                                annotations:
+                                                  additionalProperties:
+                                                    type: string
+                                                  type: object
+                                                finalizers:
+                                                  items:
+                                                    type: string
+                                                  type: array
+                                                labels:
+                                                  additionalProperties:
+                                                    type: string
+                                                  type: object
+                                                name:
+                                                  type: string
+                                                namespace:
+                                                  type: string
                                               type: object
                                             spec:
                                               description: |-
@@ -17590,6 +17707,11 @@ spec:
                   name:
                     description: Name is the model identifier used in inference requests.
                     type: string
+                  revision:
+                    description: |-
+                      Revision pins a Hugging Face branch, tag, or commit. It is valid only
+                      with hf://, hf-mount://, or hf-mirror:// URIs.
+                    type: string
                   storage:
                     description: Storage configures credentials for model download.
                     properties:
@@ -17765,7 +17887,6 @@ spec:
                 required:
                 - gateway
                 - route
-                - scheduler
                 type: object
               scaling:
                 description: Scaling configures autoscaling behavior.
@@ -17882,6 +18003,23 @@ spec:
                     description: |-
                       Standard object's metadata.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      finalizers:
+                        items:
+                          type: string
+                        type: array
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      name:
+                        type: string
+                      namespace:
+                        type: string
                     type: object
                   spec:
                     description: |-
@@ -24879,6 +25017,23 @@ spec:
                                         May contain labels and annotations that will be copied into the PVC
                                         when creating it. No other fields are allowed and will be rejected during
                                         validation.
+                                      properties:
+                                        annotations:
+                                          additionalProperties:
+                                            type: string
+                                          type: object
+                                        finalizers:
+                                          items:
+                                            type: string
+                                          type: array
+                                        labels:
+                                          additionalProperties:
+                                            type: string
+                                          type: object
+                                        name:
+                                          type: string
+                                        namespace:
+                                          type: string
                                       type: object
                                     spec:
                                       description: |-
@@ -26416,6 +26571,9 @@ spec:
                 description: ModelReady indicates whether the model is loaded and
                   serving.
                 type: boolean
+              modelRevision:
+                description: ModelRevision is the declared Hugging Face revision.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed.
                 format: int64
@@ -26746,6 +26904,55 @@ spec:
                           are intentionally strings so the CRD remains portable across connector
                           versions and clusters.
                         type: object
+                      lmcache:
+                        description: |-
+                          LMCache provides a typed setup path. When omitted, the legacy connector,
+                          extraConfig, and env behavior is unchanged.
+                        properties:
+                          chunkSize:
+                            default: 256
+                            description: ChunkSize is the token chunk size used by
+                              the in-process connector.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          engineRef:
+                            description: |-
+                              EngineRef names the LMCacheEngine whose <name>-connection ConfigMap is
+                              consumed in multiprocess mode.
+                            properties:
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          localCPU:
+                            default: true
+                            description: LocalCPU enables the in-process local CPU
+                              cache.
+                            type: boolean
+                          localCPUSizeGiB:
+                            default: 20
+                            description: LocalCPUSizeGiB bounds the in-process local
+                              CPU cache.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          mode:
+                            default: inProcess
+                            description: Mode defaults to inProcess when the typed
+                              block is present.
+                            enum:
+                            - inProcess
+                            - multiprocess
+                            type: string
+                        type: object
                       role:
                         description: |-
                           Role is kv_producer for prefill, kv_consumer for decode, or kv_both for
@@ -26772,6 +26979,11 @@ spec:
                     description: |-
                       Name is the model identifier used in inference requests.
                       This is the value clients use in the "model" field of chat/completion requests.
+                    type: string
+                  revision:
+                    description: |-
+                      Revision pins a Hugging Face branch, tag, or commit. It is valid only
+                      with hf://, hf-mount://, or hf-mirror:// URIs.
                     type: string
                   storage:
                     description: |-
@@ -26967,6 +27179,23 @@ spec:
                         description: |-
                           Standard object's metadata.
                           More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          finalizers:
+                            items:
+                              type: string
+                            type: array
+                          labels:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          name:
+                            type: string
+                          namespace:
+                            type: string
                         type: object
                       spec:
                         description: |-
@@ -34010,6 +34239,23 @@ spec:
                                             May contain labels and annotations that will be copied into the PVC
                                             when creating it. No other fields are allowed and will be rejected during
                                             validation.
+                                          properties:
+                                            annotations:
+                                              additionalProperties:
+                                                type: string
+                                              type: object
+                                            finalizers:
+                                              items:
+                                                type: string
+                                              type: array
+                                            labels:
+                                              additionalProperties:
+                                                type: string
+                                              type: object
+                                            name:
+                                              type: string
+                                            namespace:
+                                              type: string
                                           type: object
                                         spec:
                                           description: |-
@@ -35711,7 +35957,6 @@ spec:
                 required:
                 - gateway
                 - route
-                - scheduler
                 type: object
               scaling:
                 description: Scaling configures autoscaling behavior.
@@ -35866,6 +36111,23 @@ spec:
                     description: |-
                       Standard object's metadata.
                       More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      finalizers:
+                        items:
+                          type: string
+                        type: array
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      name:
+                        type: string
+                      namespace:
+                        type: string
                     type: object
                   spec:
                     description: |-
@@ -42863,6 +43125,23 @@ spec:
                                         May contain labels and annotations that will be copied into the PVC
                                         when creating it. No other fields are allowed and will be rejected during
                                         validation.
+                                      properties:
+                                        annotations:
+                                          additionalProperties:
+                                            type: string
+                                          type: object
+                                        finalizers:
+                                          items:
+                                            type: string
+                                          type: array
+                                        labels:
+                                          additionalProperties:
+                                            type: string
+                                          type: object
+                                        name:
+                                          type: string
+                                        namespace:
+                                          type: string
                                       type: object
                                     spec:
                                       description: |-
@@ -44361,6 +44640,23 @@ spec:
                         description: |-
                           Standard object's metadata.
                           More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          finalizers:
+                            items:
+                              type: string
+                            type: array
+                          labels:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          name:
+                            type: string
+                          namespace:
+                            type: string
                         type: object
                       spec:
                         description: |-
@@ -51404,6 +51700,23 @@ spec:
                                             May contain labels and annotations that will be copied into the PVC
                                             when creating it. No other fields are allowed and will be rejected during
                                             validation.
+                                          properties:
+                                            annotations:
+                                              additionalProperties:
+                                                type: string
+                                              type: object
+                                            finalizers:
+                                              items:
+                                                type: string
+                                              type: array
+                                            labels:
+                                              additionalProperties:
+                                                type: string
+                                              type: object
+                                            name:
+                                              type: string
+                                            namespace:
+                                              type: string
                                           type: object
                                         spec:
                                           description: |-
@@ -52987,6 +53300,9 @@ spec:
                   ModelReady indicates whether the model is loaded and serving.
                   Determined by V2 protocol GET /v2/health/ready.
                 type: boolean
+              modelRevision:
+                description: ModelRevision is the declared Hugging Face revision.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the most recent generation observed.
                 format: int64

@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 	controllerreconciler "github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 )
 
@@ -53,6 +54,7 @@ type ASRInferenceServiceReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Defaults operatorconfig.DefaultsConfig
 }
 
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=asrinferenceservices,verbs=get;list;watch;create;update;patch;delete
@@ -325,7 +327,11 @@ func (r *ASRInferenceServiceReconciler) buildASRDeployment(
 	}
 	// Phase 5 Hardening: Enforce default termination grace period
 	if podTemplate.Spec.TerminationGracePeriodSeconds == nil {
-		podTemplate.Spec.TerminationGracePeriodSeconds = ptr.To(int64(ASRTerminationGracePeriod))
+		grace := r.Defaults.ASRTerminationGracePeriodSeconds
+		if grace == 0 {
+			grace = ASRTerminationGracePeriod
+		}
+		podTemplate.Spec.TerminationGracePeriodSeconds = ptr.To(grace)
 	}
 
 	// Inject the primary runtime container at position 0.
@@ -362,17 +368,31 @@ func (r *ASRInferenceServiceReconciler) buildASRContainer(
 		ReadinessProbe: asrHealthProbe(15, 10, 6),
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultASRCPURequest),
-				corev1.ResourceMemory: resource.MustParse(DefaultASRMemoryRequest),
+				corev1.ResourceCPU:    resource.MustParse(r.asrCPURequest()),
+				corev1.ResourceMemory: resource.MustParse(r.asrMemoryRequest()),
 			},
 			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultASRCPURequest),
-				corev1.ResourceMemory: resource.MustParse(DefaultASRMemoryRequest),
+				corev1.ResourceCPU:    resource.MustParse(r.asrCPURequest()),
+				corev1.ResourceMemory: resource.MustParse(r.asrMemoryRequest()),
 			},
 		},
 	}
 	applyAcceleratorResources(&container, asrSvc.Spec.Accelerator)
 	return container
+}
+
+func (r *ASRInferenceServiceReconciler) asrCPURequest() string {
+	if r.Defaults.ASRCPURequest != "" {
+		return r.Defaults.ASRCPURequest
+	}
+	return DefaultASRCPURequest
+}
+
+func (r *ASRInferenceServiceReconciler) asrMemoryRequest() string {
+	if r.Defaults.ASRMemoryRequest != "" {
+		return r.Defaults.ASRMemoryRequest
+	}
+	return DefaultASRMemoryRequest
 }
 
 func asrRuntimeImage(asrSvc *servingv1alpha2.ASRInferenceService) string {

@@ -89,6 +89,26 @@ spec:
             {{- end }}
             - name: CKODEX_HUGGING_FACE_INITIALIZER_IMAGE
               value: {{ .Values.vllm.huggingFaceInitializerImage | quote }}
+            - name: CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE
+              value: {{ .Values.vllm.customStorageInitializerImage | quote }}
+            - name: CKODEX_QUANT_CPP_IMAGE
+              value: {{ .Values.vllm.quantCppImage | quote }}
+            - name: CKODEX_VLLM_CPU_REQUEST
+              value: {{ .Values.vllm.cpuRequest | quote }}
+            - name: CKODEX_VLLM_MEMORY_REQUEST
+              value: {{ .Values.vllm.memoryRequest | quote }}
+            - name: CKODEX_TERMINATION_GRACE_PERIOD_SECONDS
+              value: {{ .Values.vllm.terminationGracePeriodSeconds | quote }}
+            - name: CKODEX_ASR_CPU_REQUEST
+              value: {{ .Values.vllm.asrCPURequest | quote }}
+            - name: CKODEX_ASR_MEMORY_REQUEST
+              value: {{ .Values.vllm.asrMemoryRequest | quote }}
+            - name: CKODEX_ASR_TERMINATION_GRACE_PERIOD_SECONDS
+              value: {{ .Values.vllm.asrTerminationGracePeriodSeconds | quote }}
+            - name: CKODEX_CACHE_CPU_REQUEST
+              value: {{ .Values.vllm.cacheCPURequest | quote }}
+            - name: CKODEX_CACHE_MEMORY_REQUEST
+              value: {{ .Values.vllm.cacheMemoryRequest | quote }}
             # Feature Gates
             - name: CKODEX_FEATURE_ENABLE_SECURITY
               value: {{ .Values.features.enableSecurity | quote }}

@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
@@ -43,6 +44,7 @@ type RerankerInferenceServiceReconciler struct {
 	// don't attempt to pull from the public internet.
 	AirGappedMode bool
 	LocalRegistry string
+	Defaults      operatorconfig.DefaultsConfig
 }
 
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=rerankerinferenceservices,verbs=get;list;watch;create;update;patch;delete
@@ -271,8 +273,8 @@ func (r *RerankerInferenceServiceReconciler) buildContainer(
 
 	res := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse(api.DefaultVLLMCPURequest),
-			corev1.ResourceMemory: resource.MustParse(api.DefaultVLLMMemoryRequest),
+			corev1.ResourceCPU:    resource.MustParse(r.vllmCPURequest()),
+			corev1.ResourceMemory: resource.MustParse(r.vllmMemoryRequest()),
 		},
 	}
 	if svc.Spec.Resources != nil {
@@ -292,7 +294,10 @@ func (r *RerankerInferenceServiceReconciler) buildContainer(
 		},
 	}
 
-	image := api.VLLMImage
+	image := r.Defaults.RuntimeImage
+	if image == "" {
+		image = api.VLLMImage
+	}
 	if r.AirGappedMode && r.LocalRegistry != "" {
 		image = rewriteImageRegistry(r.LocalRegistry, image)
 	}
@@ -326,6 +331,20 @@ func (r *RerankerInferenceServiceReconciler) buildContainer(
 			FailureThreshold:    6,
 		},
 	}
+}
+
+func (r *RerankerInferenceServiceReconciler) vllmCPURequest() string {
+	if r.Defaults.VLLMCPURequest != "" {
+		return r.Defaults.VLLMCPURequest
+	}
+	return api.DefaultVLLMCPURequest
+}
+
+func (r *RerankerInferenceServiceReconciler) vllmMemoryRequest() string {
+	if r.Defaults.VLLMMemoryRequest != "" {
+		return r.Defaults.VLLMMemoryRequest
+	}
+	return api.DefaultVLLMMemoryRequest
 }
 
 func (r *RerankerInferenceServiceReconciler) buildService(

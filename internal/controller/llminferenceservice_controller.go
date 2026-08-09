@@ -38,6 +38,7 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/auth"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/autoscaler"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
@@ -89,6 +90,7 @@ type LLMInferenceServiceReconciler struct {
 	HFInitializerImage     string
 	HFMirrorURL            string
 	KServeMultiNodeRuntime string
+	Defaults               operatorconfig.DefaultsConfig
 
 	// Modular sub-reconcilers
 	DeploymentBuilder    *deployment.Builder
@@ -579,6 +581,7 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		RuntimeImage:            r.RuntimeImage,
 		HFInitializerImage:      r.HFInitializerImage,
 		HFMirrorURL:             r.HFMirrorURL,
+		Defaults:                r.Defaults,
 	}
 	r.StatusReconciler = &status.Reconciler{
 		Client:          mgr.GetClient(),

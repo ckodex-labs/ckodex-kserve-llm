@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 	"k8s.io/utils/ptr"
 )
@@ -55,6 +56,7 @@ type LocalModelCacheReconciler struct {
 	Scheme    *runtime.Scheme
 	Recorder  record.EventRecorder
 	APIReader client.Reader
+	Defaults  operatorconfig.DefaultsConfig
 }
 
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=localmodelcaches,verbs=get;list;watch;create;update;patch;delete
@@ -439,9 +441,25 @@ func (r *LocalModelCacheReconciler) buildWarmupJob(
 	jobName, pvcName, namespace, nodeName string,
 ) *batchv1.Job {
 	backoffLimit := int32(3)
+	storageImage := r.Defaults.CustomStorageInitializerImage
+	if storageImage == "" {
+		storageImage = CKodexStorageInitializerImage
+	}
+	cpuRequest := r.Defaults.CacheCPURequest
+	if cpuRequest == "" {
+		cpuRequest = DefaultCacheCPURequest
+	}
+	memoryRequest := r.Defaults.CacheMemoryRequest
+	if memoryRequest == "" {
+		memoryRequest = DefaultCacheMemoryRequest
+	}
+	grace := r.Defaults.ASRTerminationGracePeriodSeconds
+	if grace == 0 {
+		grace = ASRTerminationGracePeriod
+	}
 	container := corev1.Container{
 		Name:            "warmup",
-		Image:           CKodexStorageInitializerImage,
+		Image:           storageImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Args:            []string{lmc.Spec.SourceModelURI, ModelMountPath},
 		Env: append(lmc.Spec.Env, []corev1.EnvVar{
@@ -459,12 +477,12 @@ func (r *LocalModelCacheReconciler) buildWarmupJob(
 		},
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultCacheCPURequest),
-				corev1.ResourceMemory: resource.MustParse(DefaultCacheMemoryRequest),
+				corev1.ResourceCPU:    resource.MustParse(cpuRequest),
+				corev1.ResourceMemory: resource.MustParse(memoryRequest),
 			},
 			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultCacheCPURequest),
-				corev1.ResourceMemory: resource.MustParse(DefaultCacheMemoryRequest),
+				corev1.ResourceCPU:    resource.MustParse(cpuRequest),
+				corev1.ResourceMemory: resource.MustParse(memoryRequest),
 			},
 		},
 	}
@@ -474,7 +492,7 @@ func (r *LocalModelCacheReconciler) buildWarmupJob(
 			"kubernetes.io/hostname": nodeName,
 		},
 		RestartPolicy:                 corev1.RestartPolicyOnFailure,
-		TerminationGracePeriodSeconds: ptr.To(int64(ASRTerminationGracePeriod)), // reusing ASR's 30s grace for storage jobs
+		TerminationGracePeriodSeconds: ptr.To(grace),
 		Containers:                    []corev1.Container{container},
 		Volumes: []corev1.Volume{
 			{

@@ -37,6 +37,16 @@ runtime:
   kserveMultiNodeRuntime: "kserve-huggingfaceserver-multinode"
   # Purpose-built Xet-aware image; dependencies are installed at image build time.
   huggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.7"
+  customStorageInitializerImage: "ckodex/storage-initializer:v0.1.0"
+  quantCppImage: "ckodex/quant-cpp:v0.1.0"
+  vllmCPURequest: "2"
+  vllmMemoryRequest: "4Gi"
+  terminationGracePeriodSeconds: 60
+  asrCPURequest: "1"
+  asrMemoryRequest: "2Gi"
+  asrTerminationGracePeriodSeconds: 30
+  cacheCPURequest: "1"
+  cacheMemoryRequest: "1Gi"
 
 gateway:
   # Namespace where Envoy Gateway creates its data-plane proxy pods.

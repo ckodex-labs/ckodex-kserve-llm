@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/storage"
@@ -44,6 +45,7 @@ type Builder struct {
 	RuntimeImage       string
 	HFInitializerImage string
 	HFMirrorURL        string
+	Defaults           operatorconfig.DefaultsConfig
 }
 
 // Build constructs the desired Deployment spec.
@@ -75,7 +77,11 @@ func (b *Builder) BuildWithRole(ctx context.Context, llmSvc *servingv1alpha2.LLM
 
 	// Phase 5 Hardening: Termination Grace Period
 	if podSpec.TerminationGracePeriodSeconds == nil {
-		podSpec.TerminationGracePeriodSeconds = ptr.To(int64(api.DefaultTerminationGracePeriod))
+		grace := b.Defaults.TerminationGracePeriodSeconds
+		if grace == 0 {
+			grace = api.DefaultTerminationGracePeriod
+		}
+		podSpec.TerminationGracePeriodSeconds = ptr.To(grace)
 	}
 
 	// Ensure primary container resources
@@ -422,7 +428,10 @@ func (b *Builder) BuildStorageInitializer(ctx context.Context, llmSvc *servingv1
 		initializerImage = b.HFInitializerImage
 	}
 	if !isHuggingFaceScheme(scheme) {
-		initializerImage = api.CKodexStorageInitializerImage
+		initializerImage = b.Defaults.CustomStorageInitializerImage
+		if initializerImage == "" {
+			initializerImage = api.CKodexStorageInitializerImage
+		}
 	}
 	if b.AirGappedMode && b.LocalRegistry != "" {
 		initializerImage = b.rewriteImage(initializerImage)
@@ -547,10 +556,18 @@ func (b *Builder) ensureResources(c *corev1.Container) {
 		c.Resources.Requests = make(corev1.ResourceList)
 	}
 	if _, ok := c.Resources.Requests[corev1.ResourceCPU]; !ok {
-		c.Resources.Requests[corev1.ResourceCPU] = resource.MustParse(api.DefaultVLLMCPURequest)
+		cpu := b.Defaults.VLLMCPURequest
+		if cpu == "" {
+			cpu = api.DefaultVLLMCPURequest
+		}
+		c.Resources.Requests[corev1.ResourceCPU] = resource.MustParse(cpu)
 	}
 	if _, ok := c.Resources.Requests[corev1.ResourceMemory]; !ok {
-		c.Resources.Requests[corev1.ResourceMemory] = resource.MustParse(api.DefaultVLLMMemoryRequest)
+		memory := b.Defaults.VLLMMemoryRequest
+		if memory == "" {
+			memory = api.DefaultVLLMMemoryRequest
+		}
+		c.Resources.Requests[corev1.ResourceMemory] = resource.MustParse(memory)
 	}
 	if c.Resources.Limits == nil {
 		c.Resources.Limits = make(corev1.ResourceList)
@@ -1057,7 +1074,7 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 
 	// GGUF format: auto-route to quant-cpp engine (no need to set engine: quant-cpp explicitly).
 	if llmSvc.Spec.Quantization != nil && llmSvc.Spec.Quantization.Method == "gguf" {
-		c.Image = api.QuantCppImage
+		c.Image = b.quantCppImage()
 		if b.AirGappedMode && b.LocalRegistry != "" {
 			c.Image = b.rewriteImage(c.Image)
 		}
@@ -1072,7 +1089,7 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 
 	switch engine {
 	case "quant-cpp":
-		c.Image = api.QuantCppImage
+		c.Image = b.quantCppImage()
 		if b.AirGappedMode && b.LocalRegistry != "" {
 			c.Image = b.rewriteImage(c.Image)
 		}
@@ -1103,6 +1120,13 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 			c.Args = append(c.Args, "--quantization", q.Method)
 		}
 	}
+}
+
+func (b *Builder) quantCppImage() string {
+	if b.Defaults.QuantCppImage != "" {
+		return b.Defaults.QuantCppImage
+	}
+	return api.QuantCppImage
 }
 
 func hasArg(args []string, target string) bool {

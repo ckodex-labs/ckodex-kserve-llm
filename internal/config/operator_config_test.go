@@ -102,6 +102,16 @@ func TestLoadFromEnv_StringFields(t *testing.T) {
 	setEnv(t, "CKODEX_AUTH_AUDIENCE", "inference-service")
 	setEnv(t, "CKODEX_PROMETHEUS_URL", "http://prometheus.monitoring:9090")
 	setEnv(t, "CKODEX_HUGGING_FACE_INITIALIZER_IMAGE", "registry.corp/hf-initializer@sha256:1234")
+	setEnv(t, "CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE", "registry.corp/ckodex-storage@sha256:1234")
+	setEnv(t, "CKODEX_QUANT_CPP_IMAGE", "registry.corp/quant-cpp@sha256:1234")
+	setEnv(t, "CKODEX_VLLM_CPU_REQUEST", "8")
+	setEnv(t, "CKODEX_VLLM_MEMORY_REQUEST", "32Gi")
+	setEnv(t, "CKODEX_TERMINATION_GRACE_PERIOD_SECONDS", "180")
+	setEnv(t, "CKODEX_ASR_CPU_REQUEST", "2")
+	setEnv(t, "CKODEX_ASR_MEMORY_REQUEST", "8Gi")
+	setEnv(t, "CKODEX_ASR_TERMINATION_GRACE_PERIOD_SECONDS", "90")
+	setEnv(t, "CKODEX_CACHE_CPU_REQUEST", "500m")
+	setEnv(t, "CKODEX_CACHE_MEMORY_REQUEST", "2Gi")
 
 	cfg := config.DefaultOperatorConfig()
 	cfg.LoadFromEnv()
@@ -113,6 +123,16 @@ func TestLoadFromEnv_StringFields(t *testing.T) {
 	assert.Equal(t, "inference-service", cfg.Auth.Audience)
 	assert.Equal(t, "http://prometheus.monitoring:9090", cfg.PrometheusURL)
 	assert.Equal(t, "registry.corp/hf-initializer@sha256:1234", cfg.Defaults.HuggingFaceInitializerImage)
+	assert.Equal(t, "registry.corp/ckodex-storage@sha256:1234", cfg.Defaults.CustomStorageInitializerImage)
+	assert.Equal(t, "registry.corp/quant-cpp@sha256:1234", cfg.Defaults.QuantCppImage)
+	assert.Equal(t, "8", cfg.Defaults.VLLMCPURequest)
+	assert.Equal(t, "32Gi", cfg.Defaults.VLLMMemoryRequest)
+	assert.Equal(t, int64(180), cfg.Defaults.TerminationGracePeriodSeconds)
+	assert.Equal(t, "2", cfg.Defaults.ASRCPURequest)
+	assert.Equal(t, "8Gi", cfg.Defaults.ASRMemoryRequest)
+	assert.Equal(t, int64(90), cfg.Defaults.ASRTerminationGracePeriodSeconds)
+	assert.Equal(t, "500m", cfg.Defaults.CacheCPURequest)
+	assert.Equal(t, "2Gi", cfg.Defaults.CacheMemoryRequest)
 }
 
 func TestLoadFromEnv_AllowInsecurePromotionGates(t *testing.T) {

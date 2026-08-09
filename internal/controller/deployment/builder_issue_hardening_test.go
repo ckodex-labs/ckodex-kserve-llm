@@ -46,6 +46,24 @@ func TestBuilderMetadataPrecedence(t *testing.T) {
 	assert.NotContains(t, deployment.Spec.Selector.MatchLabels, "team")
 }
 
+func TestBuilderPreStopTerminatesOnlyTheContainerProcess(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build()}
+	deployment := builder.Build(context.Background(), hardeningService(), 1, HardwareNVIDIA, nil)
+	hook := deployment.Spec.Template.Spec.Containers[0].Lifecycle.PreStop
+	require.NotNil(t, hook)
+	require.NotNil(t, hook.Exec)
+	assert.Equal(t, []string{"/bin/sh", "-c", "kill -TERM 1 2>/dev/null || true; sleep 10; kill -KILL 1 2>/dev/null || true; sleep 5"}, hook.Exec.Command)
+}
+
+func TestBuilderGPUDeviceSelection(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build()}
+	svc := hardeningService()
+	tp := int32(2)
+	svc.Spec.Parallelism = &servingv1alpha2.ParallelismSpec{Tensor: &tp, GPUDevices: []string{"GPU-a", "GPU-b"}}
+	deployment := builder.Build(context.Background(), svc, 1, HardwareNVIDIA, nil)
+	assert.Equal(t, "GPU-a,GPU-b", envValue(deployment.Spec.Template.Spec.Containers[0].Env, "NVIDIA_VISIBLE_DEVICES"))
+}
+
 func TestBuilderForwardsDeclaredHuggingFaceRevision(t *testing.T) {
 	builder := &Builder{Client: fake.NewClientBuilder().Build()}
 	svc := hardeningService()

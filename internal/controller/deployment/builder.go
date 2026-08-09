@@ -108,6 +108,7 @@ func (b *Builder) BuildWithRole(ctx context.Context, llmSvc *servingv1alpha2.LLM
 	b.applyKVTransfer(llmSvc, podSpec, kvRole)
 
 	b.ensureVLLMEnv(llmSvc, podSpec)
+	b.applyGPUDeviceSelection(llmSvc, podSpec)
 
 	if !isNilSPIREInjector(b.SPIRE) {
 		b.SPIRE.InjectSidecar(podSpec, llmSvc)
@@ -569,10 +570,21 @@ func (b *Builder) injectPreStop(c *corev1.Container) {
 	if c.Lifecycle.PreStop == nil {
 		c.Lifecycle.PreStop = &corev1.LifecycleHandler{
 			Exec: &corev1.ExecAction{
-				Command: []string{"/bin/sh", "-c", "sleep 15"},
+				// Keep cleanup inside this container. Killing arbitrary PIDs returned
+				// by nvidia-smi could terminate another tenant's workload on a
+				// time-sliced GPU; terminating PID 1 lets the driver reclaim this
+				// container's CUDA context without crossing that boundary.
+				Command: []string{"/bin/sh", "-c", "kill -TERM 1 2>/dev/null || true; sleep 10; kill -KILL 1 2>/dev/null || true; sleep 5"},
 			},
 		}
 	}
+}
+
+func (b *Builder) applyGPUDeviceSelection(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
+	if len(podSpec.Containers) == 0 || llmSvc.Spec.Parallelism == nil || len(llmSvc.Spec.Parallelism.GPUDevices) == 0 {
+		return
+	}
+	setEnvDefault(&podSpec.Containers[0], "NVIDIA_VISIBLE_DEVICES", strings.Join(llmSvc.Spec.Parallelism.GPUDevices, ","))
 }
 
 func (b *Builder) applyLocalModelCache(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) bool {

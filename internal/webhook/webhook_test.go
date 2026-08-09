@@ -197,6 +197,29 @@ func TestValidator_ValidateCreate_TensorParallelism_WithGPU_NoWarning(t *testing
 	assert.Empty(t, warnings)
 }
 
+func TestValidator_ValidateCreate_GPUDevicesMatchTensorParallelism(t *testing.T) {
+	svc := minimalValidSvc()
+	tp := int32(2)
+	svc.Spec.Parallelism = &servingv1alpha2.ParallelismSpec{Tensor: &tp, GPUDevices: []string{"0", "1"}}
+	svc.Spec.Template.Spec.Containers[0].Resources.Limits = corev1.ResourceList{
+		"nvidia.com/gpu": resource.MustParse("2"),
+	}
+	v := &webhook.LLMInferenceServiceValidator{}
+	warnings, err := v.ValidateCreate(context.Background(), svc)
+	assert.NoError(t, err)
+	assert.Empty(t, warnings)
+}
+
+func TestValidator_ValidateCreate_GPUDevicesRejectsDuplicates(t *testing.T) {
+	svc := minimalValidSvc()
+	tp := int32(2)
+	svc.Spec.Parallelism = &servingv1alpha2.ParallelismSpec{Tensor: &tp, GPUDevices: []string{"0", "0"}}
+	v := &webhook.LLMInferenceServiceValidator{}
+	_, err := v.ValidateCreate(context.Background(), svc)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate device")
+}
+
 // minReplicas > maxReplicas is a hard error.
 func TestValidator_ValidateCreate_Scaling_MinGTMax(t *testing.T) {
 	svc := minimalValidSvc()

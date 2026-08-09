@@ -239,6 +239,12 @@ type ParallelismSpec struct {
 	// +optional
 	DataLocal *int32 `json:"dataLocal,omitempty"`
 
+	// GPUDevices pins NVIDIA_VISIBLE_DEVICES for the runtime container. Use
+	// stable GPU UUIDs when possible; the list length must match tensor
+	// parallelism when both are set.
+	// +optional
+	GPUDevices []string `json:"gpuDevices,omitempty"`
+
 	// Expert enables expert parallelism for MoE models.
 	// +optional
 	Expert bool `json:"expert,omitempty"`

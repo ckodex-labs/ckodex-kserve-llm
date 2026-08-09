@@ -201,14 +201,14 @@ func convertParallelismToV1(src *ParallelismSpec) *servingv1.ParallelismSpec {
 	if src == nil {
 		return nil
 	}
-	return &servingv1.ParallelismSpec{Tensor: src.Tensor, Data: src.Data, DataLocal: src.DataLocal, Expert: src.Expert}
+	return &servingv1.ParallelismSpec{Tensor: src.Tensor, Data: src.Data, DataLocal: src.DataLocal, GPUDevices: append([]string(nil), src.GPUDevices...), Expert: src.Expert}
 }
 
 func convertParallelismFromV1(src *servingv1.ParallelismSpec) *ParallelismSpec {
 	if src == nil {
 		return nil
 	}
-	return &ParallelismSpec{Tensor: src.Tensor, Data: src.Data, DataLocal: src.DataLocal, Expert: src.Expert}
+	return &ParallelismSpec{Tensor: src.Tensor, Data: src.Data, DataLocal: src.DataLocal, GPUDevices: append([]string(nil), src.GPUDevices...), Expert: src.Expert}
 }
 
 func convertScalingToV1(src *ScalingSpec) *servingv1.ScalingSpec {

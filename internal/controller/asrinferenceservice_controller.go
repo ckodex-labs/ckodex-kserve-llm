@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	controllerreconciler "github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 )
 
 const (
@@ -97,14 +98,15 @@ func (r *ASRInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	// Validate: transformers runtime requires a user-supplied image.
-	if asrSvc.Spec.Runtime == servingv1alpha2.ASRRuntimeTransformers && asrSvc.Spec.RuntimeImage == "" {
+	// Validate custom runtimes require a user-supplied image.
+	if (asrSvc.Spec.Runtime == servingv1alpha2.ASRRuntimeTransformers ||
+		asrSvc.Spec.Runtime == servingv1alpha2.ASRRuntimeCustom) && asrSvc.Spec.RuntimeImage == "" {
 		if err := r.setCondition(ctx, &asrSvc, asrSvcBeforePatch, servingv1alpha2.ASRConditionReady,
 			metav1.ConditionFalse, "MissingRuntimeImage",
-			"runtime=transformers requires spec.runtimeImage to be set"); err != nil {
+			fmt.Sprintf("runtime=%s requires spec.runtimeImage to be set", asrSvc.Spec.Runtime)); err != nil {
 			return ctrl.Result{}, err
 		}
-		logger.Info("ASRInferenceService blocked: transformers runtime but no runtimeImage", "name", asrSvc.Name)
+		logger.Info("ASRInferenceService blocked: custom runtime but no runtimeImage", "name", asrSvc.Name, "runtime", asrSvc.Spec.Runtime)
 		return ctrl.Result{}, nil
 	}
 
@@ -156,10 +158,17 @@ func (r *ASRInferenceServiceReconciler) reconcileASRDeployment(
 		return fmt.Errorf("get Deployment: %w", err)
 	}
 
-	// Update replicas and container image on spec change.
-	existing.Spec.Replicas = desired.Spec.Replicas
-	existing.Spec.Template = desired.Spec.Template
+	if !controllerreconciler.SyncDeployment(ctx, existing, desired, replicaCount(desired.Spec.Replicas), false) {
+		return nil
+	}
 	return r.Update(ctx, existing)
+}
+
+func replicaCount(replicas *int32) int32 {
+	if replicas == nil {
+		return 1
+	}
+	return *replicas
 }
 
 // reconcileASRService creates or updates the ClusterIP Service.

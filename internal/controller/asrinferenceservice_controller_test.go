@@ -384,6 +384,8 @@ func TestDefaultASRRuntimeImage(t *testing.T) {
 	// transformers has no default — user must supply runtimeImage.
 	assert.Empty(t, servingv1alpha2.DefaultASRRuntimeImage(servingv1alpha2.ASRRuntimeTransformers),
 		"transformers runtime must not have a default image")
+	assert.Empty(t, servingv1alpha2.DefaultASRRuntimeImage(servingv1alpha2.ASRRuntimeCustom),
+		"custom runtime must require an explicit image")
 }
 
 // TestASRReconcile_UpdateExisting verifies that Deployment and Service are updated

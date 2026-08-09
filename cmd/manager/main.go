@@ -148,6 +148,7 @@ func main() {
 		KServeMultiNodeRuntime: cfg.Defaults.KServeMultiNodeRuntime,
 		HFInitializerImage:     cfg.Defaults.HuggingFaceInitializerImage,
 		HFMirrorURL:            cfg.HuggingFaceMirrorURL,
+		Defaults:               cfg.Defaults,
 	}
 
 	// gRPC — independent of gateway (controls Service port definition)
@@ -324,6 +325,7 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("localmodelcache-controller"),
+		Defaults: cfg.Defaults,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LocalModelCache")
 		os.Exit(1)
@@ -377,6 +379,7 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorderFor("asrinferenceservice-controller"),
+		Defaults: cfg.Defaults,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ASRInferenceService")
 		os.Exit(1)
@@ -415,6 +418,7 @@ func main() {
 		Scheme:        mgr.GetScheme(),
 		AirGappedMode: cfg.AirGappedMode,
 		LocalRegistry: cfg.LocalRegistry,
+		Defaults:      cfg.Defaults,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RerankerInferenceService")
 		os.Exit(1)

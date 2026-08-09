@@ -62,6 +62,11 @@ func SyncDeployment(ctx context.Context, existing, desired *appsv1.Deployment, r
 		existing.Spec.Template.Spec.Affinity = desired.Spec.Template.Spec.Affinity
 		changed = true
 	}
+	if !equality.Semantic.DeepEqual(existing.Spec.Template.Spec.Tolerations, desired.Spec.Template.Spec.Tolerations) {
+		logger.Info("Deployment tolerations changed, updating", "name", existing.Name)
+		existing.Spec.Template.Spec.Tolerations = desired.Spec.Template.Spec.Tolerations
+		changed = true
+	}
 
 	return changed
 }

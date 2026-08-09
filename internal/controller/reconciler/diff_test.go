@@ -6,6 +6,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
@@ -97,6 +98,24 @@ func TestSyncDeployment_PreservesUnmanagedAnnotations(t *testing.T) {
 	}
 	if existing.Annotations["deployment.kubernetes.io/revision"] != "16" {
 		t.Fatalf("unmanaged annotation stripped: %v", existing.Annotations)
+	}
+}
+
+func TestSyncDeploymentSyncsTolerations(t *testing.T) {
+	existing := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "gpu"},
+		Spec: appsv1.DeploymentSpec{Replicas: ptr.To(int32(1)), Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "server", Image: "server:v1"}}},
+		}},
+	}
+	desired := existing.DeepCopy()
+	desired.Spec.Template.Spec.Tolerations = []corev1.Toleration{{Key: "tensorprime.io/gpu-unsafe", Value: "true", Effect: corev1.TaintEffectNoSchedule}}
+
+	if !SyncDeployment(context.Background(), existing, desired, 1, false) {
+		t.Fatal("SyncDeployment did not report toleration change")
+	}
+	if !equality.Semantic.DeepEqual(existing.Spec.Template.Spec.Tolerations, desired.Spec.Template.Spec.Tolerations) {
+		t.Fatalf("tolerations not synchronized: got %v want %v", existing.Spec.Template.Spec.Tolerations, desired.Spec.Template.Spec.Tolerations)
 	}
 }
 

@@ -29,6 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
+	controllerreconciler "github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 )
 
 const (
@@ -52,6 +54,7 @@ type ASRInferenceServiceReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	Defaults operatorconfig.DefaultsConfig
 }
 
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=asrinferenceservices,verbs=get;list;watch;create;update;patch;delete
@@ -97,14 +100,15 @@ func (r *ASRInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	// Validate: transformers runtime requires a user-supplied image.
-	if asrSvc.Spec.Runtime == servingv1alpha2.ASRRuntimeTransformers && asrSvc.Spec.RuntimeImage == "" {
+	// Validate custom runtimes require a user-supplied image.
+	if (asrSvc.Spec.Runtime == servingv1alpha2.ASRRuntimeTransformers ||
+		asrSvc.Spec.Runtime == servingv1alpha2.ASRRuntimeCustom) && asrSvc.Spec.RuntimeImage == "" {
 		if err := r.setCondition(ctx, &asrSvc, asrSvcBeforePatch, servingv1alpha2.ASRConditionReady,
 			metav1.ConditionFalse, "MissingRuntimeImage",
-			"runtime=transformers requires spec.runtimeImage to be set"); err != nil {
+			fmt.Sprintf("runtime=%s requires spec.runtimeImage to be set", asrSvc.Spec.Runtime)); err != nil {
 			return ctrl.Result{}, err
 		}
-		logger.Info("ASRInferenceService blocked: transformers runtime but no runtimeImage", "name", asrSvc.Name)
+		logger.Info("ASRInferenceService blocked: custom runtime but no runtimeImage", "name", asrSvc.Name, "runtime", asrSvc.Spec.Runtime)
 		return ctrl.Result{}, nil
 	}
 
@@ -156,10 +160,17 @@ func (r *ASRInferenceServiceReconciler) reconcileASRDeployment(
 		return fmt.Errorf("get Deployment: %w", err)
 	}
 
-	// Update replicas and container image on spec change.
-	existing.Spec.Replicas = desired.Spec.Replicas
-	existing.Spec.Template = desired.Spec.Template
+	if !controllerreconciler.SyncDeployment(ctx, existing, desired, replicaCount(desired.Spec.Replicas), false) {
+		return nil
+	}
 	return r.Update(ctx, existing)
+}
+
+func replicaCount(replicas *int32) int32 {
+	if replicas == nil {
+		return 1
+	}
+	return *replicas
 }
 
 // reconcileASRService creates or updates the ClusterIP Service.
@@ -316,7 +327,11 @@ func (r *ASRInferenceServiceReconciler) buildASRDeployment(
 	}
 	// Phase 5 Hardening: Enforce default termination grace period
 	if podTemplate.Spec.TerminationGracePeriodSeconds == nil {
-		podTemplate.Spec.TerminationGracePeriodSeconds = ptr.To(int64(ASRTerminationGracePeriod))
+		grace := r.Defaults.ASRTerminationGracePeriodSeconds
+		if grace == 0 {
+			grace = ASRTerminationGracePeriod
+		}
+		podTemplate.Spec.TerminationGracePeriodSeconds = ptr.To(grace)
 	}
 
 	// Inject the primary runtime container at position 0.
@@ -353,17 +368,31 @@ func (r *ASRInferenceServiceReconciler) buildASRContainer(
 		ReadinessProbe: asrHealthProbe(15, 10, 6),
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultASRCPURequest),
-				corev1.ResourceMemory: resource.MustParse(DefaultASRMemoryRequest),
+				corev1.ResourceCPU:    resource.MustParse(r.asrCPURequest()),
+				corev1.ResourceMemory: resource.MustParse(r.asrMemoryRequest()),
 			},
 			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultASRCPURequest),
-				corev1.ResourceMemory: resource.MustParse(DefaultASRMemoryRequest),
+				corev1.ResourceCPU:    resource.MustParse(r.asrCPURequest()),
+				corev1.ResourceMemory: resource.MustParse(r.asrMemoryRequest()),
 			},
 		},
 	}
 	applyAcceleratorResources(&container, asrSvc.Spec.Accelerator)
 	return container
+}
+
+func (r *ASRInferenceServiceReconciler) asrCPURequest() string {
+	if r.Defaults.ASRCPURequest != "" {
+		return r.Defaults.ASRCPURequest
+	}
+	return DefaultASRCPURequest
+}
+
+func (r *ASRInferenceServiceReconciler) asrMemoryRequest() string {
+	if r.Defaults.ASRMemoryRequest != "" {
+		return r.Defaults.ASRMemoryRequest
+	}
+	return DefaultASRMemoryRequest
 }
 
 func asrRuntimeImage(asrSvc *servingv1alpha2.ASRInferenceService) string {

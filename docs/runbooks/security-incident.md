@@ -76,10 +76,9 @@ kubectl describe llmregistrycheck -A | grep -A10 "Violations:"
 2. If the violation is a false positive (new registry not in allowlist):
 
    ```bash
-   # Add registry to operator config
-   kubectl patch configmap ckodex-operator-config -n ckodex-system \
-     --type=merge -p '{"data":{"CKODEX_SECURITY_ALLOWED_REGISTRIES":"ghcr.io,gcr.io,quay.io,new-registry.example.com"}}'
-   kubectl rollout restart deploy/ckodex-kserve-llm-operator -n ckodex-system
+   # Update the operator's supported deployment configuration through the
+   # deployment pipeline, then roll it out. See docs/operator-defaults.md for
+   # workload defaults; security allowlists are currently compiled defaults.
    ```
 
 ---

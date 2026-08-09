@@ -141,6 +141,20 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 					"tensor parallelism=%d requires GPU resources; nvidia.com/gpu limit not set", tp))
 			}
 		}
+		if len(llmSvc.Spec.Parallelism.GPUDevices) > 0 {
+			if len(llmSvc.Spec.Template.Spec.Containers) == 0 {
+				errs = append(errs, "spec.parallelism.gpuDevices requires a primary container")
+			} else {
+				if tp != int32(len(llmSvc.Spec.Parallelism.GPUDevices)) {
+					errs = append(errs, fmt.Sprintf(
+						"spec.parallelism.gpuDevices has %d devices but tensor parallelism is %d",
+						len(llmSvc.Spec.Parallelism.GPUDevices), tp))
+				}
+				if err := validateGPUDevices(llmSvc.Spec.Parallelism.GPUDevices); err != nil {
+					errs = append(errs, err.Error())
+				}
+			}
+		}
 	}
 
 	// Validate scaling
@@ -205,6 +219,21 @@ func (v *LLMInferenceServiceValidator) validate(llmSvc *servingv1alpha2.LLMInfer
 	}
 
 	return warnings, nil
+}
+
+func validateGPUDevices(devices []string) error {
+	seen := make(map[string]struct{}, len(devices))
+	for _, device := range devices {
+		device = strings.TrimSpace(device)
+		if device == "" {
+			return fmt.Errorf("spec.parallelism.gpuDevices must not contain empty values")
+		}
+		if _, ok := seen[device]; ok {
+			return fmt.Errorf("spec.parallelism.gpuDevices contains duplicate device %q", device)
+		}
+		seen[device] = struct{}{}
+	}
+	return nil
 }
 
 func (v *LLMInferenceServiceValidator) validateResources(llmSvc *servingv1alpha2.LLMInferenceService, warnings *admission.Warnings) error {

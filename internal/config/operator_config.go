@@ -213,11 +213,35 @@ type DefaultsConfig struct {
 	// StorageInitializerImage is the default storage initializer image.
 	StorageInitializerImage string `json:"storageInitializerImage"`
 
+	// QuantCppImage is the default quant-cpp runtime image.
+	QuantCppImage string `json:"quantCppImage"`
+
+	// CustomStorageInitializerImage handles non-hf:// model sources.
+	CustomStorageInitializerImage string `json:"customStorageInitializerImage"`
+
 	// HuggingFaceInitializerImage is the Xet-aware hf:// downloader image.
 	HuggingFaceInitializerImage string `json:"huggingFaceInitializerImage"`
 
 	// DefaultReplicas is the default number of model server replicas.
 	DefaultReplicas int32 `json:"defaultReplicas"`
+
+	// VLLMCPURequest and VLLMMemoryRequest apply when a workload does not
+	// provide resource requests for its primary vLLM container.
+	VLLMCPURequest    string `json:"vllmCPURequest"`
+	VLLMMemoryRequest string `json:"vllmMemoryRequest"`
+
+	// TerminationGracePeriodSeconds applies when a workload omits a pod-level
+	// termination grace period.
+	TerminationGracePeriodSeconds int64 `json:"terminationGracePeriodSeconds"`
+
+	// ASR defaults apply when an ASR service omits its resource and grace values.
+	ASRCPURequest                    string `json:"asrCPURequest"`
+	ASRMemoryRequest                 string `json:"asrMemoryRequest"`
+	ASRTerminationGracePeriodSeconds int64  `json:"asrTerminationGracePeriodSeconds"`
+
+	// Cache defaults apply to LocalModelCache warmup Jobs.
+	CacheCPURequest    string `json:"cacheCPURequest"`
+	CacheMemoryRequest string `json:"cacheMemoryRequest"`
 }
 
 // SchedulerDefaults configures the EPP scheduler.
@@ -324,12 +348,22 @@ func DefaultOperatorConfig() OperatorConfig {
 		Features: DefaultFeatureGates(),
 		Defaults: DefaultsConfig{
 			// Pinned to a specific version — :latest is a supply chain risk and air-gapped blocker.
-			RuntimeImage:                "vllm/vllm-openai:v0.25.1",
-			KServeMultiNodeRuntime:      "kserve-huggingfaceserver-multinode",
-			SchedulerImage:              "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc",
-			StorageInitializerImage:     "kserve/storage-initializer:v0.19.0",
-			HuggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.7",
-			DefaultReplicas:             1,
+			RuntimeImage:                     "vllm/vllm-openai:v0.25.1",
+			KServeMultiNodeRuntime:           "kserve-huggingfaceserver-multinode",
+			SchedulerImage:                   "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc",
+			StorageInitializerImage:          "kserve/storage-initializer:v0.19.0",
+			QuantCppImage:                    "ckodex/quant-cpp:v0.1.0",
+			CustomStorageInitializerImage:    "ckodex/storage-initializer:v0.1.0",
+			HuggingFaceInitializerImage:      "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.7",
+			DefaultReplicas:                  1,
+			VLLMCPURequest:                   "2",
+			VLLMMemoryRequest:                "4Gi",
+			TerminationGracePeriodSeconds:    60,
+			ASRCPURequest:                    "1",
+			ASRMemoryRequest:                 "2Gi",
+			ASRTerminationGracePeriodSeconds: 30,
+			CacheCPURequest:                  "1",
+			CacheMemoryRequest:               "1Gi",
 		},
 		Scheduler: SchedulerDefaults{
 			Image: "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc",
@@ -383,7 +417,17 @@ func (c *OperatorConfig) LoadFromEnv() {
 
 	envStr("CKODEX_RUNTIME_IMAGE", &c.Defaults.RuntimeImage)
 	envStr("CKODEX_KSERVE_MULTINODE_RUNTIME", &c.Defaults.KServeMultiNodeRuntime)
+	envStr("CKODEX_QUANT_CPP_IMAGE", &c.Defaults.QuantCppImage)
+	envStr("CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE", &c.Defaults.CustomStorageInitializerImage)
 	envStr("CKODEX_HUGGING_FACE_INITIALIZER_IMAGE", &c.Defaults.HuggingFaceInitializerImage)
+	envStr("CKODEX_VLLM_CPU_REQUEST", &c.Defaults.VLLMCPURequest)
+	envStr("CKODEX_VLLM_MEMORY_REQUEST", &c.Defaults.VLLMMemoryRequest)
+	envInt64("CKODEX_TERMINATION_GRACE_PERIOD_SECONDS", &c.Defaults.TerminationGracePeriodSeconds)
+	envStr("CKODEX_ASR_CPU_REQUEST", &c.Defaults.ASRCPURequest)
+	envStr("CKODEX_ASR_MEMORY_REQUEST", &c.Defaults.ASRMemoryRequest)
+	envInt64("CKODEX_ASR_TERMINATION_GRACE_PERIOD_SECONDS", &c.Defaults.ASRTerminationGracePeriodSeconds)
+	envStr("CKODEX_CACHE_CPU_REQUEST", &c.Defaults.CacheCPURequest)
+	envStr("CKODEX_CACHE_MEMORY_REQUEST", &c.Defaults.CacheMemoryRequest)
 	envStr("CKODEX_SCHEDULER_IMAGE", &c.Scheduler.Image)
 	envStr("CKODEX_AUTH_ISSUER_URL", &c.Auth.IssuerURL)
 	envStr("CKODEX_AUTH_AUDIENCE", &c.Auth.Audience)
@@ -437,6 +481,17 @@ func envFloat(key string, target *float64) {
 		parsed, err := strconv.ParseFloat(val, 64)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "WARNING: invalid float value for %s: %s (using default: %f)\n", key, val, *target)
+			return
+		}
+		*target = parsed
+	}
+}
+
+func envInt64(key string, target *int64) {
+	if val, ok := os.LookupEnv(key); ok {
+		parsed, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: invalid integer value for %s: %s (using default: %d)\n", key, val, *target)
 			return
 		}
 		*target = parsed

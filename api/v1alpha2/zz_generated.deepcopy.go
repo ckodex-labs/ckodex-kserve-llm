@@ -3077,6 +3077,11 @@ func (in *ParallelismSpec) DeepCopyInto(out *ParallelismSpec) {
 		*out = new(int32)
 		**out = **in
 	}
+	if in.GPUDevices != nil {
+		in, out := &in.GPUDevices, &out.GPUDevices
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.Pipeline != nil {
 		in, out := &in.Pipeline, &out.Pipeline
 		*out = new(int32)

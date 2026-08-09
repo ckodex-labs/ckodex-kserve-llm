@@ -33,19 +33,34 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 		norm := strings.ToLower(modelURI)
 		return strings.Contains(norm, "qwen3") && strings.Contains(norm, strings.ToLower(size))
 	}
+	qwen3ToolArgs := func() []string {
+		norm := strings.ToLower(modelURI)
+		parser := "hermes"
+		if strings.Contains(norm, "coder") {
+			parser = "qwen3_coder"
+		}
+		args := []string{"--enable-auto-tool-choice", "--tool-call-parser", parser}
+		if strings.Contains(norm, "coder") || strings.Contains(norm, "thinking") || strings.Contains(norm, "reasoning") {
+			args = append(args, "--reasoning-parser", "qwen3")
+		}
+		return args
+	}
+	toolArgs := func(parser string) []string {
+		return []string{"--enable-auto-tool-choice", "--tool-call-parser", parser}
+	}
 
 	switch {
 	case isGemma4("E2B"):
 		// 5B params, Any-to-Any, Dense. Single GPU (8 GB VRAM).
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
-				Args: []string{
+				Args: append([]string{
 					"--max-model-len", "131072",
 					"--trust-remote-code",
 					"--enforce-eager",
 					"--gpu-memory-utilization", "0.95",
 					"--max-num-seqs", "256",
-				},
+				}, toolArgs("hermes")...),
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("8"),
@@ -64,13 +79,13 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 		// 8B params, Any-to-Any, Dense. Single GPU (16 GB VRAM).
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
-				Args: []string{
+				Args: append([]string{
 					"--max-model-len", "131072",
 					"--trust-remote-code",
 					"--enforce-eager",
 					"--gpu-memory-utilization", "0.95",
 					"--max-num-seqs", "128",
-				},
+				}, toolArgs("hermes")...),
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("16"),
@@ -92,11 +107,11 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Expert: true, // Enable MoE expert routing
 			},
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
-				Args: []string{
+				Args: append([]string{
 					"--max-model-len", "65536",
 					"--trust-remote-code",
 					"--enforce-eager",
-				},
+				}, toolArgs("hermes")...),
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("32"),
@@ -118,11 +133,11 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				Tensor: ptr.To(int32(2)),
 			},
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
-				Args: []string{
+				Args: append([]string{
 					"--max-model-len", "65536",
 					"--trust-remote-code",
 					"--enforce-eager",
-				},
+				}, toolArgs("hermes")...),
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("32"),
@@ -148,6 +163,22 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("8"),
 						corev1.ResourceMemory: resource.MustParse("32Gi"),
+						"nvidia.com/gpu":      resource.MustParse("1"),
+					},
+				},
+			},
+		}
+	case strings.Contains(strings.ToLower(modelURI), "llama-4"):
+		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
+			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
+				Args: append([]string{
+					"--max-model-len", "32768",
+					"--trust-remote-code",
+				}, toolArgs("llama4_json")...),
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("16"),
+						corev1.ResourceMemory: resource.MustParse("64Gi"),
 						"nvidia.com/gpu":      resource.MustParse("1"),
 					},
 				},
@@ -228,11 +259,11 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			Parallelism: &servingv1alpha2.ParallelismSpec{Tensor: &tp},
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
-				Args: []string{
+				Args: append([]string{
 					"--max-model-len", "32768",
 					"--trust-remote-code",
 					"--gpu-memory-utilization", "0.90",
-				},
+				}, qwen3ToolArgs()...),
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("32"),
@@ -247,11 +278,11 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 		// Qwen3-8B/7B dense; single GPU (16 GB VRAM), MRv2 is the v0.24.0 default.
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
-				Args: []string{
+				Args: append([]string{
 					"--max-model-len", "32768",
 					"--trust-remote-code",
 					"--gpu-memory-utilization", "0.90",
-				},
+				}, qwen3ToolArgs()...),
 				Resources: &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("8"),
@@ -260,6 +291,10 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 					},
 				},
 			},
+		}
+	case strings.Contains(strings.ToLower(modelURI), "qwen3"):
+		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
+			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{Args: qwen3ToolArgs()},
 		}
 	}
 

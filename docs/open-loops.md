@@ -141,12 +141,11 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 - **Status:** done
 - **Priority:** P1
-- **Context:** `GHSA-fxhp-mv3v-67qp` affects the current `oras-go/v2` line and
-  has no published patched release as of 2026-07-04. OCI pulls set
+- **Context:** `GHSA-fxhp-mv3v-67qp` affected the `oras-go/v2` line. The
+  patched `v2.6.2` release is now pinned. OCI pulls set
   `file.Store.SkipUnpack = true`, so registry-controlled archives cannot reach
   the vulnerable automatic tar extraction path. A module-file test binds this
-  containment to `v2.6.1`; changing the dependency fails CI until the security
-  posture is reviewed.
+  containment to the patched version.
 - **Reference:** `internal/storage/oci_client.go`,
   `internal/storage/storage_extra_test.go`,
   `https://github.com/oras-project/oras-go/security/advisories/GHSA-fxhp-mv3v-67qp`

@@ -56,87 +56,11 @@ func (b *Builder) Build(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenc
 // BuildWithRole builds a model Deployment and, when configured, assigns its
 // distributed KV-transfer role (producer, consumer, or both) to vLLM.
 func (b *Builder) BuildWithRole(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32, hwType HardwareType, loras []servingv1alpha2.LLMLoraAdapter, kvRole string) *appsv1.Deployment {
-	selectorLabels := map[string]string{
-		"app.kubernetes.io/name":       "llminferenceservice",
-		"app.kubernetes.io/instance":   llmSvc.Name,
-		"app.kubernetes.io/managed-by": "ckodex-kserve-llm-operator",
-		"serving.ckodex.com/model":     strings.ReplaceAll(llmSvc.Spec.Model.Name, "/", "."),
-	}
-	labels := copyStringMap(llmSvc.Spec.Template.Labels)
-	for key, value := range selectorLabels {
-		labels[key] = value
-	}
-
-	podSpec := llmSvc.Spec.Template.Spec.DeepCopy()
-	if len(podSpec.Containers) > 0 && podSpec.Containers[0].Image == "" && b.RuntimeImage != "" {
-		podSpec.Containers[0].Image = b.RuntimeImage
-	}
-
-	// Apply Hardware Optimizations
-	ApplyHardwareOptimizations(ctx, hwType, podSpec)
-
-	// Phase 5 Hardening: Termination Grace Period
-	if podSpec.TerminationGracePeriodSeconds == nil {
-		grace := b.Defaults.TerminationGracePeriodSeconds
-		if grace == 0 {
-			grace = api.DefaultTerminationGracePeriod
-		}
-		podSpec.TerminationGracePeriodSeconds = ptr.To(grace)
-	}
-
-	// Ensure primary container resources
-	if len(podSpec.Containers) > 0 {
-		c := &podSpec.Containers[0]
-		b.ensureResources(c)
-		b.injectPreStop(c)
-	}
-
-	// LocalModelCache Logic
-	skipInitializer := b.applyLocalModelCache(ctx, llmSvc, podSpec)
-
-	if !skipInitializer {
-		if initContainer := b.BuildStorageInitializer(ctx, llmSvc, hwType, nil); initContainer != nil {
-			podSpec.InitContainers = append([]corev1.Container{*initContainer}, podSpec.InitContainers...)
-		}
-	}
-
-	b.ensureModelVolume(llmSvc, podSpec)
-	b.ensureModelVolumeMount(llmSvc, podSpec)
-	b.ensureHealthProbes(podSpec)
-	b.ensureSecurityContext(podSpec)
-	b.ensureTopologySpreadConstraints(podSpec, selectorLabels)
-
-	if len(loras) > 0 {
-		b.applyLoraAdapters(loras, podSpec)
-	}
-
-	b.applyEngineSelection(llmSvc, podSpec, hwType)
-	b.applyKVTransfer(llmSvc, podSpec, kvRole)
-
-	b.ensureVLLMEnv(llmSvc, podSpec)
-	b.applyGPUDeviceSelection(llmSvc, podSpec)
-
-	if !isNilSPIREInjector(b.SPIRE) {
-		b.SPIRE.InjectSidecar(podSpec, llmSvc)
-	}
-
-	// OIS v0.1: Refined Telemetry Sinks (Vector Sidecar)
-	b.injectVector(llmSvc, podSpec)
-
-	for k, v := range llmSvc.Spec.CostAllocationTags {
-		labels["ckodex.cost/"+strings.ReplaceAll(k, ".", "-")] = v
-	}
-	if isMultiprocessLMCache(llmSvc) {
-		labels["serving.ckodex.com/lmcache-mode"] = "multiprocess"
-	}
-
+	selectorLabels := deploymentSelectorLabels(llmSvc)
+	labels := b.buildDeploymentLabels(llmSvc, selectorLabels)
+	podSpec := b.buildPodSpec(ctx, llmSvc, hwType, loras, kvRole, selectorLabels)
 	annotations := b.buildAnnotations(llmSvc, podSpec, kvRole)
-	podAnnotations := copyStringMap(llmSvc.Spec.Template.Annotations)
-	podAnnotations["prometheus.io/scrape"] = "true"
-	podAnnotations["prometheus.io/port"] = "8000"
-	if isMultiprocessLMCache(llmSvc) {
-		podAnnotations["serving.ckodex.com/lmcache-engine"] = llmSvc.Spec.KVCache.Transfer.LMCache.EngineRef.Name
-	}
+	podAnnotations := b.buildPodAnnotations(llmSvc)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -160,6 +84,105 @@ func (b *Builder) BuildWithRole(ctx context.Context, llmSvc *servingv1alpha2.LLM
 			},
 		},
 	}
+}
+
+func deploymentSelectorLabels(llmSvc *servingv1alpha2.LLMInferenceService) map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "llminferenceservice",
+		"app.kubernetes.io/instance":   llmSvc.Name,
+		"app.kubernetes.io/managed-by": "ckodex-kserve-llm-operator",
+		"serving.ckodex.com/model":     strings.ReplaceAll(llmSvc.Spec.Model.Name, "/", "."),
+	}
+}
+
+func (b *Builder) buildDeploymentLabels(llmSvc *servingv1alpha2.LLMInferenceService, selectorLabels map[string]string) map[string]string {
+	labels := copyStringMap(llmSvc.Spec.Template.Labels)
+	for key, value := range selectorLabels {
+		labels[key] = value
+	}
+	for key, value := range llmSvc.Spec.CostAllocationTags {
+		labels["ckodex.cost/"+strings.ReplaceAll(key, ".", "-")] = value
+	}
+	if isMultiprocessLMCache(llmSvc) {
+		labels["serving.ckodex.com/lmcache-mode"] = "multiprocess"
+	}
+	return labels
+}
+
+func (b *Builder) buildPodSpec(
+	ctx context.Context,
+	llmSvc *servingv1alpha2.LLMInferenceService,
+	hwType HardwareType,
+	loras []servingv1alpha2.LLMLoraAdapter,
+	kvRole string,
+	selectorLabels map[string]string,
+) *corev1.PodSpec {
+	podSpec := llmSvc.Spec.Template.Spec.DeepCopy()
+	if len(podSpec.Containers) > 0 && podSpec.Containers[0].Image == "" && b.RuntimeImage != "" {
+		podSpec.Containers[0].Image = b.RuntimeImage
+	}
+	ApplyHardwareOptimizations(ctx, hwType, podSpec)
+	b.applyStorage(ctx, llmSvc, hwType, podSpec)
+	b.applyPodHardening(podSpec, selectorLabels)
+	b.applyRuntimeWiring(llmSvc, hwType, loras, kvRole, podSpec)
+	return podSpec
+}
+
+func (b *Builder) applyStorage(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, hwType HardwareType, podSpec *corev1.PodSpec) {
+	if podSpec.TerminationGracePeriodSeconds == nil {
+		grace := b.Defaults.TerminationGracePeriodSeconds
+		if grace == 0 {
+			grace = api.DefaultTerminationGracePeriod
+		}
+		podSpec.TerminationGracePeriodSeconds = ptr.To(grace)
+	}
+	if len(podSpec.Containers) > 0 {
+		b.ensureResources(&podSpec.Containers[0])
+		b.injectPreStop(&podSpec.Containers[0])
+	}
+	if !b.applyLocalModelCache(ctx, llmSvc, podSpec) {
+		if initContainer := b.BuildStorageInitializer(ctx, llmSvc, hwType, nil); initContainer != nil {
+			podSpec.InitContainers = append([]corev1.Container{*initContainer}, podSpec.InitContainers...)
+		}
+	}
+	b.ensureModelVolume(llmSvc, podSpec)
+	b.ensureModelVolumeMount(llmSvc, podSpec)
+}
+
+func (b *Builder) applyPodHardening(podSpec *corev1.PodSpec, selectorLabels map[string]string) {
+	b.ensureHealthProbes(podSpec)
+	b.ensureSecurityContext(podSpec)
+	b.ensureTopologySpreadConstraints(podSpec, selectorLabels)
+}
+
+func (b *Builder) applyRuntimeWiring(
+	llmSvc *servingv1alpha2.LLMInferenceService,
+	hwType HardwareType,
+	loras []servingv1alpha2.LLMLoraAdapter,
+	kvRole string,
+	podSpec *corev1.PodSpec,
+) {
+	if len(loras) > 0 {
+		b.applyLoraAdapters(loras, podSpec)
+	}
+	b.applyEngineSelection(llmSvc, podSpec, hwType)
+	b.applyKVTransfer(llmSvc, podSpec, kvRole)
+	b.ensureVLLMEnv(llmSvc, podSpec)
+	b.applyGPUDeviceSelection(llmSvc, podSpec)
+	if !isNilSPIREInjector(b.SPIRE) {
+		b.SPIRE.InjectSidecar(podSpec, llmSvc)
+	}
+	b.injectVector(llmSvc, podSpec)
+}
+
+func (b *Builder) buildPodAnnotations(llmSvc *servingv1alpha2.LLMInferenceService) map[string]string {
+	annotations := copyStringMap(llmSvc.Spec.Template.Annotations)
+	annotations["prometheus.io/scrape"] = "true"
+	annotations["prometheus.io/port"] = "8000"
+	if isMultiprocessLMCache(llmSvc) {
+		annotations["serving.ckodex.com/lmcache-engine"] = llmSvc.Spec.KVCache.Transfer.LMCache.EngineRef.Name
+	}
+	return annotations
 }
 
 // BuildPrefill builds the dedicated prefill side of a PD deployment. It uses

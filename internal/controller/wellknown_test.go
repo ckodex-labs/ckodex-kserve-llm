@@ -104,6 +104,34 @@ func TestGetWellKnownConfig(t *testing.T) {
 	}
 }
 
+func TestGetWellKnownConfigToolCallingDefaults(t *testing.T) {
+	tests := []struct {
+		name   string
+		uri    string
+		parser string
+		reason bool
+	}{
+		{name: "qwen instruct", uri: "hf://Qwen/Qwen3-Next-80B-A3B-Instruct", parser: "hermes"},
+		{name: "qwen coder", uri: "hf://Qwen/Qwen3-Coder-480B-A35B-Instruct", parser: "qwen3_coder", reason: true},
+		{name: "qwen thinking", uri: "hf://Qwen/Qwen3-235B-A22B-Thinking", parser: "hermes", reason: true},
+		{name: "llama 4", uri: "hf://meta-llama/Llama-4-Scout-17B-16E-Instruct", parser: "llama4_json"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := GetWellKnownConfig(tt.uri)
+			require.NotNil(t, cfg)
+			args := strings.Join(cfg.VLLMDefaults.Args, " ")
+			assert.Contains(t, args, "--enable-auto-tool-choice")
+			assert.Contains(t, args, "--tool-call-parser "+tt.parser)
+			if tt.reason {
+				assert.Contains(t, args, "--reasoning-parser qwen3")
+			} else {
+				assert.NotContains(t, args, "--reasoning-parser")
+			}
+		})
+	}
+}
+
 func TestMergePodSpec(t *testing.T) {
 	base := &corev1.PodSpec{
 		Containers: []corev1.Container{

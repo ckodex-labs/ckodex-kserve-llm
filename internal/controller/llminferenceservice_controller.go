@@ -616,7 +616,7 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	}
 	r.Recorder = mgr.GetEventRecorderFor("ckodex-llm-operator")
 
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
 		For(&servingv1alpha2.LLMInferenceService{}).
 		Owns(&appsv1.Deployment{}).
@@ -626,8 +626,19 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&gwapiv1.HTTPRoute{}).
 		Owns(&gwapiv1.GRPCRoute{}).
-		Owns(&gwapiv1.Gateway{}).
-		Owns(inferencePool).
+		Owns(&gwapiv1.Gateway{})
+
+	// The Gateway API Inference Extension CRD is installed separately from this
+	// operator. Register the ownership watch only when discovery confirms that
+	// the external type is available; otherwise controller-runtime retries the
+	// watch forever and blocks the manager in envtest or partial installations.
+	if _, err := mgr.GetRESTMapper().RESTMapping(scheduler.InferencePoolGVK.GroupKind(), scheduler.InferencePoolGVK.Version); err == nil {
+		builder = builder.Owns(inferencePool)
+	} else if !meta.IsNoMatchError(err) {
+		return fmt.Errorf("discover InferencePool CRD: %w", err)
+	}
+
+	return builder.
 		// Watch for LocalModelCache changes to update affinity
 		Watches(
 			&servingv1alpha2.LocalModelCache{},

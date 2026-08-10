@@ -33,7 +33,7 @@ type ConfigReconciler struct {
 func (r *ConfigReconciler) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
 	logger := log.FromContext(ctx).WithValues("component", "scheduler-config")
 
-	configName := llmSvc.Name + "-scheduler-config"
+	configName := schedulerConfigName(llmSvc.Name)
 
 	data, err := r.effectiveConfig(ctx, llmSvc)
 	if err != nil {
@@ -64,6 +64,10 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, llmSvc *servingv1alpha
 		}
 		return err
 	}
+	if err := controllerutil.SetControllerReference(llmSvc, &existing, r.Scheme); err != nil {
+		return fmt.Errorf("set existing configmap owner reference: %w", err)
+	}
+	existing.Labels = desired.Labels
 	existing.Data = desired.Data
 	return r.Update(ctx, &existing)
 }

@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -191,19 +192,19 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	// Fetch AIPacks early so BaseModel quantization can be injected before the
-	// deployment builder runs. Governance re-uses the same list below (lines ~238).
-	var earlyAIPackList servingv1alpha2.AIPackList
-	if err := r.List(ctx, &earlyAIPackList, client.InNamespace(llmSvc.Namespace)); err != nil {
+	// Fetch AIPacks once so BaseModel quantization can be injected before the
+	// deployment builder runs and governance can reuse the same snapshot.
+	var aipackList servingv1alpha2.AIPackList
+	activePacks := []servingv1alpha2.AIPack{}
+	if err := r.List(ctx, &aipackList, client.InNamespace(llmSvc.Namespace)); err != nil {
 		logger.Error(err, "failed to list AIPacks for pre-deployment injection (non-blocking)")
 	} else {
-		var earlyPacks []servingv1alpha2.AIPack
-		for _, pack := range earlyAIPackList.Items {
+		for _, pack := range aipackList.Items {
 			if pack.Labels["serving.ckodex.com/workload"] == llmSvc.Name {
-				earlyPacks = append(earlyPacks, pack)
+				activePacks = append(activePacks, pack)
 			}
 		}
-		applyAIPackConfig(&llmSvc, earlyPacks)
+		applyAIPackConfig(&llmSvc, activePacks)
 	}
 
 	// 3b. Select the single-node Deployment or KServe-native multi-node path.
@@ -253,13 +254,7 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 				Type: servingv1alpha2.ConditionSchedulerReady, Status: metav1.ConditionFalse,
 				Reason: "SchedulerFeatureDisabled", Message: err.Error(), ObservedGeneration: llmSvc.Generation,
 			}
-			meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
-			setSchedulerGateReadyCondition(&llmSvc, condition.Message)
-			if r.Gateway != nil {
-				err = errors.Join(err, r.Gateway.Reconcile(ctx, &llmSvc))
-			}
-			err = errors.Join(err, r.Status().Patch(ctx, &llmSvc, client.MergeFrom(llmSvcBeforePatch)))
-			return ctrl.Result{}, err
+			return r.reconcileSchedulerBlocked(ctx, &llmSvc, llmSvcBeforePatch, condition, err, 0)
 		}
 		ready, err := r.Scheduler.Reconcile(ctx, &llmSvc)
 		condition := metav1.Condition{
@@ -270,26 +265,13 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		if err != nil {
 			condition.Reason = "SchedulerReconcileFailed"
 			condition.Message = err.Error()
-			meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
-			setSchedulerGateReadyCondition(&llmSvc, condition.Message)
-			if r.Gateway != nil {
-				err = errors.Join(err, r.Gateway.Reconcile(ctx, &llmSvc))
-			}
-			err = errors.Join(err, r.Status().Patch(ctx, &llmSvc, client.MergeFrom(llmSvcBeforePatch)))
-			return ctrl.Result{}, fmt.Errorf("reconcile scheduler: %w", err)
+			return r.reconcileSchedulerBlocked(
+				ctx, &llmSvc, llmSvcBeforePatch, condition,
+				fmt.Errorf("reconcile scheduler: %w", err), 0,
+			)
 		}
 		if !ready {
-			meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
-			setSchedulerGateReadyCondition(&llmSvc, condition.Message)
-			if r.Gateway != nil {
-				if err := r.Gateway.Reconcile(ctx, &llmSvc); err != nil {
-					return ctrl.Result{}, fmt.Errorf("route scheduler fail-closed backend: %w", err)
-				}
-			}
-			if err := r.Status().Patch(ctx, &llmSvc, client.MergeFrom(llmSvcBeforePatch)); err != nil {
-				return ctrl.Result{}, fmt.Errorf("update scheduler readiness: %w", err)
-			}
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			return r.reconcileSchedulerBlocked(ctx, &llmSvc, llmSvcBeforePatch, condition, nil, 5*time.Second)
 		}
 		condition.Status = metav1.ConditionTrue
 		condition.Reason = "EndpointPickerReady"
@@ -334,19 +316,6 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	if r.ToolSurface != nil {
 		if err := r.ToolSurface.ReconcileToolSurface(ctx, &llmSvc, activeLoras); err != nil {
 			return ctrl.Result{}, fmt.Errorf("reconcile tool surface: %w", err)
-		}
-	}
-
-	// List AIPacks associated with this LLMInferenceService via the workload label.
-	var aipackList servingv1alpha2.AIPackList
-	activePacks := []servingv1alpha2.AIPack{}
-	if err := r.List(ctx, &aipackList, client.InNamespace(llmSvc.Namespace)); err != nil {
-		logger.Error(err, "failed to list AIPacks; governance reconcile will run with empty pack list")
-	} else {
-		for _, pack := range aipackList.Items {
-			if pack.Labels["serving.ckodex.com/workload"] == llmSvc.Name {
-				activePacks = append(activePacks, pack)
-			}
 		}
 	}
 
@@ -464,6 +433,34 @@ func setSchedulerGateReadyCondition(llmSvc *servingv1alpha2.LLMInferenceService,
 	})
 }
 
+// reconcileSchedulerBlocked records a scheduler readiness failure before
+// reconciling the fail-closed gateway route and persisting status. Keeping
+// those operations together prevents one readiness branch from silently
+// skipping the status patch when gateway reconciliation fails.
+func (r *LLMInferenceServiceReconciler) reconcileSchedulerBlocked(
+	ctx context.Context,
+	llmSvc *servingv1alpha2.LLMInferenceService,
+	before *servingv1alpha2.LLMInferenceService,
+	condition metav1.Condition,
+	cause error,
+	requeueAfter time.Duration,
+) (ctrl.Result, error) {
+	meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
+	setSchedulerGateReadyCondition(llmSvc, condition.Message)
+	if r.Gateway != nil {
+		if err := r.Gateway.Reconcile(ctx, llmSvc); err != nil {
+			cause = errors.Join(cause, fmt.Errorf("route scheduler fail-closed backend: %w", err))
+		}
+	}
+	if err := r.Status().Patch(ctx, llmSvc, client.MergeFrom(before)); err != nil {
+		cause = errors.Join(cause, fmt.Errorf("update scheduler readiness: %w", err))
+	}
+	if cause != nil {
+		return ctrl.Result{}, cause
+	}
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
 // reconcileDeployment creates or updates the vLLM Deployment.
 func (r *LLMInferenceServiceReconciler) reconcileDeployment(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, loras []servingv1alpha2.LLMLoraAdapter) error {
 	logger := log.FromContext(ctx)
@@ -568,6 +565,9 @@ func (r *LLMInferenceServiceReconciler) cleanupResources(ctx context.Context, ll
 }
 
 func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	inferencePool := &unstructured.Unstructured{}
+	inferencePool.SetGroupVersionKind(scheduler.InferencePoolGVK)
+
 	r.APIReader = mgr.GetAPIReader()
 	r.DeploymentBuilder = &deployment.Builder{
 		Client:                  mgr.GetClient(),
@@ -616,16 +616,29 @@ func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error
 	}
 	r.Recorder = mgr.GetEventRecorderFor("ckodex-llm-operator")
 
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
 		For(&servingv1alpha2.LLMInferenceService{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.ConfigMap{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&gwapiv1.HTTPRoute{}).
 		Owns(&gwapiv1.GRPCRoute{}).
-		Owns(&gwapiv1.Gateway{}).
+		Owns(&gwapiv1.Gateway{})
+
+	// The Gateway API Inference Extension CRD is installed separately from this
+	// operator. Register the ownership watch only when discovery confirms that
+	// the external type is available; otherwise controller-runtime retries the
+	// watch forever and blocks the manager in envtest or partial installations.
+	if _, err := mgr.GetRESTMapper().RESTMapping(scheduler.InferencePoolGVK.GroupKind(), scheduler.InferencePoolGVK.Version); err == nil {
+		builder = builder.Owns(inferencePool)
+	} else if !meta.IsNoMatchError(err) {
+		return fmt.Errorf("discover InferencePool CRD: %w", err)
+	}
+
+	return builder.
 		// Watch for LocalModelCache changes to update affinity
 		Watches(
 			&servingv1alpha2.LocalModelCache{},

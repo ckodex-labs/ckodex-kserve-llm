@@ -168,6 +168,7 @@ func main() {
 
 	if cfg.Features.EnableScheduler {
 		reconciler.Scheduler = &scheduler.Reconciler{
+			Client: mgr.GetClient(),
 			Config: &scheduler.ConfigReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},
 			EPP:    &scheduler.EPPManager{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Image: cfg.Scheduler.Image},
 			Pool:   &scheduler.InferencePoolManager{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},

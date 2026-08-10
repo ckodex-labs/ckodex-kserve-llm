@@ -12,17 +12,12 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
-
-var inferencePoolGVK = schema.GroupVersionKind{
-	Group: "inference.networking.k8s.io", Version: "v1", Kind: "InferencePool",
-}
 
 // InferencePoolManager reconciles the GA Gateway API Inference Extension pool.
 type InferencePoolManager struct {
@@ -52,24 +47,27 @@ func (m *InferencePoolManager) Reconcile(ctx context.Context, llmSvc *servingv1a
 			"selector":    map[string]interface{}{"matchLabels": stringMapToAny(selector)},
 			"targetPorts": []interface{}{map[string]interface{}{"number": int64(8000)}},
 			"endpointPickerRef": map[string]interface{}{
-				"name":        llmSvc.Name + "-epp",
+				"name":        eppName(llmSvc.Name),
 				"port":        map[string]interface{}{"number": int64(EPPPort)},
 				"failureMode": "FailClose",
 			},
 		},
 	}}
-	desired.SetGroupVersionKind(inferencePoolGVK)
+	desired.SetGroupVersionKind(InferencePoolGVK)
 	if err := controllerutil.SetControllerReference(llmSvc, desired, m.Scheme); err != nil {
 		return fmt.Errorf("set inferencepool owner: %w", err)
 	}
 	existing := &unstructured.Unstructured{}
-	existing.SetGroupVersionKind(inferencePoolGVK)
+	existing.SetGroupVersionKind(InferencePoolGVK)
 	err := m.Get(ctx, types.NamespacedName{Name: llmSvc.Name, Namespace: llmSvc.Namespace}, existing)
 	if apierrors.IsNotFound(err) {
 		return m.Create(ctx, desired)
 	}
 	if err != nil {
 		return fmt.Errorf("get GA InferencePool (is the v1 CRD installed?): %w", err)
+	}
+	if err := controllerutil.SetControllerReference(llmSvc, existing, m.Scheme); err != nil {
+		return fmt.Errorf("set existing inferencepool owner reference: %w", err)
 	}
 	existing.Object["spec"] = desired.Object["spec"]
 	existing.SetLabels(desired.GetLabels())

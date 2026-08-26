@@ -4,7 +4,24 @@ import test from "node:test";
 import { assistantFailureDetail, createAssistantRequest } from "./assistant-request.ts";
 
 function aborted(signal: AbortSignal) {
-    return new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+    return new Promise<void>((resolve, reject) => {
+        if (signal.aborted) {
+            resolve();
+            return;
+        }
+        // AbortSignal.timeout uses an unref'd timer in some Node releases. Keep
+        // this test alive with a bounded, referenced timer so the assertion
+        // remains deterministic across supported CI runtimes.
+        const guard = setTimeout(() => reject(new Error("abort signal did not fire")), 1_000);
+        signal.addEventListener(
+            "abort",
+            () => {
+                clearTimeout(guard);
+                resolve();
+            },
+            { once: true },
+        );
+    });
 }
 
 test("cancels an assistant request with an explicit operator reason", async () => {

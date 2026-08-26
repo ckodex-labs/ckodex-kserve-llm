@@ -24,19 +24,15 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Detect console sources
-        id: console
+      - name: Require console sources
         shell: bash
         run: |
-          if [[ -f console/package.json && -f console/package-lock.json ]]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice title=Console gate skipped::console/package.json and console/package-lock.json are not present in this checkout. The repo currently stores console as a gitlink without a .gitmodules mapping, so Actions cannot populate it from a fresh clone."
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
+          test -f console/package.json
+          test -f console/package-lock.json
+          test -f console/Dockerfile
+          git ls-files --error-unmatch console/package.json console/package-lock.json console/Dockerfile
 
       - name: Set up Node.js
-        if: steps.console.outputs.available == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -52,17 +48,40 @@ jobs:
       - name: Install GoReleaser
         shell: bash
         run: |
-          curl -sSL https://github.com/goreleaser/goreleaser/releases/download/v2.15.4/goreleaser_Linux_x86_64.tar.gz \
-            | tar -xz goreleaser
-          sudo mv goreleaser /usr/local/bin/goreleaser
+          tool_dir="$(mktemp -d)"
+          archive="$tool_dir/goreleaser_Linux_x86_64.tar.gz"
+          curl --fail --location --show-error --output "$archive" \
+            https://github.com/goreleaser/goreleaser/releases/download/v2.15.4/goreleaser_Linux_x86_64.tar.gz
+          echo "aae00c71a4a6d55e08cce9273a1516bdce33c1e07cffb7e502fa6fec4377dede  $archive" | sha256sum --check -
+          tar -xzf "$archive" -C "$tool_dir" goreleaser
+          sudo install -m 0755 "$tool_dir/goreleaser" /usr/local/bin/goreleaser
           goreleaser --version
 
       - name: Build console
-        if: steps.console.outputs.available == 'true'
         working-directory: console
         run: |
           npm ci
+          npm audit --omit=dev --audit-level=high
+          npm run test
+          npm run lint
+          npx tsc --noEmit
           npm run build
+          npm run verify:ssr
+          npm run verify:populated
+
+      - name: Build console container
+        run: docker build --target runner --tag ckodex-kserve-llm-console:ci console
+
+      - name: Scan console container
+        run: >-
+          docker run --rm
+          -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:0.72.0 image
+          --scanners vuln
+          --severity CRITICAL,HIGH
+          --ignore-unfixed
+          --exit-code 1
+          ckodex-kserve-llm-console:ci
 
       - name: Pre-pull Dagger engine
         shell: bash
@@ -86,6 +105,17 @@ jobs:
           version: v0.21.7
           verb: call
           args: all --source=.
+          dagger-flags: --progress plain
+
+      - name: Run Dagger test and coverage gate
+        uses: dagger/dagger-for-github@v8.4.0
+        timeout-minutes: 15
+        env:
+          DAGGER_NO_NAG: "1"
+        with:
+          version: v0.21.7
+          verb: call
+          args: test --source=.
           dagger-flags: --progress plain
 
       - name: Run vulnerability scan

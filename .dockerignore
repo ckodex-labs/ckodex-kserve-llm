@@ -1,0 +1,29 @@
+# Repository and editor metadata never enters the operator image build.
+.git
+.github
+.cocoindex_code
+.impeccable
+.DS_Store
+
+# Generated frontend and local build output can be gigabytes after console checks.
+**/node_modules
+**/.next
+**/.cache
+**/coverage
+**/dist
+**/bin
+**/*.tsbuildinfo
+
+# Local-only workspaces and documentation are not read by Dockerfile stages.
+console
+charts
+dagger
+deploy
+docs
+local
+run
+samples
+schema
+scratch
+test
+PRODUCT.md

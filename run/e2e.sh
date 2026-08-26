@@ -8,6 +8,14 @@ KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-kserve-017}"
 OPERATOR_IMAGE="${OPERATOR_IMAGE:-ckodex/kserve-llm-operator:dev}"
 STORAGE_INITIALIZER_IMAGE="${STORAGE_INITIALIZER_IMAGE:-ckodex/storage-initializer:v0.1.0}"
 
+if [[ "$OPERATOR_IMAGE" != *:* || "$OPERATOR_IMAGE" == *@* ]]; then
+  echo "OPERATOR_IMAGE must include a tag for the local Helm profile: ${OPERATOR_IMAGE}" >&2
+  exit 1
+fi
+
+OPERATOR_IMAGE_REPOSITORY="${OPERATOR_IMAGE%:*}"
+OPERATOR_IMAGE_TAG="${OPERATOR_IMAGE##*:}"
+
 log() {
   printf '\n==> %s\n' "$*"
 }
@@ -37,10 +45,20 @@ make storage-initializer-load STORAGE_INITIALIZER_IMG="$STORAGE_INITIALIZER_IMAG
 
 log "Installing CRDs and deploying the operator"
 kubectl apply --server-side -k config/crd/
-kubectl apply -k config/rbac/
-kubectl apply -f config/manager/manager.yaml
-kubectl rollout restart deployment/ckodex-controller-manager -n ckodex-system
-kubectl wait --for=condition=Available deployment/ckodex-controller-manager \
+helm upgrade --install ckodex-kserve-llm-operator deploy/helm \
+  --namespace ckodex-system --create-namespace \
+  --set fullnameOverride=ckodex-kserve-llm-operator \
+  --set-string image.repository="$OPERATOR_IMAGE_REPOSITORY" \
+  --set-string image.tag="$OPERATOR_IMAGE_TAG" \
+  --set image.pullPolicy=IfNotPresent \
+  --set replicaCount=1 \
+  --set leaderElection.enabled=false \
+  --set webhook.enabled=true \
+  --set certManager.enabled=true
+kubectl wait --for=condition=Ready \
+  certificate/ckodex-kserve-llm-operator-webhook-cert \
+  -n ckodex-system --timeout=300s
+kubectl rollout status deployment/ckodex-kserve-llm-operator-controller-manager \
   -n ckodex-system --timeout=300s
 
 log "Applying the sample inference service and probing the endpoint"

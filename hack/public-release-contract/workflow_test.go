@@ -23,7 +23,9 @@ type releaseWorkflow struct {
 type workflowJob struct {
 	Needs       []string          `yaml:"needs"`
 	Permissions map[string]string `yaml:"permissions"`
+	Outputs     map[string]string `yaml:"outputs"`
 	Steps       []workflowStep    `yaml:"steps"`
+	Uses        string            `yaml:"uses"`
 }
 
 type workflowStep struct {
@@ -41,16 +43,47 @@ func TestReleaseWorkflowRunsAnonymousContractAfterPublishing(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(content, &workflow))
 	job, found := workflow.Jobs["public-release-contract"]
 	require.True(t, found, "release workflow has no public-release-contract job")
-	assert.ElementsMatch(t, []string{"image-release", "helm-release"}, job.Needs)
+	assert.ElementsMatch(t, []string{
+		"image-release",
+		"console-image-release",
+		"image-provenance",
+		"console-image-provenance",
+		"hf-initializer-provenance",
+		"helm-release",
+	}, job.Needs)
 	assert.Equal(t, map[string]string{"contents": "read"}, job.Permissions)
+	consoleImageJob, found := workflow.Jobs["console-image-release"]
+	require.True(t, found, "release workflow has no console-image-release job")
+	assert.Equal(t, "ghcr.io/${{ github.repository_owner }}/ckodex-kserve-llm-console", consoleImageJob.Outputs["image-name"])
+	assert.Contains(t, consoleImageJob.Steps[len(consoleImageJob.Steps)-1].Run, "COSIGN_REF")
+	assert.Contains(t, workflow.Jobs["console-image-provenance"].Uses, "generator_container_slsa3.yml")
+	assert.Equal(t, "ghcr.io/${{ github.repository }}", workflow.Jobs["image-release"].Outputs["image-name"])
+	verifyJob, found := workflow.Jobs["verify"]
+	require.True(t, found, "release workflow has no verify job")
+	require.NotEmpty(t, stepContaining(verifyJob.Steps, "git ls-files --error-unmatch console/package.json"), "release verification must require ordinary console source files")
+	helmJob, found := workflow.Jobs["helm-release"]
+	require.True(t, found, "release workflow has no helm-release job")
+	helmPackage := stepContaining(helmJob.Steps, "helm package deploy/helm")
+	require.NotEmpty(t, helmPackage)
+	assert.Contains(t, helmPackage, "--version \"${chart_version}\"")
+	assert.Contains(t, helmPackage, "--app-version \"${RELEASE_VERSION}\"")
+	assert.Contains(t, helmPackage, "helm template release \"$chart_package\"")
+	assert.Contains(t, helmPackage, "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:${RELEASE_VERSION}")
 
+	assertAnonymousContractSafety(t, job)
+}
+
+func assertAnonymousContractSafety(t *testing.T, job workflowJob) {
+	t.Helper()
 	command := contractCommand(job.Steps)
 	require.NotEmpty(t, command)
 	for _, argument := range []string{
 		"--repository=",
+		"--console-repository=",
 		"--chart-repository=",
 		"--version=",
 		"--operator-digest=",
+		"--console-digest=",
 		"--initializer-digest=",
 	} {
 		assert.Contains(t, command, argument)
@@ -65,8 +98,12 @@ func TestReleaseWorkflowRunsAnonymousContractAfterPublishing(t *testing.T) {
 }
 
 func contractCommand(steps []workflowStep) string {
+	return stepContaining(steps, "go run ./hack/public-release-contract")
+}
+
+func stepContaining(steps []workflowStep, needle string) string {
 	for _, step := range steps {
-		if strings.Contains(step.Run, "go run ./hack/public-release-contract") {
+		if strings.Contains(step.Run, needle) {
 			return step.Run
 		}
 	}

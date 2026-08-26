@@ -1,7 +1,7 @@
 version: "2"
 run:
   issues-exit-code: 1
-  tests: false
+  tests: true
   concurrency: 2
 linters:
   default: none
@@ -28,6 +28,7 @@ linters:
         - G102
         - G103
         - G104
+        - G101
         - G106
         - G108
         - G109
@@ -36,16 +37,22 @@ linters:
         - G112
         - G113
         - G114
+        - G107
+        - G204
         - G201
         - G202
         - G203
+        - G301
         - G302
         - G303
+        - G304
         - G305
+        - G306
         - G307
         - G401
         - G402
         - G403
+        - G404
         - G501
         - G502
         - G503
@@ -55,6 +62,33 @@ linters:
   exclusions:
     generated: lax
     rules:
+      # These are pre-existing, path-scoped findings in trusted plumbing and
+      # identifier constants; new findings outside these exact files remain
+      # blocking. Retire each exception as its owning subsystem is hardened.
+      - linters:
+          - gosec
+        path: ^(internal/auth/apikey\.go|internal/config/startup_validation\.go|internal/controller/imagepullsecret_reconciler\.go|internal/observability/(audit|events|ois_v01)\.go)$
+        text: "G101:"
+      - linters:
+          - gosec
+        path: ^(cmd/huggingface-initializer/main\.go|cmd/storage-initializer/main\.go|hack/helm-contract/main\.go)$
+        text: "G204:"
+      - linters:
+          - gosec
+        path: ^(cmd/storage-initializer/main\.go|internal/observability/audit\.go|internal/storage/(github_client|gitlab_client|gs_client|oci_client|parallel_download|s3_client)\.go)$
+        text: "G301:"
+      - linters:
+          - gosec
+        path: ^(cmd/storage-initializer/main\.go|hack/helm-contract/main\.go|internal/storage/(checksum|github_client|gs_client|oci_client|parallel_download|s3_client|seaweedfs_client)\.go)$
+        text: "G304:"
+      - linters:
+          - gosec
+        path: ^internal/storage/gitlab_client\.go$
+        text: "G306:"
+      - linters:
+          - gosec
+        path: ^(internal/chaos/engine\.go|internal/observability/metrics_querier\.go)$
+        text: "G404:"
       - linters:
           - gosec
         path: _test\.go
@@ -70,7 +104,7 @@ linters:
         path: ^test/
       - linters:
           - staticcheck
-        text: "SA1019: mgr.GetEventRecorderFor is deprecated"
+        text: "GetEventRecorderFor is deprecated"
     paths:
       - third_party$
       - builtin$

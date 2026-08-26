@@ -32,21 +32,31 @@ jobs:
       - name: Install GoReleaser
         shell: bash
         run: |
-          curl -sSL https://github.com/goreleaser/goreleaser/releases/download/v2.15.4/goreleaser_Linux_x86_64.tar.gz \
-            | tar -xz goreleaser
-          sudo mv goreleaser /usr/local/bin/goreleaser
+          tool_dir="$(mktemp -d)"
+          archive="$tool_dir/goreleaser_Linux_x86_64.tar.gz"
+          curl --fail --location --show-error --output "$archive" \
+            https://github.com/goreleaser/goreleaser/releases/download/v2.15.4/goreleaser_Linux_x86_64.tar.gz
+          echo "aae00c71a4a6d55e08cce9273a1516bdce33c1e07cffb7e502fa6fec4377dede  $archive" | sha256sum --check -
+          tar -xzf "$archive" -C "$tool_dir" goreleaser
+          sudo install -m 0755 "$tool_dir/goreleaser" /usr/local/bin/goreleaser
           goreleaser --version
 
       - name: Install golangci-lint
         shell: bash
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v2.12.2/install.sh \
-            | sh -s -- -b /usr/local/bin v2.12.2
+          tool_dir="$(mktemp -d)"
+          archive="$tool_dir/golangci-lint-2.12.2-linux-amd64.tar.gz"
+          curl --fail --location --show-error --output "$archive" \
+            https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz
+          echo "8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553  $archive" | sha256sum --check -
+          tar -xzf "$archive" -C "$tool_dir"
+          sudo install -m 0755 "$tool_dir/golangci-lint-2.12.2-linux-amd64/golangci-lint" /usr/local/bin/golangci-lint
           golangci-lint --version
 
       - name: Run release verification gates
         shell: bash
         run: |
+          git ls-files --error-unmatch console/package.json console/package-lock.json console/Dockerfile
           golangci-lint run -v --timeout 10m ./...
           go test ./...
           go run ./hack/helm-contract
@@ -88,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image-digest: ${{ steps.build.outputs.digest }}
-      image-name: ${{ steps.build.outputs.name }}
+      image-name: ghcr.io/${{ github.repository }}
       hf-initializer-digest: ${{ steps.build-hf-initializer.outputs.digest }}
       hf-initializer-name: ${{ steps.build-hf-initializer.outputs.name }}
     steps:
@@ -106,8 +116,13 @@ jobs:
       - name: Install Dagger CLI
         shell: bash
         run: |
-          curl -fsSL https://dl.dagger.io/dagger/install.sh \
-            | BIN_DIR=/usr/local/bin DAGGER_VERSION=v0.21.7 sh
+          tool_dir="$(mktemp -d)"
+          archive="$tool_dir/dagger_v0.21.7_linux_amd64.tar.gz"
+          curl --fail --location --show-error --output "$archive" \
+            https://dl.dagger.io/dagger/releases/0.21.7/dagger_v0.21.7_linux_amd64.tar.gz
+          echo "44430afc6f9c390fc47c4f352b15de9309a5e97ebd1ae563839617d6df8e8cc5  $archive" | sha256sum --check -
+          tar -xzf "$archive" -C "$tool_dir" dagger
+          sudo install -m 0755 "$tool_dir/dagger" /usr/local/bin/dagger
           dagger version
 
       - name: Install Cosign
@@ -208,6 +223,71 @@ jobs:
           path: sbom/
           retention-days: 90
 
+  # 2. Console image build, scan metadata, and publish
+  console-image-release:
+    name: Console Image Build + Push
+    needs: [verify]
+    runs-on: ubuntu-latest
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-name: ghcr.io/${{ github.repository_owner }}/ckodex-kserve-llm-console
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish console image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./console
+          file: ./console/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/ckodex-kserve-llm-console:${{ github.ref_name }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Scan published console image
+        env:
+          CONSOLE_REF: ghcr.io/${{ github.repository_owner }}/ckodex-kserve-llm-console@${{ steps.build.outputs.digest }}
+        run: |
+          docker pull "${CONSOLE_REF}"
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.72.0 image \
+            --scanners vuln \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --exit-code 1 \
+            "${CONSOLE_REF}"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.0.0
+        with:
+          cosign-release: v3.1.1
+
+      - name: Sign console image with cosign (OIDC)
+        env:
+          COSIGN_REF: ghcr.io/${{ github.repository_owner }}/ckodex-kserve-llm-console@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${COSIGN_REF}"
+
   # 2. Binary Release (GoReleaser)
   # Generates the multi-arch binaries and creates a GitHub Release (Draft).
   binary-release:
@@ -277,6 +357,21 @@ jobs:
     secrets:
       registry-password: ${{ secrets.GITHUB_TOKEN }}
 
+  console-image-provenance:
+    needs: [console-image-release]
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
+    with:
+      image: ${{ needs.console-image-release.outputs.image-name }}
+      digest: ${{ needs.console-image-release.outputs.image-digest }}
+      registry-username: ${{ github.actor }}
+      private-repository: true
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
   hf-initializer-provenance:
     needs: [image-release]
     permissions:
@@ -323,16 +418,31 @@ jobs:
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
           chart_version="${RELEASE_VERSION#v}"
-          helm package deploy/helm --version "${chart_version}" --app-version "${chart_version}"
-          helm push ckodex-kserve-llm-operator-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+          chart_package="$RUNNER_TEMP/ckodex-kserve-llm-operator-${chart_version}.tgz"
+          helm package deploy/helm \
+            --version "${chart_version}" \
+            --app-version "${RELEASE_VERSION}" \
+            --destination "$RUNNER_TEMP"
+          rendered="$RUNNER_TEMP/helm-rendered.yaml"
+          helm template release "$chart_package" \
+            --namespace ckodex-system \
+            --set console.enabled=true > "$rendered"
+          for image in \
+            "ghcr.io/ckodex-labs/ckodex-kserve-llm:${RELEASE_VERSION}" \
+            "ghcr.io/ckodex-labs/ckodex-kserve-llm-console:${RELEASE_VERSION}" \
+            "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:${RELEASE_VERSION}"; do
+            grep -Fq "$image" "$rendered"
+          done
+          helm push "$chart_package" oci://ghcr.io/${{ github.repository_owner }}/charts
 
   # 6. Public artifact acceptance
   # Uses only anonymous GHCR bearer tokens. A release fails if any published
   # tag is private, missing, points at the wrong digest, or lacks an architecture.
   public-release-contract:
     name: Public Release Contract
-    needs: [image-release, helm-release]
+    needs: [image-release, console-image-release, image-provenance, console-image-provenance, hf-initializer-provenance, helm-release]
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -349,7 +459,9 @@ jobs:
         run: |
           go run ./hack/public-release-contract \
             --repository="ghcr.io/${{ github.repository }}" \
+            --console-repository="ghcr.io/${{ github.repository_owner }}/ckodex-kserve-llm-console" \
             --chart-repository="ghcr.io/${{ github.repository_owner }}/charts/ckodex-kserve-llm-operator" \
             --version="${{ github.ref_name }}" \
             --operator-digest="${{ needs.image-release.outputs.image-digest }}" \
+            --console-digest="${{ needs.console-image-release.outputs.image-digest }}" \
             --initializer-digest="${{ needs.image-release.outputs.hf-initializer-digest }}"

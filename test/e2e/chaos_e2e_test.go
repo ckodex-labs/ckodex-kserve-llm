@@ -15,14 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	operatorNamespace = "ckodex-system"
-	operatorName      = "ckodex-controller-manager"
 )
 
 var operatorLabels = client.MatchingLabels{
@@ -40,7 +38,10 @@ func TestE2E_Chaos_ControllerPodRestartRecovers(t *testing.T) {
 	victim := pods.Items[0]
 	require.NoError(t, k8sClient.Delete(ctx, &victim))
 
-	key := types.NamespacedName{Name: operatorName, Namespace: operatorNamespace}
+	var deployments appsv1.DeploymentList
+	require.NoError(t, k8sClient.List(ctx, &deployments, client.InNamespace(operatorNamespace), operatorLabels))
+	require.Len(t, deployments.Items, 1, "the chaos target must resolve to exactly one controller Deployment")
+	key := client.ObjectKeyFromObject(&deployments.Items[0])
 	require.NoError(t, wait.PollUntilContextTimeout(ctx, 2*time.Second, shortTimeout, true,
 		func(ctx context.Context) (bool, error) {
 			var deployment appsv1.Deployment

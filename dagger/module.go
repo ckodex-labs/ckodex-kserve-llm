@@ -63,11 +63,38 @@ func (m *CkodexOperator) Integration(ctx context.Context,
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
-	const script = `set -eu
-go install sigs.k8s.io/controller-runtime/tools/setup-envtest@` + envtestToolVersion + `
-assets="$$("$$(go env GOPATH)/bin/setup-envtest" use -p path "` + envtestK8sVersion + `")"
-REQUIRE_ENVTEST=1 KUBEBUILDER_ASSETS="$${assets}" go test -race -count=1 -p 1 ./test/integration/...`
-	out, err := goBase(source).WithExec([]string{"sh", "-ec", script}).Stdout(ctx)
+	script := `set -eu
+case "$(uname -m)" in
+  x86_64)
+    asset="setup-envtest-linux-amd64"
+    expected="` + envtestToolSHA256AMD64 + `"
+    envtest_asset="envtest-v` + envtestK8sVersion + `-linux-amd64.tar.gz"
+    envtest_expected="` + envtestAssetsSHA512AMD64 + `"
+    ;;
+  aarch64|arm64)
+    asset="setup-envtest-linux-arm64"
+    expected="` + envtestToolSHA256ARM64 + `"
+    envtest_asset="envtest-v` + envtestK8sVersion + `-linux-arm64.tar.gz"
+    envtest_expected="` + envtestAssetsSHA512ARM64 + `"
+    ;;
+  *)
+    echo "unsupported envtest tool architecture: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 120 \
+  -o /tmp/setup-envtest "` + envtestToolBaseURL + `/${asset}"
+echo "${expected}  /tmp/setup-envtest" | sha256sum --check --strict -
+install -m 0755 /tmp/setup-envtest /usr/local/bin/setup-envtest
+curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 180 \
+  -o /tmp/envtest.tar.gz "` + envtestAssetsBaseURL + `/${envtest_asset}"
+echo "${envtest_expected}  /tmp/envtest.tar.gz" | sha512sum --check --strict -
+setup-envtest sideload "` + envtestK8sVersion + `" < /tmp/envtest.tar.gz
+assets="$(setup-envtest use -i -p path "` + envtestK8sVersion + `")"
+REQUIRE_ENVTEST=1 KUBEBUILDER_ASSETS="$assets" go test -race -count=1 -p 1 ./test/integration/...`
+	out, err := goBase(source).
+		WithMountedCache("/root/.local/share/kubebuilder-envtest", dag.CacheVolume("envtest-assets")).
+		WithExec([]string{"sh", "-ec", script}).Stdout(ctx)
 	if err != nil {
 		return out, fmt.Errorf("integration: %w", err)
 	}

@@ -42,6 +42,16 @@ runtime:
   kserveMultiNodeRuntime: "kserve-huggingfaceserver-multinode"
   # Empty follows Chart.appVersion; set a digest-pinned override when required.
   huggingFaceInitializerImage: ""
+  customStorageInitializerImage: "ckodex/storage-initializer:v0.1.0"
+  quantCppImage: "ckodex/quant-cpp:v0.1.0"
+  vllmCPURequest: "2"
+  vllmMemoryRequest: "4Gi"
+  terminationGracePeriodSeconds: 60
+  asrCPURequest: "1"
+  asrMemoryRequest: "2Gi"
+  asrTerminationGracePeriodSeconds: 30
+  cacheCPURequest: "1"
+  cacheMemoryRequest: "1Gi"
 
 gateway:
   # Namespace where Envoy Gateway creates its data-plane proxy pods.

@@ -15,7 +15,7 @@ func setupControllers(mgr ctrl.Manager, cfg operatorconfig.OperatorConfig, recon
 	setupAdapterController(mgr, reconciler)
 	setupEvaluationController(mgr, reconciler)
 	setupTenantQuotaController(mgr)
-	setupLocalModelCacheController(mgr)
+	setupLocalModelCacheController(mgr, cfg)
 	setupExperimentalControllers(mgr, cfg)
 	setupModelOnboardingController(mgr, cfg)
 	setupSpecializedControllers(mgr, cfg)
@@ -37,8 +37,8 @@ func setupTenantQuotaController(mgr ctrl.Manager) {
 	mustSetupController("TenantQuota", instance.SetupWithManager(mgr))
 }
 
-func setupLocalModelCacheController(mgr ctrl.Manager) {
-	instance := &controller.LocalModelCacheReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("localmodelcache-controller")}
+func setupLocalModelCacheController(mgr ctrl.Manager, cfg operatorconfig.OperatorConfig) {
+	instance := &controller.LocalModelCacheReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("localmodelcache-controller"), Defaults: cfg.Defaults}
 	mustSetupController("LocalModelCache", instance.SetupWithManager(mgr))
 }
 
@@ -74,7 +74,7 @@ func configurePromotionMetrics(instance *controller.ModelOnboardingReconciler, c
 }
 
 func setupSpecializedControllers(mgr ctrl.Manager, cfg operatorconfig.OperatorConfig) {
-	asr := &controller.ASRInferenceServiceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("asrinferenceservice-controller")}
+	asr := &controller.ASRInferenceServiceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Recorder: mgr.GetEventRecorderFor("asrinferenceservice-controller"), Defaults: cfg.Defaults}
 	mustSetupController("ASRInferenceService", asr.SetupWithManager(mgr))
 	embedding := &controller.EmbeddingInferenceServiceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
 	mustSetupController("EmbeddingInferenceService", embedding.SetupWithManager(mgr))
@@ -82,7 +82,7 @@ func setupSpecializedControllers(mgr ctrl.Manager, cfg operatorconfig.OperatorCo
 	mustSetupController("AIPack", aipack.SetupWithManager(mgr))
 	multimodal := &controller.MultimodalInferenceServiceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
 	mustSetupController("MultimodalInferenceService", multimodal.SetupWithManager(mgr))
-	reranker := &controller.RerankerInferenceServiceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), AirGappedMode: cfg.AirGappedMode, LocalRegistry: cfg.LocalRegistry}
+	reranker := &controller.RerankerInferenceServiceReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), AirGappedMode: cfg.AirGappedMode, LocalRegistry: cfg.LocalRegistry, Defaults: cfg.Defaults}
 	mustSetupController("RerankerInferenceService", reranker.SetupWithManager(mgr))
 }
 

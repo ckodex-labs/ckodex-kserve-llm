@@ -17887,6 +17887,14 @@ spec:
                   expert:
                     description: Expert enables expert parallelism for MoE models.
                     type: boolean
+                  gpuDevices:
+                    description: |-
+                      GPUDevices pins NVIDIA_VISIBLE_DEVICES for the runtime container. Use
+                      stable GPU UUIDs when possible; the list length must match tensor
+                      parallelism when both are set.
+                    items:
+                      type: string
+                    type: array
                   pipeline:
                     description: Pipeline is the pipeline parallelism degree.
                     format: int32
@@ -27315,6 +27323,17 @@ spec:
                       Expert enables expert parallelism for MoE models.
                       When true, distributes Mixture-of-Experts across GPUs.
                     type: boolean
+                  gpuDevices:
+                    description: |-
+                      GPUDevices pins the runtime's visible NVIDIA devices. Values may be
+                      physical indices ("0", "1") or stable NVIDIA GPU UUIDs. The number of
+                      entries must match tensor parallelism when both are specified. Kubernetes
+                      still owns allocation and node placement; this field makes the
+                      container-level selection explicit for time-sliced or topology-managed
+                      deployments.
+                    items:
+                      type: string
+                    type: array
                   pipeline:
                     description: |-
                       Pipeline is the pipeline parallelism degree (--pipeline-parallel-size).

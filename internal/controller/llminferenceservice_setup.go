@@ -6,10 +6,14 @@ Licensed under the Apache License, Version 2.0.
 package controller
 
 import (
+	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -22,6 +26,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/status"
 	kserveintegration "github.com/ckodex-labs/kserve-llm-operator/internal/kserve"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/scheduler"
 )
 
 func (r *LLMInferenceServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -39,6 +44,7 @@ func (r *LLMInferenceServiceReconciler) initializeDeploymentComponents(mgr ctrl.
 		EnableHardwareSelection: r.EnableHardwareSelection, OTEL_Endpoint: r.OTEL_Endpoint,
 		AirGappedMode: r.AirGappedMode, LocalRegistry: r.LocalRegistry, LocalCosignKeyPath: r.LocalCosignKeyPath,
 		RuntimeImage: r.RuntimeImage, HFInitializerImage: r.HFInitializerImage, HFMirrorURL: r.HFMirrorURL,
+		Defaults: r.Defaults,
 	}
 	r.StatusReconciler = &status.Reconciler{Client: mgr.GetClient(), EnableHardening: r.EnableExperimentalStatusHardening}
 	r.CleanupReconciler = &cleanup.Reconciler{Client: mgr.GetClient()}
@@ -58,12 +64,20 @@ func (r *LLMInferenceServiceReconciler) initializeRuntimeComponents(mgr ctrl.Man
 }
 
 func (r *LLMInferenceServiceReconciler) setupManagedController(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	inferencePool := &unstructured.Unstructured{}
+	inferencePool.SetGroupVersionKind(scheduler.InferencePoolGVK)
+	builder := ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 10}).
 		For(&servingv1alpha2.LLMInferenceService{}).
 		Owns(&appsv1.Deployment{}).Owns(&corev1.Service{}).Owns(&policyv1.PodDisruptionBudget{}).
 		Owns(&corev1.PersistentVolumeClaim{}).Owns(&gwapiv1.HTTPRoute{}).Owns(&gwapiv1.GRPCRoute{}).
-		Owns(&gwapiv1.Gateway{}).
+		Owns(&gwapiv1.Gateway{})
+	if _, err := mgr.GetRESTMapper().RESTMapping(scheduler.InferencePoolGVK.GroupKind(), scheduler.InferencePoolGVK.Version); err == nil {
+		builder = builder.Owns(inferencePool)
+	} else if !meta.IsNoMatchError(err) {
+		return fmt.Errorf("discover InferencePool CRD: %w", err)
+	}
+	return builder.
 		Watches(&servingv1alpha2.LocalModelCache{}, handler.EnqueueRequestsFromMapFunc(r.mapLocalModelCacheToInferenceServices)).
 		Watches(&servingv1alpha2.LLMLoraAdapter{}, handler.EnqueueRequestsFromMapFunc(r.mapLoraAdapterToInferenceService)).
 		Complete(r)

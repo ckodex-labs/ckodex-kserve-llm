@@ -21,7 +21,7 @@ limitations under the License.
 package v1alpha2
 
 import (
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -3076,6 +3076,11 @@ func (in *ParallelismSpec) DeepCopyInto(out *ParallelismSpec) {
 		in, out := &in.DataLocal, &out.DataLocal
 		*out = new(int32)
 		**out = **in
+	}
+	if in.GPUDevices != nil {
+		in, out := &in.GPUDevices, &out.GPUDevices
+		*out = make([]string, len(*in))
+		copy(*out, *in)
 	}
 	if in.Pipeline != nil {
 		in, out := &in.Pipeline, &out.Pipeline

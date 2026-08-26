@@ -77,7 +77,10 @@ func (b *Builder) newInitializerContainer(uri, scheme string, hwType HardwareTyp
 		image = b.HFInitializerImage
 	}
 	if !isHuggingFaceScheme(scheme) || hwType == HardwareAppleSilicon {
-		image = api.CKodexStorageInitializerImage
+		image = b.Defaults.CustomStorageInitializerImage
+		if image == "" {
+			image = api.CKodexStorageInitializerImage
+		}
 	}
 	if b.AirGappedMode && b.LocalRegistry != "" {
 		image = b.rewriteImage(image)

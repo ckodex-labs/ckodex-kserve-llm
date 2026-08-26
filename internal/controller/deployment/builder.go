@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
@@ -33,6 +34,7 @@ type Builder struct {
 	RuntimeImage            string
 	HFInitializerImage      string
 	HFMirrorURL             string
+	Defaults                operatorconfig.DefaultsConfig
 }
 
 // Build constructs the desired Deployment spec.
@@ -83,7 +85,11 @@ func (b *Builder) preparePod(ctx context.Context, llmSvc *servingv1alpha2.LLMInf
 	}
 	ApplyHardwareOptimizations(ctx, hwType, podSpec)
 	if podSpec.TerminationGracePeriodSeconds == nil {
-		podSpec.TerminationGracePeriodSeconds = ptr.To(int64(api.DefaultTerminationGracePeriod))
+		grace := b.Defaults.TerminationGracePeriodSeconds
+		if grace == 0 {
+			grace = api.DefaultTerminationGracePeriod
+		}
+		podSpec.TerminationGracePeriodSeconds = ptr.To(grace)
 	}
 	if len(podSpec.Containers) > 0 {
 		b.ensureResources(&podSpec.Containers[0])
@@ -115,6 +121,7 @@ func (b *Builder) applyRuntime(llmSvc *servingv1alpha2.LLMInferenceService, hwTy
 	b.applyEngineSelection(llmSvc, podSpec, hwType)
 	b.applyKVTransfer(llmSvc, podSpec, kvRole)
 	b.ensureVLLMEnv(llmSvc, podSpec)
+	b.applyGPUDeviceSelection(llmSvc, podSpec)
 	if !isNilSPIREInjector(b.SPIRE) {
 		b.SPIRE.InjectSidecar(podSpec, llmSvc)
 	}

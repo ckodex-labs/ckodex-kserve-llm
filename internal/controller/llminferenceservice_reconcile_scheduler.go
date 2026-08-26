@@ -40,13 +40,8 @@ func (r *LLMInferenceServiceReconciler) reconcileScheduler(ctx context.Context, 
 func (r *LLMInferenceServiceReconciler) schedulerFeatureDisabled(ctx context.Context, state *llmInferenceReconcileState) (ctrl.Result, bool, error) {
 	err := fmt.Errorf("scheduler is requested but the scheduler feature is disabled")
 	condition := schedulerCondition(state.llmSvc, metav1.ConditionFalse, "SchedulerFeatureDisabled", err.Error())
-	meta.SetStatusCondition(&state.llmSvc.Status.Conditions, condition)
-	setSchedulerGateReadyCondition(state.llmSvc, condition.Message)
-	if r.Gateway != nil {
-		err = errors.Join(err, r.Gateway.Reconcile(ctx, state.llmSvc))
-	}
-	err = errors.Join(err, r.Status().Patch(ctx, state.llmSvc, client.MergeFrom(state.beforePatch)))
-	return ctrl.Result{}, true, err
+	result, err := r.reconcileSchedulerBlocked(ctx, state.llmSvc, state.beforePatch, condition, err, 0)
+	return result, true, err
 }
 
 func (r *LLMInferenceServiceReconciler) reconcileEnabledScheduler(ctx context.Context, state *llmInferenceReconcileState) (ctrl.Result, bool, error) {
@@ -64,28 +59,41 @@ func (r *LLMInferenceServiceReconciler) reconcileEnabledScheduler(ctx context.Co
 
 func (r *LLMInferenceServiceReconciler) schedulerReconcileFailed(ctx context.Context, state *llmInferenceReconcileState, reconcileErr error) (ctrl.Result, bool, error) {
 	condition := schedulerCondition(state.llmSvc, metav1.ConditionFalse, "SchedulerReconcileFailed", reconcileErr.Error())
-	meta.SetStatusCondition(&state.llmSvc.Status.Conditions, condition)
-	setSchedulerGateReadyCondition(state.llmSvc, condition.Message)
-	if r.Gateway != nil {
-		reconcileErr = errors.Join(reconcileErr, r.Gateway.Reconcile(ctx, state.llmSvc))
-	}
-	reconcileErr = errors.Join(reconcileErr, r.Status().Patch(ctx, state.llmSvc, client.MergeFrom(state.beforePatch)))
-	return ctrl.Result{}, true, fmt.Errorf("reconcile scheduler: %w", reconcileErr)
+	result, err := r.reconcileSchedulerBlocked(ctx, state.llmSvc, state.beforePatch, condition, fmt.Errorf("reconcile scheduler: %w", reconcileErr), 0)
+	return result, true, err
 }
 
 func (r *LLMInferenceServiceReconciler) schedulerNotReady(ctx context.Context, state *llmInferenceReconcileState) (ctrl.Result, bool, error) {
 	condition := schedulerCondition(state.llmSvc, metav1.ConditionFalse, "EndpointPickerUnavailable", "Waiting for the GA InferencePool and EPP readiness")
-	meta.SetStatusCondition(&state.llmSvc.Status.Conditions, condition)
-	setSchedulerGateReadyCondition(state.llmSvc, condition.Message)
+	result, err := r.reconcileSchedulerBlocked(ctx, state.llmSvc, state.beforePatch, condition, nil, 5*time.Second)
+	return result, true, err
+}
+
+// reconcileSchedulerBlocked records scheduler readiness, reconciles the
+// fail-closed route, and persists status as one failure transaction. This keeps
+// every blocked scheduler branch observable and prevents partial state writes.
+func (r *LLMInferenceServiceReconciler) reconcileSchedulerBlocked(
+	ctx context.Context,
+	llmSvc *servingv1alpha2.LLMInferenceService,
+	before *servingv1alpha2.LLMInferenceService,
+	condition metav1.Condition,
+	cause error,
+	requeueAfter time.Duration,
+) (ctrl.Result, error) {
+	meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
+	setSchedulerGateReadyCondition(llmSvc, condition.Message)
 	if r.Gateway != nil {
-		if err := r.Gateway.Reconcile(ctx, state.llmSvc); err != nil {
-			return ctrl.Result{}, true, fmt.Errorf("route scheduler fail-closed backend: %w", err)
+		if err := r.Gateway.Reconcile(ctx, llmSvc); err != nil {
+			cause = errors.Join(cause, fmt.Errorf("route scheduler fail-closed backend: %w", err))
 		}
 	}
-	if err := r.Status().Patch(ctx, state.llmSvc, client.MergeFrom(state.beforePatch)); err != nil {
-		return ctrl.Result{}, true, fmt.Errorf("update scheduler readiness: %w", err)
+	if err := r.Status().Patch(ctx, llmSvc, client.MergeFrom(before)); err != nil {
+		cause = errors.Join(cause, fmt.Errorf("update scheduler readiness: %w", err))
 	}
-	return ctrl.Result{RequeueAfter: 5 * time.Second}, true, nil
+	if cause != nil {
+		return ctrl.Result{}, cause
+	}
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
 }
 
 func schedulerCondition(llmSvc *servingv1alpha2.LLMInferenceService, status metav1.ConditionStatus, reason, message string) metav1.Condition {

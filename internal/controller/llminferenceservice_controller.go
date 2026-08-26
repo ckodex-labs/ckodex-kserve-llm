@@ -13,6 +13,7 @@ import (
 
 	"github.com/ckodex-labs/kserve-llm-operator/internal/auth"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/autoscaler"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/cleanup"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/deployment"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/evidence"
@@ -61,6 +62,7 @@ type LLMInferenceServiceReconciler struct {
 	HFInitializerImage     string
 	HFMirrorURL            string
 	KServeMultiNodeRuntime string
+	Defaults               operatorconfig.DefaultsConfig
 
 	DeploymentBuilder    *deployment.Builder
 	StatusReconciler     *status.Reconciler

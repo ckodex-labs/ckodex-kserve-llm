@@ -57,6 +57,26 @@ spec:
           value: {{ .Values.runtime.kserveMultiNodeRuntime | quote }}
         - name: CKODEX_HUGGING_FACE_INITIALIZER_IMAGE
           value: {{ include "ckodex-kserve-llm-operator.huggingFaceInitializerImage" . | quote }}
+        - name: CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE
+          value: {{ .Values.runtime.customStorageInitializerImage | quote }}
+        - name: CKODEX_QUANT_CPP_IMAGE
+          value: {{ .Values.runtime.quantCppImage | quote }}
+        - name: CKODEX_VLLM_CPU_REQUEST
+          value: {{ .Values.runtime.vllmCPURequest | quote }}
+        - name: CKODEX_VLLM_MEMORY_REQUEST
+          value: {{ .Values.runtime.vllmMemoryRequest | quote }}
+        - name: CKODEX_TERMINATION_GRACE_PERIOD_SECONDS
+          value: {{ .Values.runtime.terminationGracePeriodSeconds | quote }}
+        - name: CKODEX_ASR_CPU_REQUEST
+          value: {{ .Values.runtime.asrCPURequest | quote }}
+        - name: CKODEX_ASR_MEMORY_REQUEST
+          value: {{ .Values.runtime.asrMemoryRequest | quote }}
+        - name: CKODEX_ASR_TERMINATION_GRACE_PERIOD_SECONDS
+          value: {{ .Values.runtime.asrTerminationGracePeriodSeconds | quote }}
+        - name: CKODEX_CACHE_CPU_REQUEST
+          value: {{ .Values.runtime.cacheCPURequest | quote }}
+        - name: CKODEX_CACHE_MEMORY_REQUEST
+          value: {{ .Values.runtime.cacheMemoryRequest | quote }}
         - name: CKODEX_ENVOY_GATEWAY_NAMESPACE
           value: {{ .Values.gateway.dataPlaneNamespace | quote }}
         - name: CKODEX_HF_MIRROR_URL

@@ -111,7 +111,7 @@ func (m *EPPManager) requireEPPServiceAccount(ctx context.Context, llmSvc *servi
 
 func (m *EPPManager) reconcileService(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
 	labels := eppLabels(llmSvc)
-	name := llmSvc.Name + "-epp"
+	name := eppName(llmSvc.Name)
 
 	desired := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -137,6 +137,10 @@ func (m *EPPManager) reconcileService(ctx context.Context, llmSvc *servingv1alph
 		}
 		return err
 	}
+	if err := controllerutil.SetControllerReference(llmSvc, &existing, m.Scheme); err != nil {
+		return fmt.Errorf("set existing epp service owner reference: %w", err)
+	}
+	existing.Labels = labels
 	existing.Spec.Ports = desired.Spec.Ports
 	existing.Spec.Selector = desired.Spec.Selector
 	return m.Update(ctx, &existing)

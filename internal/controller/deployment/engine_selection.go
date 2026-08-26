@@ -61,11 +61,18 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 }
 
 func (b *Builder) selectQuantCpp(llmSvc *servingv1alpha2.LLMInferenceService, c *corev1.Container, hwType HardwareType) {
-	c.Image = api.QuantCppImage
+	c.Image = b.quantCppImage()
 	if b.AirGappedMode && b.LocalRegistry != "" {
 		c.Image = b.rewriteImage(c.Image)
 	}
 	b.ensureQuantCppArgs(llmSvc, c, hwType)
+}
+
+func (b *Builder) quantCppImage() string {
+	if b.Defaults.QuantCppImage != "" {
+		return b.Defaults.QuantCppImage
+	}
+	return api.QuantCppImage
 }
 
 func (b *Builder) selectVLLM(llmSvc *servingv1alpha2.LLMInferenceService, c *corev1.Container) {

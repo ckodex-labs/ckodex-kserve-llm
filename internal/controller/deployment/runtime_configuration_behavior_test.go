@@ -18,6 +18,22 @@ func TestEnsureVLLMEnvDefaultsModelAndDoesNotOverwriteExistingValues(t *testing.
 	(&Builder{}).ensureVLLMEnv(service, &corev1.PodSpec{})
 }
 
+func TestGPUDeviceSelectionDefaultsAndPreservesExplicitValue(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Parallelism: &servingv1alpha2.ParallelismSpec{GPUDevices: []string{"GPU-0", "GPU-1"}},
+		},
+	}
+
+	pod := &corev1.PodSpec{Containers: []corev1.Container{{}}}
+	(&Builder{}).applyGPUDeviceSelection(service, pod)
+	assert.Equal(t, "GPU-0,GPU-1", envValue(pod.Containers[0].Env, "NVIDIA_VISIBLE_DEVICES"))
+
+	pod = &corev1.PodSpec{Containers: []corev1.Container{{Env: []corev1.EnvVar{{Name: "NVIDIA_VISIBLE_DEVICES", Value: "all"}}}}}
+	(&Builder{}).applyGPUDeviceSelection(service, pod)
+	assert.Equal(t, "all", envValue(pod.Containers[0].Env, "NVIDIA_VISIBLE_DEVICES"))
+}
+
 func TestInjectVectorAndBuildAnnotationsReflectConfiguredSurfaces(t *testing.T) {
 	service := &servingv1alpha2.LLMInferenceService{ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "ns"}, Spec: servingv1alpha2.LLMInferenceServiceSpec{Canary: &servingv1alpha2.CanarySpec{Weight: 25}, ToolSurface: &servingv1alpha2.ToolSurface{AllowedAPIs: []string{"search"}}}}
 	builder := &Builder{OTEL_Endpoint: "http://otel"}

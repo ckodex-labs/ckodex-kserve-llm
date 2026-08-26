@@ -13,7 +13,7 @@ import (
 // ASRRuntime selects the serving runtime for ASR models.
 // Different runtimes support different model architectures.
 //
-// +kubebuilder:validation:Enum=faster-whisper;transformers
+// +kubebuilder:validation:Enum=faster-whisper;transformers;custom
 type ASRRuntime string
 
 const (
@@ -28,6 +28,11 @@ const (
 	// CohereLabs/cohere-transcribe-03-2026. The user must supply spec.runtimeImage
 	// pointing to an image that exposes /v1/audio/transcriptions on port 8000.
 	ASRRuntimeTransformers ASRRuntime = "transformers"
+
+	// ASRRuntimeCustom accepts an operator-supplied image for runtimes such as
+	// NVIDIA Parakeet, Canary, or other ASR servers that expose the documented
+	// OpenAI-compatible transcription endpoint.
+	ASRRuntimeCustom ASRRuntime = "custom"
 )
 
 // DefaultASRRuntimeImage returns the default container image for each runtime.
@@ -69,6 +74,7 @@ func DefaultASRAcceleratorImage(r ASRRuntime) string {
 // Two runtime modes are supported:
 //   - faster-whisper: for Whisper-family models (default, no GPU required)
 //   - transformers:   for custom ASR architectures (e.g. CohereLabs/cohere-transcribe-03-2026)
+//   - custom:         for operator-supplied ASR images (e.g. NVIDIA Parakeet)
 type ASRInferenceService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -96,12 +102,13 @@ type ASRInferenceServiceSpec struct {
 
 	// Runtime selects the serving runtime. Defaults to faster-whisper.
 	// +kubebuilder:default=faster-whisper
-	// +kubebuilder:validation:Enum=faster-whisper;transformers
+	// +kubebuilder:validation:Enum=faster-whisper;transformers;custom
 	// +optional
 	Runtime ASRRuntime `json:"runtime,omitempty"`
 
 	// RuntimeImage overrides the default container image for the selected runtime.
-	// Required when runtime=transformers (no public default image exists yet).
+	// Required when runtime=transformers or custom (the operator cannot select a
+	// safe image for an arbitrary ASR server).
 	// When omitted for faster-whisper the operator uses the built-in default.
 	// +optional
 	RuntimeImage string `json:"runtimeImage,omitempty"`

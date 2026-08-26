@@ -27,6 +27,7 @@ func buildReconciler(mgr ctrl.Manager, cfg operatorconfig.OperatorConfig) *contr
 		KServeMultiNodeRuntime: cfg.Defaults.KServeMultiNodeRuntime,
 		HFInitializerImage:     cfg.Defaults.HuggingFaceInitializerImage,
 		HFMirrorURL:            cfg.HuggingFaceMirrorURL,
+		Defaults:               cfg.Defaults,
 	}
 	reconciler.EnableGRPC = cfg.Features.EnableGRPC
 	reconciler.EnableHardwareSelection = cfg.Features.EnableExperimentalHardwareSelection
@@ -52,6 +53,7 @@ func configureScheduler(mgr ctrl.Manager, cfg operatorconfig.OperatorConfig, rec
 		return
 	}
 	reconciler.Scheduler = &scheduler.Reconciler{
+		Client: mgr.GetClient(),
 		Config: &scheduler.ConfigReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},
 		EPP:    &scheduler.EPPManager{Client: mgr.GetClient(), Scheme: mgr.GetScheme(), Image: cfg.Scheduler.Image},
 		Pool:   &scheduler.InferencePoolManager{Client: mgr.GetClient(), Scheme: mgr.GetScheme()},

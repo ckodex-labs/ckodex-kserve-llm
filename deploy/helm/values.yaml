@@ -123,6 +123,16 @@ vllm:
   defaultImage: "vllm/vllm-openai:v0.25.1"
   # Purpose-built Xet-aware image; dependencies are installed at image build time.
   huggingFaceInitializerImage: ""
+  customStorageInitializerImage: "ckodex/storage-initializer:v0.1.0"
+  quantCppImage: "ckodex/quant-cpp:v0.1.0"
+  cpuRequest: "2"
+  memoryRequest: "4Gi"
+  terminationGracePeriodSeconds: 60
+  asrCPURequest: "1"
+  asrMemoryRequest: "2Gi"
+  asrTerminationGracePeriodSeconds: 30
+  cacheCPURequest: "1"
+  cacheMemoryRequest: "1Gi"
 
   # v0.19.0 features
   cpuKvOffloading:

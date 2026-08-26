@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 )
 
 func buildLocalModelCacheScheme(t *testing.T) *runtime.Scheme {
@@ -308,4 +309,24 @@ func TestBuildWarmupJob(t *testing.T) {
 	assert.Equal(t, false, container.VolumeMounts[0].ReadOnly)
 	assert.Equal(t, "tmp", container.VolumeMounts[1].Name)
 	assert.False(t, podSpec.Volumes[1].EmptyDir == nil)
+}
+
+func TestBuildWarmupJob_UsesOperatorWorkloadDefaults(t *testing.T) {
+	r := &LocalModelCacheReconciler{
+		Recorder: record.NewFakeRecorder(10),
+		Defaults: operatorconfig.DefaultsConfig{
+			CustomStorageInitializerImage:    "registry.example/cache-init@sha256:abc",
+			CacheCPURequest:                  "500m",
+			CacheMemoryRequest:               "2Gi",
+			ASRTerminationGracePeriodSeconds: 90,
+		},
+	}
+	job := r.buildWarmupJob(makeLocalModelCache("defaults"), "warmup-job", "pvc-name", "default", "node-1")
+	container := job.Spec.Template.Spec.Containers[0]
+	cpu := container.Resources.Requests[corev1.ResourceCPU]
+	memory := container.Resources.Requests[corev1.ResourceMemory]
+	assert.Equal(t, "registry.example/cache-init@sha256:abc", container.Image)
+	assert.Equal(t, "500m", cpu.String())
+	assert.Equal(t, "2Gi", memory.String())
+	assert.Equal(t, int64(90), *job.Spec.Template.Spec.TerminationGracePeriodSeconds)
 }

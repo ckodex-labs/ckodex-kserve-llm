@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 )
 
 // newASRScheme returns a scheme with all types needed for ASR controller tests.
@@ -312,6 +313,23 @@ func TestBuildASRContainer_OverrideImage(t *testing.T) {
 	assert.Equal(t, "my-registry.io/custom-asr:v2", c.Image)
 }
 
+func TestBuildASRDeployment_UsesOperatorWorkloadDefaults(t *testing.T) {
+	r := &ASRInferenceServiceReconciler{
+		Defaults: operatorconfig.DefaultsConfig{
+			ASRCPURequest:                    "3",
+			ASRMemoryRequest:                 "6Gi",
+			ASRTerminationGracePeriodSeconds: 90,
+		},
+	}
+	dep := r.buildASRDeployment(newASRSvc("asr-defaults", "ns"))
+	container := dep.Spec.Template.Spec.Containers[0]
+	cpu := container.Resources.Requests[corev1.ResourceCPU]
+	memory := container.Resources.Requests[corev1.ResourceMemory]
+	assert.Equal(t, "3", cpu.String())
+	assert.Equal(t, "6Gi", memory.String())
+	assert.Equal(t, int64(90), *dep.Spec.Template.Spec.TerminationGracePeriodSeconds)
+}
+
 // TestBuildASRDeployment_ReplicasDefault verifies the Deployment gets 1 replica by default.
 func TestBuildASRDeployment_ReplicasDefault(t *testing.T) {
 	r := &ASRInferenceServiceReconciler{
@@ -384,6 +402,8 @@ func TestDefaultASRRuntimeImage(t *testing.T) {
 	// transformers has no default — user must supply runtimeImage.
 	assert.Empty(t, servingv1alpha2.DefaultASRRuntimeImage(servingv1alpha2.ASRRuntimeTransformers),
 		"transformers runtime must not have a default image")
+	assert.Empty(t, servingv1alpha2.DefaultASRRuntimeImage(servingv1alpha2.ASRRuntimeCustom),
+		"custom runtime must require an explicit image")
 }
 
 // TestASRReconcile_UpdateExisting verifies that Deployment and Service are updated

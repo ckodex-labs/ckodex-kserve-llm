@@ -15,10 +15,18 @@ func (b *Builder) ensureResources(c *corev1.Container) {
 		c.Resources.Requests = make(corev1.ResourceList)
 	}
 	if _, ok := c.Resources.Requests[corev1.ResourceCPU]; !ok {
-		c.Resources.Requests[corev1.ResourceCPU] = resource.MustParse(api.DefaultVLLMCPURequest)
+		cpu := b.Defaults.VLLMCPURequest
+		if cpu == "" {
+			cpu = api.DefaultVLLMCPURequest
+		}
+		c.Resources.Requests[corev1.ResourceCPU] = resource.MustParse(cpu)
 	}
 	if _, ok := c.Resources.Requests[corev1.ResourceMemory]; !ok {
-		c.Resources.Requests[corev1.ResourceMemory] = resource.MustParse(api.DefaultVLLMMemoryRequest)
+		memory := b.Defaults.VLLMMemoryRequest
+		if memory == "" {
+			memory = api.DefaultVLLMMemoryRequest
+		}
+		c.Resources.Requests[corev1.ResourceMemory] = resource.MustParse(memory)
 	}
 	if c.Resources.Limits == nil {
 		c.Resources.Limits = make(corev1.ResourceList)
@@ -36,7 +44,15 @@ func (b *Builder) injectPreStop(c *corev1.Container) {
 		c.Lifecycle = &corev1.Lifecycle{}
 	}
 	if c.Lifecycle.PreStop == nil {
-		c.Lifecycle.PreStop = &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/sh", "-c", "sleep 15"}}}
+		c.Lifecycle.PreStop = &corev1.LifecycleHandler{
+			Exec: &corev1.ExecAction{
+				// Keep cleanup inside this container. Killing arbitrary PIDs returned
+				// by nvidia-smi could terminate another tenant's workload on a
+				// time-sliced GPU; terminating PID 1 lets the driver reclaim this
+				// container's CUDA context without crossing that boundary.
+				Command: []string{"/bin/sh", "-c", "kill -TERM 1 2>/dev/null || true; sleep 10; kill -KILL 1 2>/dev/null || true; sleep 5"},
+			},
+		}
 	}
 }
 

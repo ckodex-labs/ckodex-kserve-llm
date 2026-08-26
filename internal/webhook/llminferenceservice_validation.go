@@ -240,7 +240,33 @@ func (v *LLMInferenceServiceValidator) validateParallelism(llmSvc *servingv1alph
 	if tp > 0 && (tp&(tp-1)) != 0 {
 		return fmt.Errorf("tensor parallelism (%d) must be a power of 2 (1, 2, 4, 8, etc.)", tp)
 	}
+	if len(llmSvc.Spec.Parallelism.GPUDevices) > 0 {
+		if len(llmSvc.Spec.Template.Spec.Containers) == 0 {
+			return fmt.Errorf("spec.parallelism.gpuDevices requires a primary container")
+		}
+		if tp != int32(len(llmSvc.Spec.Parallelism.GPUDevices)) {
+			return fmt.Errorf("spec.parallelism.gpuDevices has %d devices but tensor parallelism is %d", len(llmSvc.Spec.Parallelism.GPUDevices), tp)
+		}
+		if err := validateGPUDevices(llmSvc.Spec.Parallelism.GPUDevices); err != nil {
+			return err
+		}
+	}
 	return validateParallelismGPU(llmSvc, tp)
+}
+
+func validateGPUDevices(devices []string) error {
+	seen := make(map[string]struct{}, len(devices))
+	for _, device := range devices {
+		device = strings.TrimSpace(device)
+		if device == "" {
+			return fmt.Errorf("spec.parallelism.gpuDevices must not contain empty values")
+		}
+		if _, ok := seen[device]; ok {
+			return fmt.Errorf("spec.parallelism.gpuDevices contains duplicate device %q", device)
+		}
+		seen[device] = struct{}{}
+	}
+	return nil
 }
 
 func validateParallelismGPU(llmSvc *servingv1alpha2.LLMInferenceService, tp int32) error {

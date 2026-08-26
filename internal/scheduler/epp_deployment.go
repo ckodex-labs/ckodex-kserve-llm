@@ -16,13 +16,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
 
 func buildEPPDeployment(llmSvc *servingv1alpha2.LLMInferenceService, replicas int32, image string) *appsv1.Deployment {
 	labels := eppLabels(llmSvc)
-	name := llmSvc.Name + "-epp"
+	name := eppName(llmSvc.Name)
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: llmSvc.Namespace, Labels: labels},
 		Spec: appsv1.DeploymentSpec{
@@ -97,7 +98,7 @@ func eppConfigVolume(llmSvc *servingv1alpha2.LLMInferenceService) corev1.Volume 
 }
 
 func (m *EPPManager) createOrUpdateDeployment(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, desired *appsv1.Deployment) error {
-	name := llmSvc.Name + "-epp"
+	name := eppName(llmSvc.Name)
 	var existing appsv1.Deployment
 	if err := m.Get(ctx, types.NamespacedName{Name: name, Namespace: llmSvc.Namespace}, &existing); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -105,6 +106,10 @@ func (m *EPPManager) createOrUpdateDeployment(ctx context.Context, llmSvc *servi
 		}
 		return err
 	}
+	if err := controllerutil.SetControllerReference(llmSvc, &existing, m.Scheme); err != nil {
+		return fmt.Errorf("set existing epp deployment owner reference: %w", err)
+	}
+	existing.Labels = desired.Labels
 	existing.Spec = desired.Spec
 	return m.Update(ctx, &existing)
 }

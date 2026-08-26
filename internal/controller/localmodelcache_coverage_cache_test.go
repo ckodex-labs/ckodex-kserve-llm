@@ -78,7 +78,7 @@ func TestLocalModelCacheCoverageFailedJobSelfHealing(t *testing.T) {
 	if status.Phase != "Pending" {
 		t.Fatalf("self-healed phase = %q", status.Phase)
 	}
-	if err := cl.Get(context.Background(), clientKey("default", "job"), &batchv1.Job{}); err == nil {
+	if err := cl.Get(context.Background(), cacheClientKey("default", "job"), &batchv1.Job{}); err == nil {
 		t.Fatal("failed job still exists")
 	}
 
@@ -91,7 +91,7 @@ func TestLocalModelCacheCoverageFailedJobSelfHealing(t *testing.T) {
 	}
 }
 
-func clientKey(namespace, name string) client.ObjectKey {
+func cacheClientKey(namespace, name string) client.ObjectKey {
 	return client.ObjectKey{Namespace: namespace, Name: name}
 }
 

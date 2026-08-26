@@ -22,6 +22,15 @@ type ParallelismSpec struct {
 	// +optional
 	DataLocal *int32 `json:"dataLocal,omitempty"`
 
+	// GPUDevices pins the runtime's visible NVIDIA devices. Values may be
+	// physical indices ("0", "1") or stable NVIDIA GPU UUIDs. The number of
+	// entries must match tensor parallelism when both are specified. Kubernetes
+	// still owns allocation and node placement; this field makes the
+	// container-level selection explicit for time-sliced or topology-managed
+	// deployments.
+	// +optional
+	GPUDevices []string `json:"gpuDevices,omitempty"`
+
 	// Expert enables expert parallelism for MoE models.
 	// When true, distributes Mixture-of-Experts across GPUs.
 	// +optional

@@ -30,7 +30,7 @@ func TestInferencePoolManagerReconcilesGAContract(t *testing.T) {
 	require.NoError(t, manager.Reconcile(context.Background(), svc))
 
 	pool := &unstructured.Unstructured{}
-	pool.SetGroupVersionKind(inferencePoolGVK)
+	pool.SetGroupVersionKind(InferencePoolGVK)
 	require.NoError(t, manager.Get(context.Background(), types.NamespacedName{Name: "llama", Namespace: "inference"}, pool))
 	port, found, err := unstructured.NestedInt64(pool.Object, "spec", "targetPorts", "0", "number")
 	if err != nil || !found {

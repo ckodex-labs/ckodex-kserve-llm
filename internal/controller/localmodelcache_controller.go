@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 )
 
 const (
@@ -41,6 +42,7 @@ type LocalModelCacheReconciler struct {
 	Scheme    *runtime.Scheme
 	Recorder  record.EventRecorder
 	APIReader client.Reader
+	Defaults  operatorconfig.DefaultsConfig
 }
 
 // +kubebuilder:rbac:groups=serving.ckodex.com,resources=localmodelcaches,verbs=get;list;watch;create;update;patch;delete

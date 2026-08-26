@@ -28,6 +28,13 @@ func (b *Builder) ensureVLLMEnv(llmSvc *servingv1alpha2.LLMInferenceService, pod
 	}
 }
 
+func (b *Builder) applyGPUDeviceSelection(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
+	if len(podSpec.Containers) == 0 || llmSvc.Spec.Parallelism == nil || len(llmSvc.Spec.Parallelism.GPUDevices) == 0 {
+		return
+	}
+	setEnvDefault(&podSpec.Containers[0], "NVIDIA_VISIBLE_DEVICES", strings.Join(llmSvc.Spec.Parallelism.GPUDevices, ","))
+}
+
 func (b *Builder) injectVector(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
 	sink := "stdout"
 	if b.OTEL_Endpoint != "" {

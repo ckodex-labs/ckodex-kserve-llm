@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	controllerreconciler "github.com/ckodex-labs/kserve-llm-operator/internal/controller/reconciler"
 )
 
 const (
@@ -143,8 +144,9 @@ func (r *MultimodalInferenceServiceReconciler) reconcileMultimodalDeployment(
 		return fmt.Errorf("get Deployment: %w", err)
 	}
 
-	existing.Spec.Replicas = desired.Spec.Replicas
-	existing.Spec.Template = desired.Spec.Template
+	if !controllerreconciler.SyncDeployment(ctx, existing, desired, replicaCount(desired.Spec.Replicas), false) {
+		return nil
+	}
 	return r.Update(ctx, existing)
 }
 

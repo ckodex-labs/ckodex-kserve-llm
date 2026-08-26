@@ -5,12 +5,26 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{/* Hugging Face initializer image follows appVersion unless explicitly overridden. */}}
+{{- define "ckodex-kserve-llm-operator.huggingFaceInitializerImage" -}}
+{{- default (printf "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:%s" .Chart.AppVersion) .Values.runtime.huggingFaceInitializerImage -}}
+{{- end }}
+
 {{/* ServiceAccount used by the manager. */}}
 {{- define "ckodex-kserve-llm-operator.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
 {{- default (include "ckodex-kserve-llm-operator.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/* ServiceAccount used by the observe-only console. */}}
+{{- define "ckodex-kserve-llm-operator.consoleServiceAccountName" -}}
+{{- if .Values.console.serviceAccount.create }}
+{{- default (printf "%s-console" (include "ckodex-kserve-llm-operator.fullname" .)) .Values.console.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.console.serviceAccount.name }}
 {{- end }}
 {{- end }}
 

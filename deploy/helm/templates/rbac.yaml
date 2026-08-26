@@ -13,7 +13,10 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 rules:
 - apiGroups: [""]
-  resources: [configmaps, namespaces, nodes]
+  resources: [configmaps]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [""]
+  resources: [namespaces, nodes]
   verbs: [get, list, watch]
 - apiGroups: [""]
   resources: [events, secrets]
@@ -45,6 +48,12 @@ rules:
 - apiGroups: [policy]
   resources: [poddisruptionbudgets]
   verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [inference.networking.k8s.io]
+  resources: [inferencepools]
+  verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [inference.networking.x-k8s.io]
+  resources: [inferencemodelrewrites, inferenceobjectives]
+  verbs: [get, list, watch]
 - apiGroups: [serving.ckodex.com]
   resources:
     - agents

@@ -56,7 +56,7 @@ spec:
         - name: CKODEX_KSERVE_MULTINODE_RUNTIME
           value: {{ .Values.runtime.kserveMultiNodeRuntime | quote }}
         - name: CKODEX_HUGGING_FACE_INITIALIZER_IMAGE
-          value: {{ .Values.runtime.huggingFaceInitializerImage | quote }}
+          value: {{ include "ckodex-kserve-llm-operator.huggingFaceInitializerImage" . | quote }}
         - name: CKODEX_ENVOY_GATEWAY_NAMESPACE
           value: {{ .Values.gateway.dataPlaneNamespace | quote }}
         - name: CKODEX_HF_MIRROR_URL

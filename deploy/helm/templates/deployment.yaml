@@ -8,6 +8,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/component: controller-manager
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     control-plane: controller-manager
@@ -19,6 +20,8 @@ spec:
   template:
     metadata:
       labels:
+        app.kubernetes.io/name: ckodex-kserve-llm-operator
+        app.kubernetes.io/component: controller-manager
         control-plane: controller-manager
       annotations:
         prometheus.io/scrape: "true"
@@ -33,7 +36,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: manager
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ include "ckodex-kserve-llm-operator.imageTag" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - /manager
@@ -88,7 +91,7 @@ spec:
               value: {{ .Values.registry.mirrorURL | quote }}
             {{- end }}
             - name: CKODEX_HUGGING_FACE_INITIALIZER_IMAGE
-              value: {{ .Values.vllm.huggingFaceInitializerImage | quote }}
+              value: {{ include "ckodex-kserve-llm-operator.huggingFaceInitializerImage" . | quote }}
             # Feature Gates
             - name: CKODEX_FEATURE_ENABLE_SECURITY
               value: {{ .Values.features.enableSecurity | quote }}

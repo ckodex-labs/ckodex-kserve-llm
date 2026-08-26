@@ -486,7 +486,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Status:** done
 - **Priority:** P2
 - **Context:** `go.mod` uses the `go 1.26` language directive plus an explicit
-  `toolchain go1.26.5` pin.
+  `toolchain go1.26.6` pin.
 - **Reference:** `go.mod`
 
 ### L-CI-008 — No surface-conformance gate

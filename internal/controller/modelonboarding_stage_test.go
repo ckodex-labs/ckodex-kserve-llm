@@ -247,8 +247,8 @@ func TestExecuteStage_Promotion_Fails(t *testing.T) {
 	assert.Contains(t, err.Error(), "not ready for promotion")
 }
 
-// TestExecuteStage_UnknownType_NoOp skips unknown stage types without error.
-func TestExecuteStage_UnknownType_NoOp(t *testing.T) {
+// TestExecuteStage_UnknownType_FailsClosed rejects unknown stage types.
+func TestExecuteStage_UnknownType_FailsClosed(t *testing.T) {
 	scheme := newControllerScheme(t)
 	r := &ModelOnboardingReconciler{
 		Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
@@ -256,11 +256,12 @@ func TestExecuteStage_UnknownType_NoOp(t *testing.T) {
 	}
 
 	ob := simpleModelOnboarding("my-model")
-	llmSvc := stageNotReadyLLMSvc("my-model") // would fail for validation — must be ignored
+	llmSvc := stageNotReadyLLMSvc("my-model")
 	stage := servingv1alpha2.OnboardingStage{Name: "custom", Type: "future-stage-type"}
 
 	err := r.executeStage(context.Background(), ob, llmSvc, stage)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported onboarding stage type")
 }
 
 // ---- insecurePassMetricsQuerier ---------------------------------------------

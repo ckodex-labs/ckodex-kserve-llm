@@ -12,9 +12,8 @@ Licensed under the Apache License, Version 2.0.
 // The conversion webhook is registered in SetupWebhooks via ctrl.NewWebhookManagedBy.
 // controller-runtime automatically discovers the conversion methods by interface.
 //
-// Registration is currently commented out in cmd/manager/main.go pending TLS cert provisioning.
-// When un-commenting, also add `servingv1 "github.com/ckodex-labs/kserve-llm-operator/api/v1"`
-// to the main.go imports and register the v1 scheme.
+// Registration is enabled when the chart's webhook profile is enabled. The beta CRD
+// profile points the API server at the /convert endpoint and cert-manager supplies its CA.
 package webhook
 
 import (

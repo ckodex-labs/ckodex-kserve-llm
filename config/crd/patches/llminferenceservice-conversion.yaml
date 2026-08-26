@@ -1,0 +1,17 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: llminferenceservices.serving.ckodex.com
+  annotations:
+    cert-manager.io/inject-ca-from: ckodex-system/ckodex-kserve-llm-operator-webhook-cert
+spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      conversionReviewVersions:
+        - v1
+      clientConfig:
+        service:
+          name: ckodex-kserve-llm-operator-webhook-service
+          namespace: ckodex-system
+          path: /convert

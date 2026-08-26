@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,6 +29,7 @@ func eppScheme(t *testing.T) *runtime.Scheme {
 	require.NoError(t, servingv1alpha2.AddToScheme(s))
 	require.NoError(t, appsv1.AddToScheme(s))
 	require.NoError(t, corev1.AddToScheme(s))
+	require.NoError(t, rbacv1.AddToScheme(s))
 	return s
 }
 
@@ -40,6 +42,16 @@ func eppSvc(name, ns string) *servingv1alpha2.LLMInferenceService {
 				URI:  "hf://meta-llama/Llama-3.2-1B",
 			},
 			Router: servingv1alpha2.RouterSpec{Scheduler: &servingv1alpha2.SchedulerSpec{}},
+		},
+	}
+}
+
+func preprovisionedEPPServiceAccount(namespace string) *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EPPServiceAccountName,
+			Namespace: namespace,
+			Labels:    map[string]string{EPPServiceAccountLabel: "preprovisioned"},
 		},
 	}
 }
@@ -210,7 +222,7 @@ func TestEPPManager_Reconcile_DefaultReplicas(t *testing.T) {
 	// No Replicas set → defaults to 1
 
 	m := &EPPManager{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc, preprovisionedEPPServiceAccount("default")).Build(),
 		Scheme: scheme,
 	}
 
@@ -220,6 +232,7 @@ func TestEPPManager_Reconcile_DefaultReplicas(t *testing.T) {
 	require.NoError(t, m.Get(context.Background(),
 		types.NamespacedName{Name: "llama3-epp", Namespace: "default"}, &dep))
 	assert.Equal(t, int32(1), *dep.Spec.Replicas)
+	assert.Equal(t, EPPServiceAccountName, dep.Spec.Template.Spec.ServiceAccountName)
 }
 
 func TestEPPManager_Reconcile_CustomReplicas(t *testing.T) {
@@ -228,7 +241,7 @@ func TestEPPManager_Reconcile_CustomReplicas(t *testing.T) {
 	svc.Spec.Router.Scheduler.Replicas = ptr.To(int32(3))
 
 	m := &EPPManager{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc, preprovisionedEPPServiceAccount("production")).Build(),
 		Scheme: scheme,
 	}
 
@@ -245,7 +258,7 @@ func TestEPPManager_Reconcile_CreatesServiceAndDeployment(t *testing.T) {
 	svc := eppSvc("mistral", "default")
 
 	m := &EPPManager{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc, preprovisionedEPPServiceAccount("default")).Build(),
 		Scheme: scheme,
 	}
 
@@ -258,4 +271,17 @@ func TestEPPManager_Reconcile_CreatesServiceAndDeployment(t *testing.T) {
 	var service corev1.Service
 	require.NoError(t, m.Get(context.Background(),
 		types.NamespacedName{Name: "mistral-epp", Namespace: "default"}, &service))
+}
+
+func TestEPPManager_Reconcile_RequiresPreProvisionedRBAC(t *testing.T) {
+	scheme := eppScheme(t)
+	svc := eppSvc("mistral", "default")
+	m := &EPPManager{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme: scheme,
+	}
+
+	err := m.Reconcile(context.Background(), svc)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pre-provisioned")
 }

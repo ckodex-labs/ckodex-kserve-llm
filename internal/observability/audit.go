@@ -7,22 +7,13 @@ package observability
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
-
-	"github.com/google/uuid"
 )
 
 // AuditAction identifies the type of reconcile or inference-time event.
@@ -330,138 +321,13 @@ func (a *AuditLogger) LogModelPromotion(ctx context.Context, modelName, fromEnv,
 
 // emit writes the audit event to all configured sinks.
 func (a *AuditLogger) emit(ctx context.Context, event AuditEvent) {
-	// OIS v0.1: Ensure execution identity
-	if event.ExecID == "" {
-		event.ExecID = URN("exec", uuid.New().String())
-	}
-	if event.ExecKind == "" {
-		event.ExecKind = a.mapToExecKind(event.Action)
-	}
-	if event.ReproducibilityClass == "" {
-		event.ReproducibilityClass = ReproExplanatory
-	}
-
-	// 0. PII redaction — applied before any sink sees the details.
-	if a.redactor != nil {
-		event.Details = a.redactor.RedactDetails(event.Details)
-		event.Reason = a.redactor.RedactString(event.Reason)
-	}
-
-	// 1. Structured slog output (JSON)
-	a.logger.LogAttrs(ctx, slog.LevelInfo, "audit_event",
-		slog.String("action", string(event.Action)),
-		slog.String("resource", event.Resource),
-		slog.String("actor", event.Actor),
-		slog.String("outcome", string(event.Outcome)),
-		slog.Time("timestamp", event.Timestamp),
-		slog.String("reason", event.Reason),
-		slog.String(AttrExecID, event.ExecID),
-		slog.String(AttrExecKind, event.ExecKind),
-	)
-
-	// 2. OTel span event
-	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		attrs := []attribute.KeyValue{
-			attribute.String("audit.action", string(event.Action)),
-			attribute.String("audit.resource", event.Resource),
-			attribute.String("audit.actor", event.Actor),
-			attribute.String("audit.outcome", string(event.Outcome)),
-			attribute.String(AttrExecID, event.ExecID),
-			attribute.String(AttrExecKind, event.ExecKind),
-			attribute.String(AttrExecReproClass, event.ReproducibilityClass),
-		}
-		if event.Reason != "" {
-			attrs = append(attrs, attribute.String("audit.reason", event.Reason))
-		}
-		// OIS v0.1: Promote structured details to span attributes
-		for k, v := range event.Details {
-			attrs = append(attrs, attribute.String(k, v))
-		}
-		span.AddEvent("audit", trace.WithAttributes(attrs...))
-	}
-	// 3. Persistent File Audit (Best-effort, synchronous file append)
+	event = a.prepareAuditEvent(event)
+	event = a.redactAuditEvent(event)
+	a.emitToStructuredLog(ctx, event)
+	a.emitToOTelSpan(ctx, event)
 	a.emitToFile(event)
-
-	// 4. Direct OTLP Sink (OIS v0.1 / Contract)
-	if a.otelEndpoint != "" {
-		go a.emitToOTLP(ctx, event)
-	}
-
-	// 5. K8s Event (best-effort, non-blocking)
+	a.reportUnavailableOTLP(event)
 	go a.emitK8sEvent(ctx, event)
-}
-
-// emitToOTLP sends the audit event directly to an OTel collector as a log record.
-func (a *AuditLogger) emitToOTLP(ctx context.Context, event AuditEvent) {
-	// In a real production implementation, we would use the OTel Logs SDK.
-	// For this wave, we emit a debug log indicating the OTLP route is active.
-	// The operator's own Vector sidecar (if deployed) or FluentBit would scrape the
-	// slog JSON output and forward it to OTLP_ENDPOINT automatically.
-	a.logger.Debug("Audit signal routed to OTLP collector", "endpoint", a.otelEndpoint, "exec.id", event.ExecID)
-}
-
-// emitToFile writes the event as a JSON line to the persistent audit file.
-func (a *AuditLogger) emitToFile(event AuditEvent) {
-	if a.auditFilePath == "" {
-		return
-	}
-
-	// Ensure directory exists
-	dir := filepath.Dir(a.auditFilePath)
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			a.logger.Error("Failed to create audit log directory", "path", dir, "error", err)
-			return
-		}
-	}
-
-	f, err := os.OpenFile(a.auditFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-	if err != nil {
-		a.logger.Error("Failed to open audit log file", "path", a.auditFilePath, "error", err)
-		return
-	}
-	defer func() { _ = f.Close() }()
-
-	data, err := json.Marshal(event)
-	if err != nil {
-		return
-	}
-
-	if _, err := f.Write(append(data, '\n')); err != nil {
-		a.logger.Error("Failed to write to audit log file", "path", a.auditFilePath, "error", err)
-	}
-}
-
-// emitK8sEvent creates a Kubernetes Event resource for the audit trail.
-func (a *AuditLogger) emitK8sEvent(ctx context.Context, event AuditEvent) {
-	eventJSON, _ := json.Marshal(event.Details)
-
-	k8sEvent := &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "ckodex-audit-",
-			Namespace:    "default",
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "ckodex-kserve-llm-operator",
-				"ckodex.com/audit-action":      string(event.Action),
-			},
-		},
-		Reason:              string(event.Action),
-		Message:             event.Reason + " | " + string(eventJSON),
-		Type:                "Normal",
-		Action:              string(event.Action),
-		EventTime:           metav1.NowMicro(),
-		ReportingController: "ckodex-kserve-llm-operator",
-		ReportingInstance:   "controller-manager",
-	}
-
-	if event.Outcome == AuditFailure || event.Outcome == AuditDenied {
-		k8sEvent.Type = "Warning"
-	}
-
-	// Best-effort: don't fail reconcile if event creation fails
-	if a.Client != nil {
-		_ = a.Create(ctx, k8sEvent)
-	}
 }
 
 // LogRichInferenceSignal records a full OIS Inference Profile envelope (Section 26.2).

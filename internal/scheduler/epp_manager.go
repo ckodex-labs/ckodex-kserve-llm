@@ -9,15 +9,12 @@ import (
 	"context"
 	"fmt"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -36,6 +33,11 @@ const (
 	EPPMetricsPort int32 = 9090
 	// EPPHealthPort is the dedicated gRPC health port introduced by llm-d Router.
 	EPPHealthPort int32 = 9003
+	// EPPServiceAccountName is pre-provisioned by the platform/Helm profile in
+	// each managed namespace. The operator does not create or mutate RBAC.
+	EPPServiceAccountName = "ckodex-epp"
+	// EPPServiceAccountLabel identifies the pre-provisioned identity contract.
+	EPPServiceAccountLabel = "serving.ckodex.com/epp-rbac"
 )
 
 // EPPManager manages the Endpoint Picker Pod (EPP) deployment
@@ -45,6 +47,8 @@ type EPPManager struct {
 	Scheme *runtime.Scheme
 	Image  string
 }
+
+// +kubebuilder:rbac:groups=inference.networking.x-k8s.io,resources=inferencemodelrewrites;inferenceobjectives,verbs=get;list;watch
 
 // Reconcile creates/updates the EPP Deployment and Service.
 func (m *EPPManager) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
@@ -56,6 +60,9 @@ func (m *EPPManager) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMI
 	}
 	if llmSvc.Spec.Router.Scheduler.Replicas != nil {
 		replicas = *llmSvc.Spec.Router.Scheduler.Replicas
+	}
+	if err := m.requireEPPServiceAccount(ctx, llmSvc); err != nil {
+		return fmt.Errorf("validate pre-provisioned epp identity: %w", err)
 	}
 
 	// 1. Reconcile EPP Deployment
@@ -73,96 +80,33 @@ func (m *EPPManager) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMI
 }
 
 func (m *EPPManager) reconcileDeployment(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, replicas int32) error {
-	labels := eppLabels(llmSvc)
-	name := llmSvc.Name + "-epp"
-	image := m.Image
-	if image == "" {
-		image = EPPImage
-	}
-
-	desired := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: llmSvc.Namespace,
-			Labels:    labels,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: labels},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: labels},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "epp",
-							Image: image,
-							Args: []string{
-								"--pool-name=" + llmSvc.Name,
-								"--pool-namespace=" + llmSvc.Namespace,
-								"--pool-group=inference.networking.k8s.io",
-								"--config-file=/config/scheduler.yaml",
-								fmt.Sprintf("--grpc-port=%d", EPPPort),
-								fmt.Sprintf("--metrics-port=%d", EPPMetricsPort),
-								fmt.Sprintf("--grpc-health-port=%d", EPPHealthPort),
-								"--secure-serving=false",
-								"--metrics-endpoint-auth=false",
-								"--tracing=false",
-							},
-							Ports: []corev1.ContainerPort{
-								{Name: "grpc", ContainerPort: EPPPort, Protocol: corev1.ProtocolTCP},
-								{Name: "metrics", ContainerPort: EPPMetricsPort, Protocol: corev1.ProtocolTCP},
-								{Name: "health", ContainerPort: EPPHealthPort, Protocol: corev1.ProtocolTCP},
-							},
-							VolumeMounts: []corev1.VolumeMount{{
-								Name: "plugins-config-volume", MountPath: "/config", ReadOnly: true,
-							}},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									GRPC: &corev1.GRPCAction{Port: EPPHealthPort},
-								},
-								PeriodSeconds: 5,
-							},
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    *parseQuantity("100m"),
-									corev1.ResourceMemory: *parseQuantity("128Mi"),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    *parseQuantity("500m"),
-									corev1.ResourceMemory: *parseQuantity("256Mi"),
-								},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								RunAsNonRoot:             ptr.To(true),
-								AllowPrivilegeEscalation: ptr.To(false),
-								ReadOnlyRootFilesystem:   ptr.To(true),
-							},
-						},
-					},
-					Volumes: []corev1.Volume{{
-						Name: "plugins-config-volume",
-						VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
-							LocalObjectReference: corev1.LocalObjectReference{Name: llmSvc.Name + "-scheduler-config"},
-						}},
-					}},
-				},
-			},
-		},
-	}
-
+	desired := buildEPPDeployment(llmSvc, replicas, m.eppImage())
 	if err := controllerutil.SetControllerReference(llmSvc, desired, m.Scheme); err != nil {
 		return err
 	}
+	return m.createOrUpdateDeployment(ctx, llmSvc, desired)
+}
 
-	var existing appsv1.Deployment
-	if err := m.Get(ctx, types.NamespacedName{Name: name, Namespace: llmSvc.Namespace}, &existing); err != nil {
+func (m *EPPManager) eppImage() string {
+	if m.Image != "" {
+		return m.Image
+	}
+	return EPPImage
+}
+
+func (m *EPPManager) requireEPPServiceAccount(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
+	var serviceAccount corev1.ServiceAccount
+	key := types.NamespacedName{Name: EPPServiceAccountName, Namespace: llmSvc.Namespace}
+	if err := m.Get(ctx, key, &serviceAccount); err != nil {
 		if apierrors.IsNotFound(err) {
-			return m.Create(ctx, desired)
+			return fmt.Errorf("serviceaccount %q is not pre-provisioned in namespace %q; configure Helm managedNamespaces", EPPServiceAccountName, llmSvc.Namespace)
 		}
 		return err
 	}
-	existing.Spec = desired.Spec
-	return m.Update(ctx, &existing)
+	if serviceAccount.Labels[EPPServiceAccountLabel] != "preprovisioned" {
+		return fmt.Errorf("serviceaccount %q in namespace %q is missing label %s=preprovisioned", EPPServiceAccountName, llmSvc.Namespace, EPPServiceAccountLabel)
+	}
+	return nil
 }
 
 func (m *EPPManager) reconcileService(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
@@ -205,9 +149,4 @@ func eppLabels(llmSvc *servingv1alpha2.LLMInferenceService) map[string]string {
 		"app.kubernetes.io/managed-by": "ckodex-kserve-llm-operator",
 		"serving.ckodex.com/role":      "scheduler",
 	}
-}
-
-func parseQuantity(s string) *resource.Quantity {
-	q := resource.MustParse(s)
-	return &q
 }

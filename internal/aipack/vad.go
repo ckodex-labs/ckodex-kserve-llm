@@ -42,6 +42,12 @@ func RunVAD(_ string, _ []VADClass) (*VADDeclaration, error) {
 
 // ValidateVADDeclaration validates that a VADDeclaration covers the required classes for kind.
 // TODO(ckodex): implement per AIPACK-SPEC v0.1.1 §22 — class coverage check per kind
-func ValidateVADDeclaration(_ *VADDeclaration) error {
-	return nil
+func ValidateVADDeclaration(declaration *VADDeclaration) error {
+	if declaration == nil {
+		return nil
+	}
+	return newErr(ErrNotImplemented,
+		"VAD declaration validation is not implemented (AIPACK-VAD-001)",
+		"VAD coverage validation is fail-closed",
+	)
 }

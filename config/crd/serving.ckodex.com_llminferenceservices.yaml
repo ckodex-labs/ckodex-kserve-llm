@@ -63,18 +63,20 @@ spec:
             properties:
               allowedTenants:
                 description: |-
-                  AllowedTenants is the list of tenant IDs permitted to send requests to this service.
-                  Enforced by the LLMModelAccess OPA Gatekeeper constraint.
+                  AllowedTenants is reserved for per-service tenant allow-list enforcement.
+                  Non-empty values are rejected until the OPA admission path is wired.
                 items:
                   type: string
                 type: array
               autoOptimize:
-                description: AutoOptimize enables automatic hardware detection and
-                  optimization.
+                description: |-
+                  AutoOptimize is reserved for automatic hardware optimization. Non-nil
+                  values are rejected until the hardware profile path is implemented.
                 type: boolean
               baseRefs:
-                description: BaseRefs references LLMInferenceServiceConfig resources
-                  for configuration composition.
+                description: |-
+                  BaseRefs is reserved for configuration composition. Non-empty values are
+                  rejected until reference resolution is implemented.
                 items:
                   description: ConfigReference references an LLMInferenceServiceConfig
                     for composition.
@@ -122,6 +124,12 @@ spec:
                   in v1 for workloads that need them, but are not part of the stable surface.
                   Fields in this sub-struct may change or be removed in future versions.
                 properties:
+                  engine:
+                    description: Engine selects the inference engine.
+                    enum:
+                    - vllm
+                    - quant-cpp
+                    type: string
                   kvCache:
                     description: |-
                       KVCache configures distributed KV transfer for prefill/decode serving.
@@ -354,6 +362,20 @@ spec:
                             type: string
                         required:
                         - connector
+                        type: object
+                    type: object
+                  observability:
+                    description: Observability configures telemetry sinks.
+                    properties:
+                      sink:
+                        description: TelemetrySink identifies a telemetry destination.
+                        properties:
+                          endpoint:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                        - type
                         type: object
                     type: object
                   prefill:
@@ -9031,6 +9053,47 @@ spec:
                     required:
                     - template
                     type: object
+                  quantization:
+                    description: Quantization configures weight quantization.
+                    properties:
+                      checkpointPath:
+                        description: |-
+                          CheckpointPath is retained in the schema for compatibility. The active
+                          runtime does not consume it and admission rejects non-empty values.
+                        type: string
+                      method:
+                        type: string
+                    required:
+                    - method
+                    type: object
+                  speculativeDecoding:
+                    description: |-
+                      SpeculativeDecoding configures speculative decoding for vLLM.
+                      It remains experimental while runtime support evolves.
+                    properties:
+                      draftModel:
+                        type: string
+                      method:
+                        type: string
+                      numTokens:
+                        format: int32
+                        type: integer
+                    required:
+                    - method
+                    type: object
+                  toolSurface:
+                    description: ToolSurface declares reachable APIs and external
+                      connectors.
+                    properties:
+                      allowedApis:
+                        items:
+                          type: string
+                        type: array
+                      allowedCidrs:
+                        items:
+                          type: string
+                        type: array
+                    type: object
                   worker:
                     description: |-
                       Worker configures worker nodes for multi-node distributed inference (LeaderWorkerSet).
@@ -17704,6 +17767,10 @@ spec:
               model:
                 description: Model specifies the model to serve.
                 properties:
+                  hardwareAware:
+                    description: HardwareAware enables hardware-specific artifact
+                      selection.
+                    type: boolean
                   name:
                     description: Name is the model identifier used in inference requests.
                     type: string
@@ -17715,6 +17782,49 @@ spec:
                   storage:
                     description: Storage configures credentials for model download.
                     properties:
+                      externalSecret:
+                        description: ExternalSecret configures external-secrets.io
+                          credential synchronization.
+                        properties:
+                          data:
+                            items:
+                              description: ExternalSecretData maps a remote provider
+                                key to a Kubernetes Secret key.
+                              properties:
+                                remoteRef:
+                                  description: ExternalSecretRemoteRef identifies
+                                    a remote key and optional property.
+                                  properties:
+                                    key:
+                                      type: string
+                                    property:
+                                      type: string
+                                  required:
+                                  - key
+                                  type: object
+                                secretKey:
+                                  type: string
+                              required:
+                              - remoteRef
+                              - secretKey
+                              type: object
+                            type: array
+                          refreshInterval:
+                            type: string
+                          secretStoreRef:
+                            description: SecretStoreRef identifies a SecretStore or
+                              ClusterSecretStore.
+                            properties:
+                              kind:
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - secretStoreRef
+                        type: object
                       secretRef:
                         description: SecretRef is a reference to a Secret containing
                           storage credentials.
@@ -17771,9 +17881,16 @@ spec:
                     format: int32
                     minimum: 1
                     type: integer
+                  eplbEnabled:
+                    description: EPLBEnabled enables expert parallelism load balancing.
+                    type: boolean
                   expert:
                     description: Expert enables expert parallelism for MoE models.
                     type: boolean
+                  pipeline:
+                    description: Pipeline is the pipeline parallelism degree.
+                    format: int32
+                    type: integer
                   tensor:
                     description: Tensor is the tensor parallelism degree.
                     format: int32
@@ -17828,6 +17945,18 @@ spec:
                             items:
                               type: string
                             type: array
+                          resilience:
+                            description: Resilience configures route timeouts and
+                              retries.
+                            properties:
+                              maxRetries:
+                                format: int32
+                                type: integer
+                              retryOn:
+                                type: string
+                              timeout:
+                                type: string
+                            type: object
                         type: object
                     type: object
                   scheduler:
@@ -17973,8 +18102,9 @@ spec:
                     type: object
                 type: object
               slo:
-                description: SLO defines the service level objective for this inference
-                  service.
+                description: |-
+                  SLO is reserved for service-specific objective evaluation. Values are
+                  rejected until targets are rendered and evaluated by the operator.
                 properties:
                   errorBudgetDays:
                     default: 30
@@ -26510,6 +26640,22 @@ spec:
           status:
             description: LLMInferenceServiceStatus defines the observed state of LLMInferenceService.
             properties:
+              adaptiveMetrics:
+                description: AdaptiveMetrics represents real-time performance and
+                  load pressure.
+                properties:
+                  loadLevel:
+                    type: string
+                  p50Latency:
+                    type: string
+                  p95Latency:
+                    type: string
+                  p99Latency:
+                    type: string
+                  queueDepth:
+                    format: int64
+                    type: integer
+                type: object
               conditions:
                 description: Conditions represent the latest available observations.
                 items:
@@ -26567,6 +26713,10 @@ spec:
                   - type
                   type: object
                 type: array
+              detectedHardware:
+                description: DetectedHardware is the hardware type identified for
+                  this service.
+                type: string
               modelReady:
                 description: ModelReady indicates whether the model is loaded and
                   serving.
@@ -26578,10 +26728,29 @@ spec:
                 description: ObservedGeneration is the most recent generation observed.
                 format: int64
                 type: integer
+              optimized:
+                description: Optimized indicates whether model-specific optimizations
+                  were applied.
+                type: boolean
               replicas:
                 description: Replicas is the current number of ready replicas.
                 format: int32
                 type: integer
+              statePlanes:
+                description: StatePlanes represents the governed composite state of
+                  the model system.
+                properties:
+                  binding:
+                    type: string
+                  composition:
+                    type: string
+                  lifecycle:
+                    type: string
+                  risk:
+                    type: string
+                  trust:
+                    type: string
+                type: object
               url:
                 description: URL is the inference endpoint URL.
                 type: string
@@ -26634,22 +26803,20 @@ spec:
             properties:
               allowedTenants:
                 description: |-
-                  AllowedTenants is the list of tenant IDs (ckodex.com/tenant-id label values)
-                  permitted to send inference requests to this service. Empty list = no restriction.
-                  Enforced by the LLMModelAccess OPA Gatekeeper constraint.
+                  AllowedTenants is reserved for per-service tenant allow-list enforcement.
+                  Non-empty values are rejected until the OPA admission path is wired.
                 items:
                   type: string
                 type: array
               autoOptimize:
                 description: |-
-                  AutoOptimize enables automatic hardware detection and optimization.
-                  When true, the operator will apply best-practice defaults for the
-                  detected hardware (e.g., Apple Silicon / ARM64).
+                  AutoOptimize is reserved for automatic hardware optimization. Non-nil
+                  values are rejected until the hardware profile path is implemented.
                 type: boolean
               baseRefs:
                 description: |-
-                  BaseRefs references LLMInferenceServiceConfig resources for
-                  configuration composition. Merge order: WellKnown → BaseRefs → Spec.
+                  BaseRefs is reserved for configuration composition. Non-empty values are
+                  rejected until reference resolution is implemented.
                 items:
                   description: ConfigReference references an LLMInferenceServiceConfig
                     for composition.
@@ -26697,6 +26864,9 @@ spec:
                 description: |-
                   Engine specifies the inference engine to use.
                   Defaults to 'vllm'. Supported: 'vllm', 'quant-cpp'.
+                enum:
+                - vllm
+                - quant-cpp
                 type: string
               kvCache:
                 description: |-
@@ -35750,8 +35920,8 @@ spec:
                 properties:
                   checkpointPath:
                     description: |-
-                      CheckpointPath is retained for API compatibility. vLLM v0.24.0 loads
-                      GPTQ metadata from the model and does not accept --gptq-ckpt-path.
+                      CheckpointPath is retained in the schema for compatibility. The active
+                      runtime does not consume it and admission rejects non-empty values.
                     type: string
                   method:
                     description: |-
@@ -36045,9 +36215,8 @@ spec:
                 type: object
               slo:
                 description: |-
-                  SLO defines the service level objective for this inference service.
-                  The operator annotates the Deployment and emits Prometheus recording rules
-                  so alerting can be tied to the declared targets rather than hard-coded thresholds.
+                  SLO is reserved for service-specific objective evaluation. Values are
+                  rejected until targets are rendered and evaluated by the operator.
                 properties:
                   errorBudgetDays:
                     default: 30

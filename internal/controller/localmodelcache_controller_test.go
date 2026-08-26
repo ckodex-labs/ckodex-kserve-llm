@@ -52,7 +52,68 @@ func TestCacheWorkloadNamespace(t *testing.T) {
 	assert.Equal(t, defaultCacheNamespace, cacheWorkloadNamespace(lmc))
 
 	lmc.Annotations = map[string]string{cacheWorkloadNamespaceAnnotation: "tenant-a"}
-	assert.Equal(t, "tenant-a", cacheWorkloadNamespace(lmc))
+	assert.Equal(t, defaultCacheNamespace, cacheWorkloadNamespace(lmc))
+}
+
+func TestResolveCacheWorkloadNamespaceRequiresRealMatchingLoraOwner(t *testing.T) {
+	s := buildLocalModelCacheScheme(t)
+	lora := &servingv1alpha2.LLMLoraAdapter{ObjectMeta: metav1.ObjectMeta{Name: "adapter", Namespace: "tenant-a", UID: "lora-uid"}, Spec: servingv1alpha2.LLMLoraAdapterSpec{Model: servingv1alpha2.ModelSpec{URI: "hf://org/test-model"}}}
+	lmc := newLoraCache(lora)
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(lora).Build()
+	r := &LocalModelCacheReconciler{Client: cl, APIReader: cl}
+
+	namespace, err := r.resolveCacheWorkloadNamespace(context.Background(), lmc)
+	require.NoError(t, err)
+	assert.Equal(t, "tenant-a", namespace)
+
+	for name, mutate := range map[string]func(*servingv1alpha2.LocalModelCache){
+		"forged owner UID": func(cache *servingv1alpha2.LocalModelCache) { cache.Annotations[loraCacheOwnerUID] = "wrong" },
+		"forged owner namespace": func(cache *servingv1alpha2.LocalModelCache) {
+			cache.Annotations[loraCacheOwnerNamespace] = "tenant-b"
+			cache.Annotations[cacheWorkloadNamespaceAnnotation] = "tenant-b"
+		},
+		"unmanaged cache": func(cache *servingv1alpha2.LocalModelCache) { delete(cache.Labels, loraCacheManagedByLabel) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			forged := lmc.DeepCopy()
+			mutate(forged)
+			_, err := r.resolveCacheWorkloadNamespace(context.Background(), forged)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestResolveCacheWorkloadNamespaceDefaultsDirectClusterCache(t *testing.T) {
+	s := buildLocalModelCacheScheme(t)
+	lmc := makeLocalModelCache("direct-cache")
+	lmc.Annotations = map[string]string{cacheWorkloadNamespaceAnnotation: "tenant-a"}
+	r := &LocalModelCacheReconciler{Client: fake.NewClientBuilder().WithScheme(s).Build()}
+
+	_, err := r.resolveCacheWorkloadNamespace(context.Background(), lmc)
+	require.Error(t, err)
+
+	delete(lmc.Annotations, cacheWorkloadNamespaceAnnotation)
+	namespace, err := r.resolveCacheWorkloadNamespace(context.Background(), lmc)
+	require.NoError(t, err)
+	assert.Equal(t, defaultCacheNamespace, namespace)
+}
+
+func TestValidateWarmupStorageReferencesRejectsCrossNamespaceNames(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		apply func(*servingv1alpha2.LocalModelStorageSpec)
+	}{
+		{name: "service account", apply: func(storage *servingv1alpha2.LocalModelStorageSpec) { storage.ServiceAccountName = "tenant-b/cache-sa" }},
+		{name: "secret", apply: func(storage *servingv1alpha2.LocalModelStorageSpec) { storage.SecretName = "tenant-b/storage-secret" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			storage := &servingv1alpha2.LocalModelStorageSpec{}
+			test.apply(storage)
+			lmc := makeLocalModelCache("cross-namespace")
+			lmc.Spec.Storage = storage
+			require.Error(t, validateWarmupStorageReferences(lmc))
+		})
+	}
 }
 
 // ---- Unit Tests (Hashing & Naming) -------------------------------------------
@@ -231,4 +292,20 @@ func TestBuildWarmupJob(t *testing.T) {
 	assert.Equal(t, "cache-sa", job.Spec.Template.Spec.ServiceAccountName)
 	require.Len(t, job.Spec.Template.Spec.Containers[0].EnvFrom, 1)
 	assert.Equal(t, "storage-secret", job.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name)
+	podSpec := job.Spec.Template.Spec
+	container := podSpec.Containers[0]
+	require.NotNil(t, podSpec.SecurityContext)
+	assert.True(t, *podSpec.SecurityContext.RunAsNonRoot)
+	assert.Equal(t, int64(65532), *podSpec.SecurityContext.RunAsUser)
+	assert.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, podSpec.SecurityContext.SeccompProfile.Type)
+	require.NotNil(t, container.SecurityContext)
+	assert.True(t, *container.SecurityContext.RunAsNonRoot)
+	assert.Equal(t, int64(65532), *container.SecurityContext.RunAsUser)
+	assert.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
+	assert.True(t, *container.SecurityContext.ReadOnlyRootFilesystem)
+	assert.Contains(t, container.SecurityContext.Capabilities.Drop, corev1.Capability("ALL"))
+	assert.Equal(t, "/tmp", container.Env[len(container.Env)-1].Value)
+	assert.Equal(t, false, container.VolumeMounts[0].ReadOnly)
+	assert.Equal(t, "tmp", container.VolumeMounts[1].Name)
+	assert.False(t, podSpec.Volumes[1].EmptyDir == nil)
 }

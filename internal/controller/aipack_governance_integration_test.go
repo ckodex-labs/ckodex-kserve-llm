@@ -118,9 +118,9 @@ func TestAIPackGovernance_NoAIPacks(t *testing.T) {
 	assert.Equal(t, "NoAIPacksAssociated", cond.Reason)
 }
 
-// TestAIPackGovernance_FullyAttestedPack verifies that a bound AIPack with all
-// required predicates present results in Compliance-SR-2-AIPack = True.
-func TestAIPackGovernance_FullyAttestedPack(t *testing.T) {
+// TestAIPackGovernance_PredicatesPresentButUnverified verifies that predicate
+// presence alone cannot produce a positive governance condition.
+func TestAIPackGovernance_PredicatesPresentButUnverified(t *testing.T) {
 	llmSvc := makeLLMInferenceService(testLLMName, testNamespace)
 	pack := makeAIPackWithLabel("llama3", testNamespace, testLLMName,
 		servingv1alpha2.KindBaseModel, makeBaseModelAttestations())
@@ -129,9 +129,9 @@ func TestAIPackGovernance_FullyAttestedPack(t *testing.T) {
 
 	cond := apimeta.FindStatusCondition(updated.Status.Conditions, aipackGovernanceCondition)
 	require.NotNil(t, cond, "Compliance-SR-2-AIPack condition must be present")
-	assert.Equal(t, metav1.ConditionTrue, cond.Status,
-		"fully-attested pack should result in True condition")
-	assert.Equal(t, "AllAIPacksAttested", cond.Reason)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status,
+		"predicate presence without cryptographic verification must remain False")
+	assert.Equal(t, "AIPackAttestationIncomplete", cond.Reason)
 }
 
 // TestAIPackGovernance_MissingPredicates verifies that a bound AIPack missing
@@ -217,8 +217,8 @@ func TestAIPackGovernance_WrongWorkloadLabelExcluded(t *testing.T) {
 		"pack bound to a different LLM must not appear in this service's governance count")
 }
 
-// TestAIPackGovernance_MixedAttestationState verifies the partial attestation
-// path: multiple packs, some verified and some not.
+// TestAIPackGovernance_MixedAttestationState verifies that multiple packs remain
+// incomplete when one lacks attestation and the other lacks cryptographic proof.
 func TestAIPackGovernance_MixedAttestationState(t *testing.T) {
 	llmSvc := makeLLMInferenceService(testLLMName, testNamespace)
 	verified := makeAIPackWithLabel("llama3-verified", testNamespace, testLLMName,
@@ -233,5 +233,5 @@ func TestAIPackGovernance_MixedAttestationState(t *testing.T) {
 	assert.Equal(t, metav1.ConditionFalse, cond.Status,
 		"one unattested pack out of two should result in False condition")
 	assert.Equal(t, "AIPackAttestationIncomplete", cond.Reason)
-	assert.Contains(t, cond.Message, "1 of 2")
+	assert.Contains(t, cond.Message, "2 of 2")
 }

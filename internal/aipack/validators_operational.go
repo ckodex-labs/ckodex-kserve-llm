@@ -21,7 +21,10 @@ func ValidateLineageEnvelope(env *v1alpha2.AIPackLineageEnvelope) error {
 		return newErr(ErrLineageEnvelopeMissing, "lineage envelope is required (AIPACK-LIN-001)", "")
 	}
 	// TODO(ckodex): implement per AIPACK-SPEC v0.1.1 §11 — validate source ref + hash
-	return nil
+	return newErr(ErrNotImplemented,
+		"lineage envelope validation is not implemented (AIPACK-LIN-002)",
+		"lineage validation is fail-closed",
+	)
 }
 
 // ValidateBlastRadius returns ErrBlastRadiusExceeded when actual exceeds the declared max.
@@ -39,6 +42,14 @@ func ValidateBlastRadius(actual, max int) error {
 // CheckRVBandBlock returns ErrRVRedBandBlocked when the band is RED and no derogation
 // attestation is present, per AIPACK-SPEC v0.1.1 §13.4.
 func CheckRVBandBlock(band v1alpha2.RVBand, hasDerogation bool) error {
+	switch band {
+	case v1alpha2.RVBandGreen, v1alpha2.RVBandYellow, v1alpha2.RVBandOrange, v1alpha2.RVBandRed:
+	default:
+		return newErr(ErrRVBandUnknown,
+			"risk band is not recognized (AIPACK-RV-003)",
+			string(band),
+		)
+	}
 	if band == v1alpha2.RVBandRed && !hasDerogation {
 		return newErr(ErrRVRedBandBlocked,
 			"RED risk band blocks composition without signed profile-derogation attestation (AIPACK-RV-002)",
@@ -103,7 +114,10 @@ func ValidateAirGapBundle(bundle *v1alpha2.AIPackAirGapBundle) error {
 		)
 	}
 	// TODO(ckodex): implement per AIPACK-SPEC v0.1.1 §17 — verify ValidUntil window
-	return nil
+	return newErr(ErrNotImplemented,
+		"air-gap bundle validity verification is not implemented (AIPACK-AIRGAP-004)",
+		"air-gap validation is fail-closed",
+	)
 }
 
 // ValidateCompositionPattern returns ErrManifoldDistanceExceeded when the pattern name
@@ -137,35 +151,15 @@ func EvaluatePolicyBundle(policy *v1alpha2.AIPackPolicySpec, kind v1alpha2.Artif
 	if policy == nil {
 		return nil
 	}
-	// Step 3: forbidden kinds
-	for _, f := range policy.ForbiddenArtifactTypes {
-		if f == kind {
-			return newErr(ErrProfileFamilyDenied,
-				"artifact kind is forbidden by policy (AIPACK-PROFILE-001)",
-				string(kind),
-			)
-		}
+	family, known := FamilyForKind(kind)
+	if !known {
+		return newErr(ErrKindUnknown, "unknown artifact kind", string(kind))
 	}
-	// Step 4: allowed kinds allowlist + deny-all sentinel
-	// Note: AllowedArtifactTypes == nil means field absent (allow-all).
-	// AllowedArtifactTypes set to an empty non-nil slice = deny-all sentinel (§19.2).
-	if policy.AllowedArtifactTypes != nil {
-		allowed := false
-		for _, a := range policy.AllowedArtifactTypes {
-			if a == kind {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			return newErr(ErrProfileFamilyDenied,
-				"artifact kind not in policy allowedArtifactTypes (AIPACK-PROFILE-001)",
-				string(kind),
-			)
-		}
+	result := EvaluatePolicy(policy, kind, family, nil, "")
+	if result.Allowed {
+		return nil
 	}
-	// TODO(ckodex): implement full §19.3 — families, requiredPredicates, maxRiskBand
-	return nil
+	return newErr(result.DenyCode, result.Reason, string(kind))
 }
 
 // ValidateQuarantineTrigger returns ErrQuarantineTriggerFired when the trigger has fired

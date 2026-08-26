@@ -201,8 +201,8 @@ spec:
                 properties:
                   checkpointPath:
                     description: |-
-                      CheckpointPath is retained for API compatibility. vLLM v0.24.0 loads
-                      GPTQ metadata from the model and does not accept --gptq-ckpt-path.
+                      CheckpointPath is retained in the schema for compatibility. The active
+                      runtime does not consume it and admission rejects non-empty values.
                     type: string
                   method:
                     description: |-

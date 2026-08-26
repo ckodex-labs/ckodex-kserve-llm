@@ -140,9 +140,18 @@ transforms:
 func buildSinkConfig(cfg VectorConfig) string {
 	switch cfg.SinkType {
 	case "loki":
-		// Loki sink: include trace_id + span_id as structured metadata fields so
-		// Grafana can render a "View trace in Tempo" button on each log line.
-		return fmt.Sprintf(`sinks:
+		return lokiSinkConfig(cfg.SinkEndpoint)
+	case "elasticsearch":
+		return elasticsearchSinkConfig(cfg.SinkEndpoint)
+	case "otlp":
+		return otlpSinkConfig(cfg.SinkEndpoint)
+	default:
+		return stdoutSinkConfig()
+	}
+}
+
+func lokiSinkConfig(endpoint string) string {
+	return fmt.Sprintf(`sinks:
   loki:
     type: loki
     inputs: ["filter_noise"]
@@ -157,10 +166,11 @@ func buildSinkConfig(cfg VectorConfig) string {
       trace_id: "{{ trace_id }}"
       span_id: "{{ span_id }}"
     encoding:
-      codec: json`, cfg.SinkEndpoint)
+      codec: json`, endpoint)
+}
 
-	case "elasticsearch":
-		return fmt.Sprintf(`sinks:
+func elasticsearchSinkConfig(endpoint string) string {
+	return fmt.Sprintf(`sinks:
   elasticsearch:
     type: elasticsearch
     inputs: ["filter_noise"]
@@ -169,14 +179,11 @@ func buildSinkConfig(cfg VectorConfig) string {
     bulk:
       index: "ckodex-llm-%%Y.%%m.%%d"
     encoding:
-      codec: json`, cfg.SinkEndpoint)
+      codec: json`, endpoint)
+}
 
-	case "otlp":
-		// OTLP/HTTP logs sink — forwards to an OTel Collector which can fan-out
-		// to Tempo (traces), Loki (logs), and Prometheus (metrics) from a single pipeline.
-		// trace_id and span_id become OTLP LogRecord.trace_id / span_id, enabling
-		// native Grafana Explore trace↔log correlation without any configuration.
-		return fmt.Sprintf(`sinks:
+func otlpSinkConfig(endpoint string) string {
+	return fmt.Sprintf(`sinks:
   otlp:
     type: opentelemetry
     inputs: ["filter_noise"]
@@ -189,111 +196,91 @@ func buildSinkConfig(cfg VectorConfig) string {
         codec: json
     resource:
       service.name: ckodex-llm-operator
-      service.namespace: ckodex`, cfg.SinkEndpoint)
+      service.namespace: ckodex`, endpoint)
+}
 
-	default: // stdout
-		return `sinks:
+func stdoutSinkConfig() string {
+	return `sinks:
   console:
     type: console
     inputs: ["filter_noise"]
     encoding:
       codec: json`
-	}
 }
 
 // InjectVectorSidecar adds a Vector sidecar container and shared log volume
 // to a PodSpec for structured log collection.
 func InjectVectorSidecar(podSpec *corev1.PodSpec, configMapName string) {
-	// Add shared log volume
-	hasLogVolume := false
+	ensureVectorVolumes(podSpec, configMapName)
+	ensureVectorAppMount(podSpec)
+	ensureVectorContainer(podSpec)
+}
+
+func ensureVectorVolumes(podSpec *corev1.PodSpec, configMapName string) {
 	for _, v := range podSpec.Volumes {
 		if v.Name == VectorLogVolumeName {
-			hasLogVolume = true
-			break
+			return
 		}
 	}
-	if !hasLogVolume {
-		podSpec.Volumes = append(podSpec.Volumes,
-			corev1.Volume{
-				Name: VectorLogVolumeName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-			corev1.Volume{
-				Name: VectorDataVolumeName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-			corev1.Volume{
-				Name: "vector-config",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
-						// Match the API server's default so the desired volume equals the
-						// persisted (defaulted) one — otherwise the Deployment reconciler
-						// loops forever ("volumes changed" every pass).
-						DefaultMode: ptr.To[int32](0o644),
-					},
-				},
-			},
-		)
-	}
+	podSpec.Volumes = append(podSpec.Volumes,
+		corev1.Volume{Name: VectorLogVolumeName, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		corev1.Volume{Name: VectorDataVolumeName, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+		corev1.Volume{Name: "vector-config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+			LocalObjectReference: corev1.LocalObjectReference{Name: configMapName}, DefaultMode: ptr.To[int32](0o644),
+		}}},
+	)
+}
 
-	// Mount shared log volume on first app container
-	if len(podSpec.Containers) > 0 {
-		hasMount := false
-		for _, m := range podSpec.Containers[0].VolumeMounts {
-			if m.Name == VectorLogVolumeName {
-				hasMount = true
-				break
-			}
-		}
-		if !hasMount {
-			podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
-				Name:      VectorLogVolumeName,
-				MountPath: VectorLogMountPath,
-			})
+func ensureVectorAppMount(podSpec *corev1.PodSpec) {
+	if len(podSpec.Containers) == 0 {
+		return
+	}
+	for _, mount := range podSpec.Containers[0].VolumeMounts {
+		if mount.Name == VectorLogVolumeName {
+			return
 		}
 	}
+	podSpec.Containers[0].VolumeMounts = append(podSpec.Containers[0].VolumeMounts, corev1.VolumeMount{
+		Name: VectorLogVolumeName, MountPath: VectorLogMountPath,
+	})
+}
 
-	// Add Vector sidecar container
-	hasVector := false
-	for _, c := range podSpec.Containers {
-		if c.Name == "vector" {
-			hasVector = true
-			break
+func ensureVectorContainer(podSpec *corev1.PodSpec) {
+	for _, container := range podSpec.Containers {
+		if container.Name == "vector" {
+			return
 		}
 	}
-	if !hasVector {
-		podSpec.Containers = append(podSpec.Containers, corev1.Container{
-			Name:  "vector",
-			Image: VectorImage,
-			Args:  []string{"--config-dir", "/etc/vector"},
-			VolumeMounts: []corev1.VolumeMount{
-				{Name: VectorLogVolumeName, MountPath: VectorLogMountPath, ReadOnly: true},
-				{Name: VectorDataVolumeName, MountPath: VectorDataMountPath},
-				{Name: "vector-config", MountPath: "/etc/vector", ReadOnly: true},
+	podSpec.Containers = append(podSpec.Containers, vectorSidecar())
+}
+
+func vectorSidecar() corev1.Container {
+	return corev1.Container{
+		Name:  "vector",
+		Image: VectorImage,
+		Args:  []string{"--config-dir", "/etc/vector"},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: VectorLogVolumeName, MountPath: VectorLogMountPath, ReadOnly: true},
+			{Name: VectorDataVolumeName, MountPath: VectorDataMountPath},
+			{Name: "vector-config", MountPath: "/etc/vector", ReadOnly: true},
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("50m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
 			},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("50m"),
-					corev1.ResourceMemory: resource.MustParse("64Mi"),
-				},
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("200m"),
-					corev1.ResourceMemory: resource.MustParse("128Mi"),
-				},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("200m"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
 			},
-			SecurityContext: &corev1.SecurityContext{
-				RunAsUser:                ptr.To(int64(65532)),
-				RunAsGroup:               ptr.To(int64(65532)),
-				RunAsNonRoot:             ptr.To(true),
-				AllowPrivilegeEscalation: ptr.To(false),
-				ReadOnlyRootFilesystem:   ptr.To(true),
-			},
-		})
+		},
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser:                ptr.To(int64(65532)),
+			RunAsGroup:               ptr.To(int64(65532)),
+			RunAsNonRoot:             ptr.To(true),
+			AllowPrivilegeEscalation: ptr.To(false),
+			ReadOnlyRootFilesystem:   ptr.To(true),
+		},
 	}
 }
 
@@ -339,8 +326,11 @@ func (l *VectorLogger) Log(level, message string, fields map[string]any) error {
 		event[k] = v
 	}
 
-	data, _ := json.Marshal(event)
-	_, err := fmt.Fprintf(l.conn, "%s\n", data)
+	data, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("encode vector event: %w", err)
+	}
+	_, err = fmt.Fprintf(l.conn, "%s\n", data)
 	if err != nil {
 		_ = l.conn.Close()
 		l.conn = nil

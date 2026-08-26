@@ -32,5 +32,8 @@ func ManifoldDistance(_, _ *v1alpha2.AIPackComposition) float64 {
 // the expected canonical pattern.
 // TODO(ckodex): implement per AIPACK-SPEC v0.1.1 §18 — pattern constraint checking
 func ValidatePattern(_ CompositionPattern, _ *v1alpha2.AIPackComposition) error {
-	return nil
+	return newErr(ErrNotImplemented,
+		"composition pattern validation is not implemented (AIPACK-PATTERN-001)",
+		"pattern validation is fail-closed",
+	)
 }

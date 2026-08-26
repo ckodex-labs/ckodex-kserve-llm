@@ -179,6 +179,6 @@ Important boundary: Agent and SkillRegistry validate metadata references only;
 they are not an agent execution or tool-calling runtime.
 Important boundary: ModelOnboarding checks readiness and metrics; traffic weights
 are controlled separately by LLMInferenceService canary configuration.
-Source of truth: api/v1alpha2, internal/controller, cmd/manager/main.go,
+Source of truth: api/v1alpha2, internal/controller, cmd/manager/,
 config/samples, dagger/module.go, dagger/policy.go, dagger/build.go.
 ```

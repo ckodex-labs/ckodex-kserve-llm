@@ -26,7 +26,7 @@ FROM builder-base AS builder
 # native Go compiler while cross-compiling this image; limiting package
 # parallelism keeps the build within the runner's memory/CPU envelope.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -p=1 -trimpath -ldflags="-s -w" -o manager cmd/manager/main.go
+    go build -p=1 -trimpath -ldflags="-s -w" -o manager ./cmd/manager
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -p=1 -trimpath -ldflags="-s -w" -o storage-initializer cmd/storage-initializer/main.go
 

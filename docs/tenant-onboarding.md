@@ -33,6 +33,14 @@ kubectl auth can-i create deployments \
 
 Use the actual service-account name from the installed release if it differs.
 
+The same Helm profile pre-provisions the shared EPP identity used by scheduler
+pods in `tenant-a`. Verify the namespace-scoped objects before enabling a
+scheduler workload:
+
+```bash
+kubectl get serviceaccount,role,rolebinding ckodex-epp -n tenant-a
+```
+
 ## 3. Apply Resource Limits
 
 ```yaml

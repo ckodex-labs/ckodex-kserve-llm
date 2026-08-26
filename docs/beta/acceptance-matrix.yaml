@@ -1,0 +1,169 @@
+schema: ckodex.beta.acceptance/v1
+release:
+  product: ckodex-kserve-llm-operator
+  posture: controlled-beta
+  artifact_contract:
+    source: fresh-checkout
+    chart: oci://ghcr.io/ckodex-labs/charts/ckodex-kserve-llm-operator
+    console_image: ghcr.io/ckodex-labs/ckodex-kserve-llm-console
+  required_evidence:
+    - source-reproducibility
+    - ci-console-gate
+    - helm-render-console
+    - image-provenance
+    - image-sbom
+    - image-signature
+    - image-security-scan
+    - runtime-acceptance
+    - security-boundary
+    - browser-accessibility
+
+classifications:
+  C: implemented, tested, and enforceable in the current release pipeline
+  S: partial implementation with missing runtime or release evidence
+  A: aspirational or outside the beta boundary
+
+capabilities:
+  - id: beta-artifact-reproducibility
+    capability: operator and console are present in a fresh checkout
+    classification: S
+    status: local_ready_hosted_pending
+    owner: release
+    evidence: [.github/workflows/ci.yml, .github/workflows/release.yml, test/conformance/api_contract_test.go]
+    exit_criterion: fresh checkout contains console source without submodule recovery
+
+  - id: beta-helm-console-profile
+    capability: published chart can install the observe-only console
+    classification: S
+    status: local_ready_hosted_pending
+    owner: release
+    evidence: [deploy/helm, hack/helm-contract]
+    exit_criterion: console-enabled helm render and install smoke pass from published chart
+
+  - id: ci-dagger-gates
+    capability: the declared Dagger CI module passes lint, build, race tests, and coverage gates on the release head
+    classification: S
+    status: hosted_exact_head_pending
+    owner: release
+    evidence: [dagger/module.go, dagger/policy.go, .github/workflows/ci.yml, .github/workflows/release.yml, docs/ci/current-state.md]
+    exit_criterion: exact-head hosted CI passes the Dagger functions required by the release workflow; local host saturation must not be used as a green substitute
+
+  - id: stable-llm-inference
+    capability: stable v1 LLMInferenceService declaration and reconciliation
+    classification: S
+    status: local_conversion_verified_runtime_pending
+    owner: operator
+    evidence: [api/v1, api/v1alpha2, api/v1alpha2/conversion_test.go, config/crd/kustomization.yaml, config/crd/patches/llminferenceservice-conversion.yaml, internal/webhook/conversion.go, internal/webhook/llminferenceservice_v1.go, internal/webhook/llminferenceservice_v1_test.go, deploy/helm/templates/cert-manager.yaml, test/conformance, local/05-test-inference.sh, run/e2e.sh, docs/beta/install.md]
+    exit_criterion: supported-profile runtime acceptance passes, including v1 create/update/read through the configured conversion path
+
+  - id: scheduler-dependency-contract
+    capability: the supported scheduler profile has its external CRDs and least-privilege EPP/operator permissions
+    classification: S
+    status: local_runtime_verified_hosted_pending
+    owner: runtime
+    evidence: [local/02-prereqs.sh, internal/scheduler/epp_manager.go, internal/scheduler/epp_manager_test.go, deploy/helm/templates/epp-rbac.yaml, deploy/helm/templates/rbac.yaml, config/rbac/role.yaml, docs/overview.md]
+    exit_criterion: fresh-cluster hosted acceptance renders the managed-namespace EPP identity, creates InferencePool, and reaches scheduler readiness without authorization errors
+
+  - id: default-cpu-storage-path
+    capability: the default CPU profile uses the supported signed initializer path without optional privileged CSI/FUSE software
+    classification: S
+    status: local_default_switched_rerun_pending
+    owner: runtime
+    evidence: [local/02-prereqs.sh, local/04-llm-inference-service.yaml, local/README.md, docs/getting-started.md, docs/overview.md]
+    exit_criterion: fresh-cluster CPU acceptance completes model initialization and inference with default settings; hf-mount remains separately qualified
+
+  - id: release-image-chart-alignment
+    capability: packaged chart defaults resolve release-owned images from the chart application version
+    classification: C
+    status: local_contract_verified_hosted_pending
+    owner: release
+    evidence: [deploy/helm/Chart.yaml, deploy/helm/values.yaml, deploy/helm/templates/_helpers.tpl, deploy/helm/templates/deployment.yaml, deploy/helm/templates/console-deployment.yaml, .github/workflows/release.yml, hack/helm-contract/main.go, hack/release-readiness.sh]
+    exit_criterion: next published chart renders operator, console, and initializer images for its own release tag and passes anonymous artifact verification
+
+  - id: runtime-probe-qualification
+    capability: the repo-native runtime probe distinguishes route, transport, and inference failures
+    classification: S
+    status: local_harness_fixed_hosted_pending
+    owner: runtime
+    evidence: [local/05-test-inference.sh, run/e2e.sh, Makefile, .dockerignore, .github/workflows/nightly-chaos.yml, docs/beta/readiness-ledger.md]
+    exit_criterion: hosted KIND acceptance reaches and validates a successful Gateway or port-forward JSON completion response
+
+  - id: local-image-build
+    capability: repo-native KIND setup builds images with a bounded context and loads them into the disposable cluster
+    classification: S
+    status: local_fix_rerun_pending
+    owner: release
+    evidence: [Dockerfile, .dockerignore, Makefile, run/e2e.sh]
+    exit_criterion: local KIND setup completes operator and storage-initializer image builds and image loads without legacy-builder or context-size failure
+
+  - id: kind-environment-reproducibility
+    capability: the disposable acceptance cluster uses a qualified Kubernetes node image
+    classification: S
+    status: local_fixed_rerun_pending
+    owner: release
+    evidence: [deploy/kind/kind-config.yaml, local/01-kind-setup.sh, run/e2e.sh]
+    exit_criterion: a fresh cluster boots on the pinned node image and hosted acceptance uses the same qualified environment contract
+
+  - id: qualified-readiness-observation
+    capability: console distinguishes observed, empty, partial, unavailable, and ready state
+    classification: S
+    status: static_verified_browser_pending
+    owner: console
+    evidence: [console/src/lib, console/src/lib/design-conformance.test.ts]
+    exit_criterion: browser journeys cover every source state and stale-data path
+
+  - id: console-dependency-security
+    capability: console production dependencies meet the beta vulnerability policy
+    classification: C
+    status: locally_verified
+    owner: security
+    evidence: [console/package.json, console/package-lock.json, .github/workflows/ci.yml]
+    exit_criterion: npm audit --omit=dev reports zero production advisories
+
+  - id: human-access-boundary
+    capability: console access is authenticated and attributable to a human actor
+    classification: S
+    status: unresolved
+    owner: security
+    evidence: [console/README.md]
+    exit_criterion: chosen authenticated-ingress or OIDC posture passes boundary tests
+
+  - id: gpu-serving
+    capability: supported GPU serving profile
+    classification: S
+    status: live_acceptance_required
+    owner: runtime
+    evidence: [docs/overview.md, docs/open-loops.md]
+    exit_criterion: real GPU declaration, readiness, inference, restart, and recovery evidence
+
+  - id: lmcache
+    capability: LMCache KV-cache offload and sharing
+    classification: S
+    status: live_acceptance_required
+    owner: runtime
+    evidence: [docs/open-loops.md, docs/runbooks/lmcache.md]
+    exit_criterion: cache-hit, ABI, latency, and failover evidence or explicit beta exclusion
+
+  - id: traffic-promotion
+    capability: automated model traffic promotion
+    classification: A
+    status: excluded
+    owner: lifecycle
+    evidence: [internal/controller/modelonboarding_controller.go]
+    exit_criterion: separate approval, route mutation, rollback, and signed receipt workflow
+
+  - id: cryptographic-evidence
+    capability: cryptographic artifact and provenance verification
+    classification: S
+    status: partial
+    owner: governance
+    evidence: [internal/governance/aipack_evidence.go, docs/SECURITY_ARCHITECTURE.md]
+    exit_criterion: verification is implemented and UI language is bound to signed evidence
+
+  - id: agent-runtime
+    capability: Agent and SkillRegistry runtime tool execution
+    classification: A
+    status: excluded
+    owner: platform
+    evidence: [docs/agent-development.md]
+    exit_criterion: separate governed runtime design and conformance package

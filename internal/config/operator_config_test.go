@@ -64,6 +64,20 @@ func TestDefaultOperatorConfig_ObservabilityDefaults(t *testing.T) {
 	assert.NotEmpty(t, cfg.Observability.ServiceName)
 }
 
+func TestDefaultOperatorConfig_WorkloadDefaults(t *testing.T) {
+	cfg := config.DefaultOperatorConfig()
+	assert.Equal(t, "ckodex/quant-cpp:v0.1.0", cfg.Defaults.QuantCppImage)
+	assert.Equal(t, "ckodex/storage-initializer:v0.1.0", cfg.Defaults.CustomStorageInitializerImage)
+	assert.Equal(t, "2", cfg.Defaults.VLLMCPURequest)
+	assert.Equal(t, "4Gi", cfg.Defaults.VLLMMemoryRequest)
+	assert.Equal(t, int64(60), cfg.Defaults.TerminationGracePeriodSeconds)
+	assert.Equal(t, "1", cfg.Defaults.ASRCPURequest)
+	assert.Equal(t, "2Gi", cfg.Defaults.ASRMemoryRequest)
+	assert.Equal(t, int64(30), cfg.Defaults.ASRTerminationGracePeriodSeconds)
+	assert.Equal(t, "1", cfg.Defaults.CacheCPURequest)
+	assert.Equal(t, "1Gi", cfg.Defaults.CacheMemoryRequest)
+}
+
 func TestDefaultOperatorConfig_PrometheusURLEmpty(t *testing.T) {
 	cfg := config.DefaultOperatorConfig()
 	assert.Empty(t, cfg.PrometheusURL, "no Prometheus URL by default")

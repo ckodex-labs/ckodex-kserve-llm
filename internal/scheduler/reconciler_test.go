@@ -22,6 +22,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+func boolPtr(value bool) *bool {
+	return &value
+}
+
 func TestReconcilerCleanupDeletesOwnedSchedulerResources(t *testing.T) {
 	scheme := schedulerScheme(t)
 	require.NoError(t, appsv1.AddToScheme(scheme))

@@ -38,15 +38,19 @@ The script:
 
 1. creates or reuses the `kserve-017` KIND cluster;
 2. installs cert-manager, Gateway API, Envoy Gateway, MetalLB, KServe, and the
-   Hugging Face CSI driver;
+   Gateway API Inference Extension CRDs;
 3. builds and loads the operator and storage initializer images;
 4. installs CRDs and RBAC;
 5. applies `local/04-llm-inference-service.yaml`;
 6. waits for readiness and sends an OpenAI-compatible chat request.
 
-The local manifest currently uses the served `v1alpha2` API because
-`hf-mount://` is not part of the stable v1 model URI schema. Use stable v1 for
-new workloads that do not require an alpha-only field.
+The local manifest uses the served stable `v1` API and the signed `hf://`
+storage-initializer path. The optional `hf-mount://` path uses the privileged
+Hugging Face CSI/FUSE dependency and is exercised separately with
+`INSTALL_HF_CSI=1` and `local/04-llm-inference-service-hfmount.yaml`. Fields that
+remain explicitly experimental are documented under `spec.experimental` in v1,
+while v1alpha2 remains available for compatibility during the deprecation
+window.
 
 Inspect the control plane:
 

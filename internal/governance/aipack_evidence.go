@@ -43,58 +43,92 @@ type AIPackVerificationResult struct {
 // It checks:
 //  1. All required predicates for kind are present (AIPACK-ATTEST-001/002)
 //  2. Predicate entries have non-empty URIs (AIPACK-ATTEST-003)
-//  3. cosign signature verification if CosignKeyRef is set (AIPACK-ATTEST-004)
+//  3. cryptographic verification is required before a positive result
 //
-// Full cosign integration is [S] — the current implementation performs
-// predicate presence + URI sanity checks only.
+// Full cosign integration is [S]. Until it is wired, predicate presence is
+// deliberately insufficient and this function returns Verified=false.
 // TODO(ckodex): integrate cosign.VerifyImageAttestations per AIPACK-SPEC §7
 func VerifyAIPackAttestation(_ context.Context, kind servingv1alpha2.ArtifactKind, ref string, attestation *servingv1alpha2.AIPackAttestation) (*AIPackVerificationResult, error) {
+	if ref == "" {
+		return missingArtifactReferenceResult(), nil
+	}
 	if attestation == nil {
-		required := aipack.RequiredPredicates(kind)
-		if len(required) > 0 {
-			return &AIPackVerificationResult{
-				Verified:         false,
-				VerifiedAt:       time.Now().UTC(),
-				FailedPredicates: required,
-				Message:          fmt.Sprintf("artifact %q (kind %s) has no attestation block but requires %d predicate(s)", ref, kind, len(required)),
-			}, nil
-		}
-		return &AIPackVerificationResult{
-			Verified:   true,
-			VerifiedAt: time.Now().UTC(),
-			Message:    "no attestation required for kind",
-		}, nil
+		return verifyMissingAttestation(kind, ref), nil
 	}
 
 	present := predicateURIs(attestation)
 	missing := aipack.MissingPredicates(kind, present)
 	if len(missing) > 0 {
-		return &AIPackVerificationResult{
-			Verified:         false,
-			VerifiedAt:       time.Now().UTC(),
-			FailedPredicates: missing,
-			Message:          fmt.Sprintf("artifact %q is missing required predicates: %v", ref, missing),
-		}, nil
+		return missingPredicatesResult(ref, missing), nil
 	}
 
-	var emptyURI []string
-	for _, pred := range attestation.Predicates {
-		if pred.PredicateURI == "" {
-			emptyURI = append(emptyURI, fmt.Sprintf("entry[%d]", len(emptyURI)))
+	emptyURI := emptyPredicateEntries(attestation)
+	if len(emptyURI) > 0 {
+		return emptyPredicateResult(ref, emptyURI), nil
+	}
+
+	return unavailableCosignResult(ref), nil
+}
+
+func missingArtifactReferenceResult() *AIPackVerificationResult {
+	return &AIPackVerificationResult{
+		Verified:         false,
+		VerifiedAt:       time.Now().UTC(),
+		FailedPredicates: []string{"artifact-reference"},
+		Message:          "artifact reference is required for attestation verification",
+	}
+}
+
+func verifyMissingAttestation(kind servingv1alpha2.ArtifactKind, ref string) *AIPackVerificationResult {
+	required := aipack.RequiredPredicates(kind)
+	if len(required) == 0 {
+		return &AIPackVerificationResult{
+			Verified:   true,
+			VerifiedAt: time.Now().UTC(),
+			Message:    "no attestation required for kind",
 		}
 	}
-	if len(emptyURI) > 0 {
-		return &AIPackVerificationResult{
-			Verified:         false,
-			VerifiedAt:       time.Now().UTC(),
-			FailedPredicates: emptyURI,
-			Message:          fmt.Sprintf("artifact %q has %d predicate entries with empty PredicateURI", ref, len(emptyURI)),
-		}, nil
-	}
-
 	return &AIPackVerificationResult{
-		Verified:   true,
-		VerifiedAt: time.Now().UTC(),
-		Message:    fmt.Sprintf("artifact %q predicate presence verified (%d predicate(s)); cosign verification deferred [S]", ref, len(attestation.Predicates)),
-	}, nil
+		Verified:         false,
+		VerifiedAt:       time.Now().UTC(),
+		FailedPredicates: required,
+		Message:          fmt.Sprintf("artifact %q (kind %s) has no attestation block but requires %d predicate(s)", ref, kind, len(required)),
+	}
+}
+
+func missingPredicatesResult(ref string, missing []string) *AIPackVerificationResult {
+	return &AIPackVerificationResult{
+		Verified:         false,
+		VerifiedAt:       time.Now().UTC(),
+		FailedPredicates: missing,
+		Message:          fmt.Sprintf("artifact %q is missing required predicates: %v", ref, missing),
+	}
+}
+
+func emptyPredicateEntries(attestation *servingv1alpha2.AIPackAttestation) []string {
+	var empty []string
+	for _, predicate := range attestation.Predicates {
+		if predicate.PredicateURI == "" {
+			empty = append(empty, fmt.Sprintf("entry[%d]", len(empty)))
+		}
+	}
+	return empty
+}
+
+func emptyPredicateResult(ref string, empty []string) *AIPackVerificationResult {
+	return &AIPackVerificationResult{
+		Verified:         false,
+		VerifiedAt:       time.Now().UTC(),
+		FailedPredicates: empty,
+		Message:          fmt.Sprintf("artifact %q has %d predicate entries with empty PredicateURI", ref, len(empty)),
+	}
+}
+
+func unavailableCosignResult(ref string) *AIPackVerificationResult {
+	return &AIPackVerificationResult{
+		Verified:         false,
+		VerifiedAt:       time.Now().UTC(),
+		FailedPredicates: []string{"cosign-signature"},
+		Message:          fmt.Sprintf("artifact %q predicates are present but cryptographic cosign verification is not implemented", ref),
+	}
 }

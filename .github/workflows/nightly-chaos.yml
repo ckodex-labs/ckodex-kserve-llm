@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 45
     env:
       KIND_CLUSTER_NAME: ckodex-nightly
+      KIND_NODE_IMAGE: kindest/node:v1.35.0
       OPERATOR_IMAGE: ckodex/kserve-llm-operator:nightly
       STORAGE_INITIALIZER_IMAGE: ckodex/storage-initializer:nightly
     steps:
@@ -60,7 +61,9 @@ jobs:
           mkdir -p kind-evidence
           kubectl get all --all-namespaces -o wide > kind-evidence/resources.txt || true
           kubectl get events --all-namespaces --sort-by=.lastTimestamp > kind-evidence/events.txt || true
-          kubectl logs deployment/ckodex-controller-manager -n ckodex-system --all-containers=true > kind-evidence/controller.log || true
+          kubectl logs -n ckodex-system \
+            -l app.kubernetes.io/component=controller-manager \
+            --all-containers=true --prefix > kind-evidence/controller.log || true
 
       - name: Upload failure evidence
         if: failure()

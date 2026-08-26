@@ -36,7 +36,7 @@ function teardown() {
 
 function deploy() {
     echo "📦 Deploy: Building manager binary..."
-    go build -o bin/manager -ldflags="-s -w" cmd/manager/main.go
+    go build -o bin/manager -ldflags="-s -w" ./cmd/manager
     
     echo "📦 Deploy: Installing CRDs and RBAC..."
     make install

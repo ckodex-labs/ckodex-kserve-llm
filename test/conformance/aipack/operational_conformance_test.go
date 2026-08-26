@@ -18,15 +18,13 @@ import (
 const goodHex = "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
 
 // TestLineageConformance covers §11 lineage envelope.
-// V-EXT-001: non-nil LineageEnvelope accepted
+// S-EXT-001: non-nil LineageEnvelope is explicitly unimplemented and blocked
 // I-EXT-001: nil LineageEnvelope returns ErrLineageEnvelopeMissing
 func TestLineageConformance(t *testing.T) {
-	t.Run("V-EXT-001", func(t *testing.T) {
+	t.Run("S-EXT-001", func(t *testing.T) {
 		env := &v1alpha2.AIPackLineageEnvelope{SourceRef: "registry.example.com/src@" + goodHex}
 		err := aipack.ValidateLineageEnvelope(env)
-		if err != nil {
-			t.Fatalf("[V-EXT-001] unexpected error: %v", err)
-		}
+		assertError(t, "S-EXT-001", err, "AIPACK-IMPLEMENTATION-001")
 	})
 	t.Run("I-EXT-001", func(t *testing.T) {
 		err := aipack.ValidateLineageEnvelope(nil)
@@ -104,19 +102,17 @@ func TestDeprecationConformance(t *testing.T) {
 }
 
 // TestAirGapConformance covers §17.
-// V-EXT-005: valid air-gap bundle passes
+// S-EXT-005: structurally valid air-gap bundle is explicitly unimplemented and blocked
 // I-EXT-006: missing trust root returns ErrAirGapTrustRootMissing
 // I-EXT-007: missing TSA returns ErrAirGapTSAMissing
 func TestAirGapConformance(t *testing.T) {
-	t.Run("V-EXT-005", func(t *testing.T) {
+	t.Run("S-EXT-005", func(t *testing.T) {
 		bundle := &v1alpha2.AIPackAirGapBundle{
 			TrustRootRef: "registry.internal/trust-root@" + goodHex,
 			TSACertRef:   "registry.internal/tsa@" + goodHex,
 		}
 		err := aipack.ValidateAirGapBundle(bundle)
-		if err != nil {
-			t.Fatalf("[V-EXT-005] unexpected error: %v", err)
-		}
+		assertError(t, "S-EXT-005", err, "AIPACK-IMPLEMENTATION-001")
 	})
 	t.Run("I-EXT-006", func(t *testing.T) {
 		bundle := &v1alpha2.AIPackAirGapBundle{

@@ -62,6 +62,10 @@ spec:
               model:
                 description: Model specifies the LoRA weights to serve.
                 properties:
+                  hardwareAware:
+                    description: HardwareAware enables hardware-specific artifact
+                      selection.
+                    type: boolean
                   name:
                     description: Name is the model identifier used in inference requests.
                     type: string
@@ -73,6 +77,49 @@ spec:
                   storage:
                     description: Storage configures credentials for model download.
                     properties:
+                      externalSecret:
+                        description: ExternalSecret configures external-secrets.io
+                          credential synchronization.
+                        properties:
+                          data:
+                            items:
+                              description: ExternalSecretData maps a remote provider
+                                key to a Kubernetes Secret key.
+                              properties:
+                                remoteRef:
+                                  description: ExternalSecretRemoteRef identifies
+                                    a remote key and optional property.
+                                  properties:
+                                    key:
+                                      type: string
+                                    property:
+                                      type: string
+                                  required:
+                                  - key
+                                  type: object
+                                secretKey:
+                                  type: string
+                              required:
+                              - remoteRef
+                              - secretKey
+                              type: object
+                            type: array
+                          refreshInterval:
+                            type: string
+                          secretStoreRef:
+                            description: SecretStoreRef identifies a SecretStore or
+                              ClusterSecretStore.
+                            properties:
+                              kind:
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - secretStoreRef
+                        type: object
                       secretRef:
                         description: SecretRef is a reference to a Secret containing
                           storage credentials.

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,6 +33,9 @@ func evidenceTestScheme(t *testing.T) *runtime.Scheme {
 	}
 	if err := appsv1.AddToScheme(s); err != nil {
 		t.Fatalf("appsv1.AddToScheme: %v", err)
+	}
+	if err := corev1.AddToScheme(s); err != nil {
+		t.Fatalf("corev1.AddToScheme: %v", err)
 	}
 	return s
 }

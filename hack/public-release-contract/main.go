@@ -35,9 +35,11 @@ var digestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 
 type configuration struct {
 	repository      string
+	consoleRepo     string
 	chartRepository string
 	version         string
 	operatorDigest  string
+	consoleHash     string
 	initializerHash string
 	plainHTTP       bool
 }
@@ -81,6 +83,9 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	if err := checker.verifyContainer(requestCtx, config.repository, config.operatorDigest); err != nil {
 		return fmt.Errorf("operator image: %w", err)
 	}
+	if err := checker.verifyContainer(requestCtx, config.consoleRepo, config.consoleHash); err != nil {
+		return fmt.Errorf("console image: %w", err)
+	}
 	if err := checker.verifyChart(requestCtx); err != nil {
 		return fmt.Errorf("helm chart: %w", err)
 	}
@@ -99,9 +104,11 @@ func parseConfiguration(args []string) (configuration, error) {
 	flags := flag.NewFlagSet("public-release-contract", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.StringVar(&config.repository, "repository", "", "operator OCI repository")
+	flags.StringVar(&config.consoleRepo, "console-repository", "", "console OCI repository")
 	flags.StringVar(&config.chartRepository, "chart-repository", "", "Helm chart OCI repository")
 	flags.StringVar(&config.version, "version", "", "release tag")
 	flags.StringVar(&config.operatorDigest, "operator-digest", "", "published operator digest")
+	flags.StringVar(&config.consoleHash, "console-digest", "", "published console image digest")
 	flags.StringVar(&config.initializerHash, "initializer-digest", "", "published initializer digest")
 	flags.BoolVar(&config.plainHTTP, "plain-http", false, "use HTTP for a local test registry")
 	if err := flags.Parse(args); err != nil {
@@ -115,8 +122,9 @@ func parseConfiguration(args []string) (configuration, error) {
 
 func validateConfiguration(config configuration) error {
 	for name, repository := range map[string]string{
-		"repository":       config.repository,
-		"chart-repository": config.chartRepository,
+		"repository":         config.repository,
+		"console-repository": config.consoleRepo,
+		"chart-repository":   config.chartRepository,
 	} {
 		if !validRepository(repository) {
 			return fmt.Errorf("%s %q must include a registry and repository path", name, repository)
@@ -127,6 +135,7 @@ func validateConfiguration(config configuration) error {
 	}
 	for name, digest := range map[string]string{
 		"operator-digest":    config.operatorDigest,
+		"console-digest":     config.consoleHash,
 		"initializer-digest": config.initializerHash,
 	} {
 		if !digestPattern.MatchString(digest) {

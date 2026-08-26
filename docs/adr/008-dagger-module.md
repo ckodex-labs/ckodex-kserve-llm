@@ -23,7 +23,7 @@ CI/CD requires:
 ## Decision
 
 The Dagger Module in `dagger/` is the sole CI implementation. GitHub Actions
-and local development invoke the same typed functions from `dagger/main.go`.
+and local development invoke the same typed functions from the responsibility-named files under `dagger/`.
 The former standalone `ci/` program was retired after the module-backed hosted
 pipeline completed its stabilization period.
 
@@ -62,5 +62,5 @@ dagger call all --source=.
 
 - [Dagger Go Module SDK](https://docs.dagger.io/api/sdk/go)
 - [Dagger Module Reference](https://docs.dagger.io/reference/dagger-module)
-- `dagger/main.go`
+- `dagger/module.go`, `dagger/policy.go`, `dagger/build.go`
 - `dagger.json`

@@ -141,8 +141,10 @@ For a platform developer:
 - Public release metadata and API stability are separate: the chart currently
   uses beta versioning even though several core CRDs have a stable v1 storage
   version.
-- The local E2E manifest still uses `LLMInferenceService` v1alpha2 because its
-  `hf-mount://` URI is not accepted by the current stable v1 model schema.
+- The local E2E manifest uses the stable `LLMInferenceService` v1 API and the
+  signed `hf://` storage-initializer path. The optional `hf-mount://` profile
+  requires the separately installed Hugging Face CSI/FUSE driver; alpha-only
+  fields remain outside the stable v1 contract.
 
 ## Documentation Map
 
@@ -177,6 +179,6 @@ Important boundary: Agent and SkillRegistry validate metadata references only;
 they are not an agent execution or tool-calling runtime.
 Important boundary: ModelOnboarding checks readiness and metrics; traffic weights
 are controlled separately by LLMInferenceService canary configuration.
-Source of truth: api/v1alpha2, internal/controller, cmd/manager/main.go,
-config/samples, dagger/main.go.
+Source of truth: api/v1alpha2, internal/controller, cmd/manager/,
+config/samples, dagger/module.go, dagger/policy.go, dagger/build.go.
 ```

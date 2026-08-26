@@ -23,6 +23,7 @@ import (
 type registryFixture struct {
 	server              *httptest.Server
 	operatorManifest    manifest
+	consoleManifest     manifest
 	initializerManifest manifest
 	chartManifest       manifest
 	tokenStatus         int
@@ -50,13 +51,23 @@ func TestRunFailsWhenAnonymousTokenIsDenied(t *testing.T) {
 
 func TestRunRejectsTagDigestMismatch(t *testing.T) {
 	fixture := newRegistryFixture(t)
-	arguments := fixture.arguments()
-	arguments[len(arguments)-3] = digestFor([]byte("wrong operator"))
+	arguments := replaceFlagValue(fixture.arguments(), "--operator-digest", digestFor([]byte("wrong operator")))
 
 	err := run(context.Background(), arguments, &bytes.Buffer{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tag resolves to")
+}
+
+func replaceFlagValue(args []string, name, value string) []string {
+	for index, argument := range args {
+		if argument == name && index+1 < len(args) {
+			updated := append([]string(nil), args...)
+			updated[index+1] = value
+			return updated
+		}
+	}
+	panic("flag not present: " + name)
 }
 
 func TestRunRejectsMissingArm64Image(t *testing.T) {
@@ -90,6 +101,7 @@ func newRegistryFixture(t *testing.T) *registryFixture {
 	}
 	fixture := &registryFixture{
 		operatorManifest:    index,
+		consoleManifest:     index,
 		initializerManifest: index,
 		chartManifest: manifest{
 			Config: descriptor{MediaType: helmConfigMediaType},
@@ -138,6 +150,8 @@ func (fixture *registryFixture) manifestForPath(path string) (manifest, bool) {
 	switch {
 	case strings.Contains(path, "huggingface-initializer"):
 		return fixture.initializerManifest, true
+	case strings.Contains(path, "kserve-llm-console"):
+		return fixture.consoleManifest, true
 	case strings.Contains(path, "charts/"):
 		return fixture.chartManifest, true
 	case strings.Contains(path, "ckodex-kserve-llm"):
@@ -150,13 +164,16 @@ func (fixture *registryFixture) manifestForPath(path string) (manifest, bool) {
 func (fixture *registryFixture) arguments() []string {
 	host := strings.TrimPrefix(fixture.server.URL, "http://")
 	operatorPayload, _ := json.Marshal(fixture.operatorManifest)
+	consolePayload, _ := json.Marshal(fixture.consoleManifest)
 	initializerPayload, _ := json.Marshal(fixture.initializerManifest)
 	return []string{
 		"--plain-http",
 		"--repository", host + "/ckodex-labs/ckodex-kserve-llm",
+		"--console-repository", host + "/ckodex-labs/ckodex-kserve-llm-console",
 		"--chart-repository", host + "/ckodex-labs/charts/ckodex-kserve-llm-operator",
 		"--version", "v0.18.0-beta.6",
 		"--operator-digest", digestFor(operatorPayload),
+		"--console-digest", digestFor(consolePayload),
 		"--initializer-digest", digestFor(initializerPayload),
 	}
 }

@@ -1,0 +1,71 @@
+{{- if and .Values.console.enabled .Values.console.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-console-observer
+  labels:
+    {{- include "ckodex-kserve-llm-operator.labels" . | nindent 4 }}
+    component: console
+rules:
+- apiGroups: [""]
+  resources: [namespaces, nodes, pods, events]
+  verbs: [get, list, watch]
+- apiGroups: [apps]
+  resources: [deployments]
+  verbs: [get, list, watch]
+- apiGroups: [serving.ckodex.com]
+  resources: [llminferenceservices]
+  verbs: [get, list, watch]
+- apiGroups: [authentication.k8s.io]
+  resources: [selfsubjectreviews]
+  verbs: [create]
+- apiGroups: [authorization.k8s.io]
+  resources: [selfsubjectaccessreviews]
+  verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-console-observer
+  labels:
+    {{- include "ckodex-kserve-llm-operator.labels" . | nindent 4 }}
+    component: console
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-console-observer
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ckodex-kserve-llm-operator.consoleServiceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-console-spire-registrations
+  namespace: {{ .Values.console.spireRegistrationNamespace }}
+  labels:
+    {{- include "ckodex-kserve-llm-operator.labels" . | nindent 4 }}
+    component: console
+rules:
+- apiGroups: [""]
+  resources: [configmaps]
+  verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-console-spire-registrations
+  namespace: {{ .Values.console.spireRegistrationNamespace }}
+  labels:
+    {{- include "ckodex-kserve-llm-operator.labels" . | nindent 4 }}
+    component: console
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-console-spire-registrations
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ckodex-kserve-llm-operator.consoleServiceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

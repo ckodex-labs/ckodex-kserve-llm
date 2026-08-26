@@ -55,12 +55,7 @@ func (r *Reconciler) Cleanup(ctx context.Context, llmSvc *servingv1alpha2.LLMInf
 	return nil
 }
 
-func (r *Reconciler) deleteOwned(
-	ctx context.Context,
-	owner *servingv1alpha2.LLMInferenceService,
-	object client.Object,
-	name string,
-) error {
+func (r *Reconciler) deleteOwned(ctx context.Context, owner *servingv1alpha2.LLMInferenceService, object client.Object, name string) error {
 	object.SetName(name)
 	object.SetNamespace(owner.Namespace)
 	if err := r.Client.Get(ctx, types.NamespacedName{Name: name, Namespace: owner.Namespace}, object); err != nil {

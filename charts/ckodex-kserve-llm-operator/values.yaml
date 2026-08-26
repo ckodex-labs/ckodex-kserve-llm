@@ -20,6 +20,11 @@ serviceAccount:
 rbac:
   create: true
 
+# managedNamespaces lists namespaces where the platform pre-provisions the
+# shared ckodex-epp ServiceAccount, Role, and RoleBinding. The operator will
+# fail closed for scheduler workloads outside this list.
+managedNamespaces: []
+
 crds:
   install: false
 
@@ -35,8 +40,8 @@ runtime:
   defaultImage: "vllm/vllm-openai:v0.25.1"
   # Installed KServe ClusterServingRuntime for v0.19 workerSpec workloads.
   kserveMultiNodeRuntime: "kserve-huggingfaceserver-multinode"
-  # Purpose-built Xet-aware image; dependencies are installed at image build time.
-  huggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.7"
+  # Empty follows Chart.appVersion; set a digest-pinned override when required.
+  huggingFaceInitializerImage: ""
   customStorageInitializerImage: "ckodex/storage-initializer:v0.1.0"
   quantCppImage: "ckodex/quant-cpp:v0.1.0"
   vllmCPURequest: "2"
@@ -78,17 +83,31 @@ metrics:
     scrapeTimeout: 10s
 
 console:
-  # No public console image is published with the operator release yet.
+  # Disabled by default; an empty tag follows Chart.appVersion when enabled.
   enabled: false
   replicas: 1
+  spireRegistrationNamespace: spire
   image:
-    # Required when console.enabled=true; no console image ships by default.
-    repository: ""
+    repository: ghcr.io/ckodex-labs/ckodex-kserve-llm-console
     pullPolicy: IfNotPresent
     tag: ""
   service:
     type: ClusterIP
     port: 3000
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    automountServiceAccountToken: true
+  rbac:
+    create: true
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
 
 podAnnotations: {}
 

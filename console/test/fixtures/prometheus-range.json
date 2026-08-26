@@ -1,0 +1,34 @@
+{
+  "status": "success",
+  "data": {
+    "resultType": "matrix",
+    "result": [
+      {
+        "metric": { "__name__": "ckodex:reconcile_success_rate", "model": "model-a" },
+        "values": [[1754143200, "0.98"], [1754143260, "0.99"]]
+      },
+      {
+        "metric": { "__name__": "ckodex:inference_latency_p99", "model": "model-a" },
+        "values": [[1754143200, "1.42"], [1754143260, "1.35"]]
+      },
+      {
+        "metric": {
+          "__name__": "vllm:kv_cache_usage_perc",
+          "endpoint": "http-inference",
+          "instance": "10.42.0.25:8000",
+          "job": "gemma4",
+          "model_name": "gemma-4-26b-nvfp4",
+          "namespace": "cortaix-llm-inference",
+          "pod": "gemma4-b6c546677-724k9",
+          "service": "gemma4"
+        },
+        "values": [[1754143200, "0.42"], [1754143260, "0.51"]]
+      },
+      {
+        "metric": { "__name__": "unapproved:metric", "model": "model-a" },
+        "values": [[1754143200, "42"]]
+      }
+    ]
+  },
+  "warnings": ["one scrape was incomplete"]
+}

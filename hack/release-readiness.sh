@@ -27,6 +27,11 @@ require_tool git
 require_tool goreleaser
 require_tool helm
 require_tool jq
+require_tool kubectl
+
+test -f "${ROOT_DIR}/console/package.json"
+test -f "${ROOT_DIR}/console/package-lock.json"
+test -f "${ROOT_DIR}/console/Dockerfile"
 
 checksum_cmd=""
 if command -v sha256sum >/dev/null 2>&1; then
@@ -42,7 +47,9 @@ mkdir -p "${ROOT_DIR}/bin"
 
 before_diff="$(mktemp)"
 after_diff="$(mktemp)"
-trap 'rm -f "${before_diff}" "${after_diff}"' EXIT
+console_manifest="$(mktemp)"
+packaged_manifest="$(mktemp)"
+trap 'rm -f "${before_diff}" "${after_diff}" "${console_manifest}" "${packaged_manifest}"' EXIT
 
 (cd "${ROOT_DIR}" && git diff --name-only > "${before_diff}")
 
@@ -117,7 +124,24 @@ echo "==> packaging helm chart"
 rm -rf "${HELM_OUT_DIR}"
 mkdir -p "${HELM_OUT_DIR}"
 (cd "${ROOT_DIR}" && helm lint deploy/helm)
-(cd "${ROOT_DIR}" && helm package deploy/helm --destination "${HELM_OUT_DIR}")
+(cd "${ROOT_DIR}" && helm template beta-console deploy/helm \
+  --namespace ckodex-system \
+  --set console.enabled=true \
+  --set console.image.repository=ghcr.io/ckodex-labs/ckodex-kserve-llm-console \
+  --set console.image.tag=contract > "${console_manifest}")
+grep -q 'name: .*console' "${console_manifest}"
+grep -q 'kind: Deployment' "${console_manifest}"
+grep -q 'kind: ClusterRole' "${console_manifest}"
+chart_version="$(helm show chart "${ROOT_DIR}/deploy/helm" | awk '$1 == "version:" { print $2; exit }')"
+if [[ -z "${chart_version}" ]]; then
+  echo "could not determine Helm chart version" >&2
+  exit 1
+fi
+release_tag="v${chart_version}"
+(cd "${ROOT_DIR}" && helm package deploy/helm \
+  --version "${chart_version}" \
+  --app-version "${release_tag}" \
+  --destination "${HELM_OUT_DIR}")
 
 checksum_file="$(find "${DIST_DIR}" -maxdepth 1 -name checksums.txt | head -n 1)"
 if [[ -z "${checksum_file}" ]]; then
@@ -143,6 +167,17 @@ if [[ -z "${helm_package}" ]]; then
   echo "helm packaging did not produce a chart archive" >&2
   exit 1
 fi
+
+echo "==> verifying packaged chart image tags"
+(cd "${ROOT_DIR}" && helm template release "${helm_package}" \
+  --namespace ckodex-system \
+  --set console.enabled=true > "${packaged_manifest}")
+for image in \
+  "ghcr.io/ckodex-labs/ckodex-kserve-llm:${release_tag}" \
+  "ghcr.io/ckodex-labs/ckodex-kserve-llm-console:${release_tag}" \
+  "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:${release_tag}"; do
+  grep -Fq "${image}" "${packaged_manifest}"
+done
 
 (cd "${ROOT_DIR}" && git diff --name-only > "${after_diff}")
 mutated_files="$(comm -13 <(sort "${before_diff}") <(sort "${after_diff}"))"

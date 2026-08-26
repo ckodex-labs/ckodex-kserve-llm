@@ -67,7 +67,7 @@ func (m *InferencePoolManager) Reconcile(ctx context.Context, llmSvc *servingv1a
 		return fmt.Errorf("get GA InferencePool (is the v1 CRD installed?): %w", err)
 	}
 	if err := controllerutil.SetControllerReference(llmSvc, existing, m.Scheme); err != nil {
-		return fmt.Errorf("set existing inferencepool owner reference: %w", err)
+		return fmt.Errorf("set existing inferencepool owner: %w", err)
 	}
 	existing.Object["spec"] = desired.Object["spec"]
 	existing.SetLabels(desired.GetLabels())

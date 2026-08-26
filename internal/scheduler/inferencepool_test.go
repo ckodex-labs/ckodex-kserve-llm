@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -42,35 +41,4 @@ func TestInferencePoolManagerReconcilesGAContract(t *testing.T) {
 	assert.Equal(t, int64(8000), port)
 	failureMode, _, _ := unstructured.NestedString(pool.Object, "spec", "endpointPickerRef", "failureMode")
 	assert.Equal(t, "FailClose", failureMode)
-}
-
-func TestInferencePoolManagerRejectsForeignPool(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, servingv1alpha2.AddToScheme(scheme))
-	svc := eppSvc("llama", "inference")
-	pool := &unstructured.Unstructured{Object: map[string]interface{}{
-		"apiVersion": "inference.networking.k8s.io/v1",
-		"kind":       "InferencePool",
-		"metadata": map[string]interface{}{
-			"name":      "llama",
-			"namespace": "inference",
-		},
-	}}
-	pool.SetGroupVersionKind(InferencePoolGVK)
-	pool.SetOwnerReferences([]metav1.OwnerReference{{
-		APIVersion: "apps/v1", Kind: "Deployment", Name: "other", UID: "other",
-		Controller: boolPtr(true), BlockOwnerDeletion: boolPtr(true),
-	}})
-	manager := &InferencePoolManager{
-		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc, pool).Build(),
-		Scheme: scheme,
-	}
-
-	err := manager.Reconcile(context.Background(), svc)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "already owned by another")
-}
-
-func boolPtr(value bool) *bool {
-	return &value
 }

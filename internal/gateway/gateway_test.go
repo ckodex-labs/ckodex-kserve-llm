@@ -74,7 +74,7 @@ func TestBuildHTTPRoute_SchedulerUsesInferencePool(t *testing.T) {
 	llmSvc := baseLLMSvc("scheduled")
 	llmSvc.Spec.Router.Scheduler = &servingv1alpha2.SchedulerSpec{}
 	route := BuildHTTPRoute(llmSvc, nil)
-	ref := route.Spec.Rules[0].BackendRefs[0].BackendRef.BackendObjectReference
+	ref := route.Spec.Rules[0].BackendRefs[0].BackendObjectReference
 	if ref.Group == nil || string(*ref.Group) != "inference.networking.k8s.io" {
 		t.Fatalf("backend group = %v", ref.Group)
 	}

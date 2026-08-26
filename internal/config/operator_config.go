@@ -354,7 +354,7 @@ func DefaultOperatorConfig() OperatorConfig {
 			StorageInitializerImage:          "kserve/storage-initializer:v0.19.0",
 			QuantCppImage:                    "ckodex/quant-cpp:v0.1.0",
 			CustomStorageInitializerImage:    "ckodex/storage-initializer:v0.1.0",
-			HuggingFaceInitializerImage:      "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.7",
+			HuggingFaceInitializerImage:      "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.8",
 			DefaultReplicas:                  1,
 			VLLMCPURequest:                   "2",
 			VLLMMemoryRequest:                "4Gi",
@@ -365,15 +365,7 @@ func DefaultOperatorConfig() OperatorConfig {
 			CacheCPURequest:                  "1",
 			CacheMemoryRequest:               "1Gi",
 		},
-		Scheduler: SchedulerDefaults{
-			Image: "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc",
-			DefaultPlugins: []string{
-				"prefix-cache-scorer",
-				"queue-scorer",
-				"kv-cache-utilization-scorer",
-				"max-score-picker",
-			},
-		},
+		Scheduler: defaultSchedulerDefaults(),
 		Gateway: GatewayDefaults{
 			GatewayClassName: "envoy",
 			ListenerPort:     80,
@@ -382,17 +374,7 @@ func DefaultOperatorConfig() OperatorConfig {
 			RequiredScopes: []string{"inference"},
 			JWKSCacheTTL:   1 * time.Hour,
 		},
-		Security: SecurityConfig{
-			AllowedRegistries: []string{
-				"ghcr.io/ckodex/",
-				"vllm/",
-				"kserve/",
-				"gcr.io/distroless/",
-				"public.ecr.aws/q9t5s3a7/",
-			},
-			MaxGPUsPerNamespace:   8,
-			MaxReplicasPerService: 16,
-		},
+		Security: defaultSecurityConfig(),
 		AuditSink: AuditSinkConfig{
 			Type:          "stdout",
 			RetentionDays: 0,
@@ -408,6 +390,25 @@ func DefaultOperatorConfig() OperatorConfig {
 		SemanticCacheTTL:            1 * time.Hour,
 		AllowInsecurePromotionGates: false,
 		Version:                     "dev",
+	}
+}
+
+func defaultSchedulerDefaults() SchedulerDefaults {
+	return SchedulerDefaults{
+		Image: "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc",
+		DefaultPlugins: []string{
+			"prefix-cache-scorer", "queue-scorer", "kv-cache-utilization-scorer", "max-score-picker",
+		},
+	}
+}
+
+func defaultSecurityConfig() SecurityConfig {
+	return SecurityConfig{
+		AllowedRegistries: []string{
+			"ghcr.io/ckodex/", "vllm/", "kserve/", "gcr.io/distroless/", "public.ecr.aws/q9t5s3a7/",
+		},
+		MaxGPUsPerNamespace:   8,
+		MaxReplicasPerService: 16,
 	}
 }
 

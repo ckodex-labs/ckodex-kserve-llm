@@ -100,7 +100,8 @@ func (r *ASRInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	// Validate custom runtimes require a user-supplied image.
+	// Custom runtimes require a user-supplied image because the operator cannot
+	// select a safe default for an arbitrary runtime implementation.
 	if (asrSvc.Spec.Runtime == servingv1alpha2.ASRRuntimeTransformers ||
 		asrSvc.Spec.Runtime == servingv1alpha2.ASRRuntimeCustom) && asrSvc.Spec.RuntimeImage == "" {
 		if err := r.setCondition(ctx, &asrSvc, asrSvcBeforePatch, servingv1alpha2.ASRConditionReady,
@@ -164,13 +165,6 @@ func (r *ASRInferenceServiceReconciler) reconcileASRDeployment(
 		return nil
 	}
 	return r.Update(ctx, existing)
-}
-
-func replicaCount(replicas *int32) int32 {
-	if replicas == nil {
-		return 1
-	}
-	return *replicas
 }
 
 // reconcileASRService creates or updates the ClusterIP Service.

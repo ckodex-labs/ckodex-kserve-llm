@@ -43,6 +43,7 @@ spec:
           Two runtime modes are supported:
             - faster-whisper: for Whisper-family models (default, no GPU required)
             - transformers:   for custom ASR architectures (e.g. CohereLabs/cohere-transcribe-03-2026)
+            - custom:         for operator-supplied ASR images (e.g. NVIDIA Parakeet)
         properties:
           apiVersion:
             description: |-
@@ -239,16 +240,19 @@ spec:
                 - enum:
                   - faster-whisper
                   - transformers
+                  - custom
                 - enum:
                   - faster-whisper
                   - transformers
+                  - custom
                 default: faster-whisper
                 description: Runtime selects the serving runtime. Defaults to faster-whisper.
                 type: string
               runtimeImage:
                 description: |-
                   RuntimeImage overrides the default container image for the selected runtime.
-                  Required when runtime=transformers (no public default image exists yet).
+                  Required when runtime=transformers or custom (the operator cannot select a
+                  safe image for an arbitrary ASR server).
                   When omitted for faster-whisper the operator uses the built-in default.
                 type: string
               scaling:

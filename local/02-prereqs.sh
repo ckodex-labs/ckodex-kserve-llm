@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+INSTALL_HF_CSI="${INSTALL_HF_CSI:-0}"
+
 # ── 1. Cert-manager ──────────────────────────────────────────────
 helm repo add jetstack https://charts.jetstack.io
 helm repo update jetstack
@@ -12,6 +14,12 @@ kubectl wait --for=condition=Available deployment/cert-manager \
 
 # ── 2. Gateway API CRDs ──────────────────────────────────────────
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
+
+# ── 2b. Gateway API Inference Extension CRDs ─────────────────────
+# The operator's optional router.scheduler path reconciles the GA InferencePool
+# API and the digest-pinned v1.5.0 EPP. Install the CRDs explicitly; the EPP
+# image alone does not register the API with the Kubernetes apiserver.
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.5.0/manifests.yaml
 
 # ── 3. Envoy Gateway controller (provides "envoy" GatewayClass) ──
 # --skip-crds because Gateway API CRDs are already installed in step 2.
@@ -53,13 +61,18 @@ metadata:
 EOF
 echo "MetalLB configured with address pool ${BASE}.200-${BASE}.250"
 
-# ── 5. HuggingFace CSI Driver (hf-mount: lazy model mounting) ──────
-# Enables hf-mount:// URI scheme — mounts HF repos via NFS/FUSE with
-# lazy byte-level loading. No full download needed.
-helm upgrade --install hf-csi oci://ghcr.io/huggingface/charts/hf-csi-driver \
-  --namespace kube-system \
-  --version 0.11.1 \
-  --set logVerbosity=2
-kubectl wait --for=condition=Ready pod -l app=hf-csi-node \
-  -n kube-system --timeout=120s
-echo "HuggingFace CSI driver (hf-mount) installed"
+# ── 5. Optional HuggingFace CSI Driver (hf-mount: lazy mounting) ───
+# The default CPU proof uses hf:// and the signed storage-initializer image.
+# Install the privileged FUSE/CSI path only when explicitly testing
+# hf-mount:// workloads: INSTALL_HF_CSI=1 ./run/e2e.sh
+if [[ "$INSTALL_HF_CSI" == "1" ]]; then
+  helm upgrade --install hf-csi oci://ghcr.io/huggingface/charts/hf-csi-driver \
+    --namespace kube-system \
+    --version 0.11.1 \
+    --set logVerbosity=2
+  kubectl wait --for=condition=Ready pod -l app=hf-csi-node \
+    -n kube-system --timeout=120s
+  echo "HuggingFace CSI driver (hf-mount) installed"
+else
+  echo "Skipping optional HuggingFace CSI driver; default proof uses hf://"
+fi

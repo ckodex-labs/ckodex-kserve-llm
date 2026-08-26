@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
-	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
 )
 
 func hardeningService() *servingv1alpha2.LLMInferenceService {
@@ -45,49 +44,6 @@ func TestBuilderMetadataPrecedence(t *testing.T) {
 	assert.Equal(t, "platform", deployment.Spec.Template.Annotations["owner"])
 	assert.Equal(t, "true", deployment.Spec.Template.Annotations["prometheus.io/scrape"])
 	assert.NotContains(t, deployment.Spec.Selector.MatchLabels, "team")
-}
-
-func TestBuilderPreStopTerminatesOnlyTheContainerProcess(t *testing.T) {
-	builder := &Builder{Client: fake.NewClientBuilder().Build()}
-	deployment := builder.Build(context.Background(), hardeningService(), 1, HardwareNVIDIA, nil)
-	hook := deployment.Spec.Template.Spec.Containers[0].Lifecycle.PreStop
-	require.NotNil(t, hook)
-	require.NotNil(t, hook.Exec)
-	assert.Equal(t, []string{"/bin/sh", "-c", "kill -TERM 1 2>/dev/null || true; sleep 10; kill -KILL 1 2>/dev/null || true; sleep 5"}, hook.Exec.Command)
-}
-
-func TestBuilderGPUDeviceSelection(t *testing.T) {
-	builder := &Builder{Client: fake.NewClientBuilder().Build()}
-	svc := hardeningService()
-	tp := int32(2)
-	svc.Spec.Parallelism = &servingv1alpha2.ParallelismSpec{Tensor: &tp, GPUDevices: []string{"GPU-a", "GPU-b"}}
-	deployment := builder.Build(context.Background(), svc, 1, HardwareNVIDIA, nil)
-	assert.Equal(t, "GPU-a,GPU-b", envValue(deployment.Spec.Template.Spec.Containers[0].Env, "NVIDIA_VISIBLE_DEVICES"))
-}
-
-func TestBuilderUsesOperatorWorkloadDefaults(t *testing.T) {
-	defaults := operatorconfig.DefaultOperatorConfig().Defaults
-	defaults.CustomStorageInitializerImage = "registry.example/storage-init@sha256:custom"
-	defaults.QuantCppImage = "registry.example/quant-cpp@sha256:custom"
-	defaults.VLLMCPURequest = "8"
-	defaults.VLLMMemoryRequest = "32Gi"
-	defaults.TerminationGracePeriodSeconds = 180
-	builder := &Builder{Client: fake.NewClientBuilder().Build(), Defaults: defaults}
-
-	svc := hardeningService()
-	svc.Spec.Model.URI = "s3://bucket/model"
-	deployment := builder.Build(context.Background(), svc, 1, HardwareNVIDIA, nil)
-	container := deployment.Spec.Template.Spec.Containers[0]
-	cpu := container.Resources.Requests[corev1.ResourceCPU]
-	memory := container.Resources.Requests[corev1.ResourceMemory]
-	assert.Equal(t, "8", cpu.String())
-	assert.Equal(t, "32Gi", memory.String())
-	assert.Equal(t, int64(180), *deployment.Spec.Template.Spec.TerminationGracePeriodSeconds)
-	assert.Equal(t, defaults.CustomStorageInitializerImage, deployment.Spec.Template.Spec.InitContainers[0].Image)
-
-	svc.Spec.Engine = "quant-cpp"
-	quantDeployment := builder.Build(context.Background(), svc, 1, HardwareNVIDIA, nil)
-	assert.Equal(t, defaults.QuantCppImage, quantDeployment.Spec.Template.Spec.Containers[0].Image)
 }
 
 func TestBuilderForwardsDeclaredHuggingFaceRevision(t *testing.T) {

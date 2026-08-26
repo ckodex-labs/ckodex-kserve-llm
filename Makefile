@@ -1,11 +1,17 @@
 # CKodex KServe LLM Operator — Makefile
 IMG ?= ghcr.io/ckodex-labs/ckodex-kserve-llm:dev
 STORAGE_INITIALIZER_IMG ?= ghcr.io/ckodex-labs/ckodex-kserve-llm-storage-initializer:dev
+CONSOLE_IMG ?= ghcr.io/ckodex-labs/ckodex-kserve-llm-console:dev
 CONTROLLER_GEN ?= $(shell which controller-gen 2>/dev/null || echo $(GOBIN)/controller-gen)
 ENVTEST ?= $(shell which setup-envtest 2>/dev/null || echo $(GOBIN)/setup-envtest)
 GOLANGCI_LINT ?= $(shell which golangci-lint 2>/dev/null || echo $(GOBIN)/golangci-lint)
+CONTROLLER_GEN_VERSION ?= v0.20.1
+ENVTEST_VERSION ?= v0.0.0-20260318145839-6c9615a2a166
+GOLANGCI_LINT_VERSION ?= v2.12.2
 KIND_CLUSTER_NAME ?= kserve-017
+KIND_NODE_IMAGE ?= kindest/node:v1.35.0
 GOBIN ?= $(shell go env GOPATH)/bin
+DOCKER_BUILD ?= docker buildx build --load
 
 .PHONY: all
 all: generate fmt vet lint build
@@ -55,15 +61,15 @@ integration-test: envtest ## Run envtest integration suite; fails if assets are 
 .PHONY: build
 build: generate fmt vet ## Build manager binary
 	@version=$$( [ -n "$$VERSION" ] && echo "$$VERSION" || echo "dev" ); \
-	go build -o bin/manager -ldflags="-s -w -X github.com/ckodex-labs/kserve-llm-operator/internal/version.Version=$$version" cmd/manager/main.go
+	go build -o bin/manager -ldflags="-s -w -X github.com/ckodex-labs/kserve-llm-operator/internal/version.Version=$$version" ./cmd/manager
 
 .PHONY: run
 run: generate fmt vet ## Run controller locally against cluster
-	go run cmd/manager/main.go
+	go run ./cmd/manager
 
 .PHONY: docker-build
 docker-build: ## Build docker image
-	docker build --target manager -t $(IMG) .
+	$(DOCKER_BUILD) --target manager -t $(IMG) .
 
 .PHONY: docker-push
 docker-push: ## Push docker image
@@ -71,7 +77,7 @@ docker-push: ## Push docker image
 
 .PHONY: storage-initializer-img
 storage-initializer-img: ## Build custom Go storage-initializer image
-	docker build --target storage-initializer -t $(STORAGE_INITIALIZER_IMG) .
+	$(DOCKER_BUILD) --target storage-initializer -t $(STORAGE_INITIALIZER_IMG) .
 
 .PHONY: storage-initializer-load
 storage-initializer-load: storage-initializer-img ## Build and load storage-initializer into KIND
@@ -82,6 +88,10 @@ storage-initializer-load: storage-initializer-img ## Build and load storage-init
 .PHONY: install
 install: manifests ## Install CRDs into cluster
 	kubectl apply --server-side -f config/crd/
+
+.PHONY: beta-crds
+beta-crds: manifests ## Install the beta CRD profile with v1/v1alpha2 conversion
+	kubectl apply --server-side -k config/crd/
 
 .PHONY: uninstall
 uninstall: manifests ## Uninstall CRDs from cluster
@@ -108,8 +118,7 @@ full-redeploy: ## High-assurance 3x redeploy cycle
 
 .PHONY: kind-setup
 kind-setup: ## Create KIND cluster with port mappings
-	kind create cluster --name $(KIND_CLUSTER_NAME) --config deploy/kind/kind-config.yaml
-	kubectl config use-context kind-$(KIND_CLUSTER_NAME)
+	KIND_CLUSTER_NAME="$(KIND_CLUSTER_NAME)" KIND_NODE_IMAGE="$(KIND_NODE_IMAGE)" bash local/01-kind-setup.sh
 
 .PHONY: kind-load
 kind-load: docker-build ## Load docker image into KIND cluster
@@ -131,15 +140,15 @@ kind-cleanup: ## Tear down KIND cluster and prune local state
 
 .PHONY: controller-gen
 controller-gen: ## Install controller-gen if not present
-	@test -x $(CONTROLLER_GEN) || go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+	@test -x $(CONTROLLER_GEN) || go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
 
 .PHONY: envtest
 envtest: ## Install setup-envtest if not present
-	@test -x $(ENVTEST) || go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	@test -x $(ENVTEST) || go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
 
 .PHONY: golangci-lint
 golangci-lint: ## Install golangci-lint if not present
-	@test -x $(GOLANGCI_LINT) || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@test -x $(GOLANGCI_LINT) || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 .PHONY: e2e-setup
 e2e-setup: kind-setup kind-load deploy ## Bootstrap E2E cluster from scratch
@@ -184,7 +193,12 @@ console-build: ## Build console production bundle
 	cd console && npm run build
 
 .PHONY: console-check
-console-check: console-build ## CI-visible console production gate
+console-check: ## CI-visible console production gate
+	cd console && npm ci && npm audit --omit=dev --audit-level=high && npm run test && npm run lint && npx tsc --noEmit && npm run build && npm run verify:ssr && npm run verify:populated
+
+.PHONY: crd-bundle
+crd-bundle: manifests ## Build a checksummed, installable CRD release bundle
+	bash hack/crd-bundle.sh
 
 .PHONY: crd-bundle
 crd-bundle: manifests ## Build a checksummed, installable CRD release bundle
@@ -196,4 +210,4 @@ release-readiness: ## Rehearse local release artifacts and fail on hidden repo m
 
 .PHONY: console-img
 console-img: ## Build console docker image
-	docker build -t ckodex/console:latest ./console
+	docker build --target runner -t $(CONSOLE_IMG) ./console

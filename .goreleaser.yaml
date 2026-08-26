@@ -5,7 +5,7 @@ project_name: kserve-llm-operator
 
 builds:
   - id: manager
-    main: ./cmd/manager/main.go
+    main: ./cmd/manager
     binary: manager
     env:
       - CGO_ENABLED=0

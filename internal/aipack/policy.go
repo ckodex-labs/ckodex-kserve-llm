@@ -35,69 +35,86 @@ func EvaluatePolicy(
 	presentPredicates []string,
 	riskBand v1alpha2.RVBand,
 ) EvaluationResult {
-	// TODO(ckodex): implement per AIPACK-SPEC v0.1.1 §19.3 — full policy evaluation
 	if policy == nil {
 		return EvaluationResult{Allowed: true}
 	}
-	// Step 1: forbidden families
+	if denial := evaluateFamilyPolicy(policy, family); denial != nil {
+		return *denial
+	}
+	if denial := evaluateArtifactKindPolicy(policy, kind); denial != nil {
+		return *denial
+	}
+	if denial := evaluatePredicatePolicy(policy, presentPredicates); denial != nil {
+		return *denial
+	}
+	if denial := evaluateRiskPolicy(policy, riskBand); denial != nil {
+		return *denial
+	}
+	return EvaluationResult{Allowed: true}
+}
+
+func evaluateFamilyPolicy(policy *v1alpha2.PolicyBundleSpec, family v1alpha2.ArtifactFamily) *EvaluationResult {
 	for _, ff := range policy.ForbiddenFamilies {
 		if ff == family {
-			return EvaluationResult{
+			return &EvaluationResult{
 				Allowed:  false,
 				DenyCode: ErrProfileFamilyDenied,
 				Reason:   "family " + string(family) + " is forbidden by policy",
 			}
 		}
 	}
-	// Step 2: allowed families allowlist
-	if len(policy.AllowedFamilies) > 0 {
-		if !familyInList(family, policy.AllowedFamilies) {
-			return EvaluationResult{
-				Allowed:  false,
-				DenyCode: ErrProfileFamilyDenied,
-				Reason:   "family " + string(family) + " is not in policy allowedFamilies",
-			}
+	if len(policy.AllowedFamilies) > 0 && !familyInList(family, policy.AllowedFamilies) {
+		return &EvaluationResult{
+			Allowed:  false,
+			DenyCode: ErrProfileFamilyDenied,
+			Reason:   "family " + string(family) + " is not in policy allowedFamilies",
 		}
 	}
-	// Step 3: forbidden artifact types
+	return nil
+}
+
+func evaluateArtifactKindPolicy(policy *v1alpha2.PolicyBundleSpec, kind v1alpha2.ArtifactKind) *EvaluationResult {
 	for _, ft := range policy.ForbiddenArtifactTypes {
 		if ft == kind {
-			return EvaluationResult{
+			return &EvaluationResult{
 				Allowed:  false,
 				DenyCode: ErrProfileFamilyDenied,
 				Reason:   "kind " + string(kind) + " is forbidden by policy",
 			}
 		}
 	}
-	// Step 4: allowed artifact types (nil = absent = allow-all; []= deny-all sentinel)
-	if policy.AllowedArtifactTypes != nil {
-		if !kindInList(kind, policy.AllowedArtifactTypes) {
-			return EvaluationResult{
-				Allowed:  false,
-				DenyCode: ErrProfileFamilyDenied,
-				Reason:   "kind " + string(kind) + " is not in policy allowedArtifactTypes",
-			}
+	if policy.AllowedArtifactTypes != nil && !kindInList(kind, policy.AllowedArtifactTypes) {
+		return &EvaluationResult{
+			Allowed:  false,
+			DenyCode: ErrProfileFamilyDenied,
+			Reason:   "kind " + string(kind) + " is not in policy allowedArtifactTypes",
 		}
 	}
-	// Step 5: required predicates
+	return nil
+}
+
+func evaluatePredicatePolicy(policy *v1alpha2.PolicyBundleSpec, presentPredicates []string) *EvaluationResult {
 	for _, req := range policy.RequiredPredicates {
 		if !stringInList(req, presentPredicates) {
-			return EvaluationResult{
+			return &EvaluationResult{
 				Allowed:  false,
 				DenyCode: ErrProfilePredicateDenied,
 				Reason:   "required predicate absent: " + req,
 			}
 		}
 	}
-	// Step 6: risk band ceiling
-	if policy.MaxRiskBand != "" && riskBandExceeds(riskBand, policy.MaxRiskBand) {
-		return EvaluationResult{
+	return nil
+}
+
+func evaluateRiskPolicy(policy *v1alpha2.PolicyBundleSpec, riskBand v1alpha2.RVBand) *EvaluationResult {
+	if policy.MaxRiskBand != "" && (!validRVBand(riskBand) || !validRVBand(policy.MaxRiskBand) || riskBandExceeds(riskBand, policy.MaxRiskBand)) {
+		return &EvaluationResult{
 			Allowed:  false,
 			DenyCode: ErrRVRedBandBlocked,
 			Reason:   "artifact risk band " + string(riskBand) + " exceeds policy maxRiskBand " + string(policy.MaxRiskBand),
 		}
 	}
-	return EvaluationResult{Allowed: true}
+	return nil
 }
 
 func familyInList(f v1alpha2.ArtifactFamily, list []v1alpha2.ArtifactFamily) bool {
@@ -136,7 +153,15 @@ var rvBandOrder = map[v1alpha2.RVBand]int{
 }
 
 func riskBandExceeds(actual, limit v1alpha2.RVBand) bool {
-	ao := rvBandOrder[actual]
-	lo := rvBandOrder[limit]
+	ao, actualOK := rvBandOrder[actual]
+	lo, limitOK := rvBandOrder[limit]
+	if !actualOK || !limitOK {
+		return true
+	}
 	return ao > lo
+}
+
+func validRVBand(band v1alpha2.RVBand) bool {
+	_, ok := rvBandOrder[band]
+	return ok
 }

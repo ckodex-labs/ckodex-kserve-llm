@@ -21,8 +21,10 @@ import (
 )
 
 const (
-	operatorImageRepository = "ghcr.io/ckodex-labs/ckodex-kserve-llm:"
-	defaultRuntimeImage     = "vllm/vllm-openai:v0.25.1"
+	operatorImageRepository    = "ghcr.io/ckodex-labs/ckodex-kserve-llm:"
+	initializerImageRepository = "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:"
+	consoleImageRepository     = "ghcr.io/ckodex-labs/ckodex-kserve-llm-console:"
+	defaultRuntimeImage        = "vllm/vllm-openai:v0.25.1"
 )
 
 func main() {
@@ -37,18 +39,113 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	for _, chart := range []string{"charts/ckodex-kserve-llm-operator", "deploy/helm"} {
+		releaseTag, err := chartAppVersion(chart)
+		if err != nil {
+			return err
+		}
 		objects, err := renderChart(ctx, chart)
 		if err != nil {
 			return err
 		}
-		if err := validateInstallContract(chart, objects); err != nil {
+		if err := validateInstallContract(chart, releaseTag, objects); err != nil {
+			return err
+		}
+		if err := validateManagedEPPProfile(ctx, chart); err != nil {
+			return err
+		}
+		consoleObjects, err := renderChart(
+			ctx,
+			chart,
+			"console.enabled=true",
+			"console.image.repository=ghcr.io/ckodex-labs/ckodex-kserve-llm-console",
+		)
+		if err != nil {
+			return err
+		}
+		if err := validateConsoleInstallContract(chart, releaseTag, consoleObjects); err != nil {
 			return err
 		}
 	}
 	if err := validateWebhookTLS(ctx); err != nil {
 		return err
 	}
+	if err := validateBetaConversionIdentity(ctx); err != nil {
+		return err
+	}
 	return validateStaticRBAC()
+}
+
+func validateConsoleInstallContract(chart, releaseTag string, objects []*unstructured.Unstructured) error {
+	deployment := findSuffix(objects, "Deployment", "-console")
+	if deployment == nil {
+		return fmt.Errorf("%s: console-enabled install has no console Deployment", chart)
+	}
+	serviceAccount, _, _ := unstructured.NestedString(
+		deployment.Object, "spec", "template", "spec", "serviceAccountName")
+	if serviceAccount == "" || findNamed(objects, "ServiceAccount", serviceAccount) == nil {
+		return fmt.Errorf("%s: console Deployment service account %q is not rendered", chart, serviceAccount)
+	}
+	containers, _, _ := unstructured.NestedSlice(deployment.Object, "spec", "template", "spec", "containers")
+	if len(containers) != 1 {
+		return fmt.Errorf("%s: console Deployment has %d containers, want 1", chart, len(containers))
+	}
+	container, ok := containers[0].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("%s: console Deployment container is malformed", chart)
+	}
+	image, err := requiredString(container, "image", "console container")
+	if err != nil {
+		return fmt.Errorf("%s: %w", chart, err)
+	}
+	if image != consoleImageRepository+releaseTag {
+		return fmt.Errorf("%s: console image %q does not follow the chart appVersion %q", chart, image, releaseTag)
+	}
+	if findSuffix(objects, "Service", "-console") == nil {
+		return fmt.Errorf("%s: console-enabled install has no console Service", chart)
+	}
+	clusterRole := findSuffix(objects, "ClusterRole", "-console-observer")
+	if clusterRole == nil {
+		return fmt.Errorf("%s: console observer ClusterRole is not rendered", chart)
+	}
+	if err := validateConsoleReadOnlyRole(clusterRole); err != nil {
+		return fmt.Errorf("%s: %w", chart, err)
+	}
+	clusterRoleBinding := findSuffix(objects, "ClusterRoleBinding", "-console-observer")
+	if clusterRoleBinding == nil || !bindingHasServiceAccount(clusterRoleBinding, serviceAccount) {
+		return fmt.Errorf("%s: console observer ClusterRoleBinding is missing or unbound", chart)
+	}
+	role := findSuffix(objects, "Role", "-console-spire-registrations")
+	roleBinding := findSuffix(objects, "RoleBinding", "-console-spire-registrations")
+	if role == nil || roleBinding == nil || !bindingHasServiceAccount(roleBinding, serviceAccount) {
+		return fmt.Errorf("%s: console SPIRE registration Role or RoleBinding is missing or unbound", chart)
+	}
+	return nil
+}
+
+func validateConsoleReadOnlyRole(role *unstructured.Unstructured) error {
+	rules, found, err := unstructured.NestedSlice(role.Object, "rules")
+	if err != nil || !found {
+		return errors.New("console observer ClusterRole has no rules")
+	}
+	for _, rawRule := range rules {
+		rule, ok := rawRule.(map[string]interface{})
+		if !ok {
+			return errors.New("console observer ClusterRole contains an invalid rule")
+		}
+		resources, _, _ := unstructured.NestedStringSlice(rule, "resources")
+		verbs, _, _ := unstructured.NestedStringSlice(rule, "verbs")
+		for _, resource := range resources {
+			if resource == "selfsubjectreviews" || resource == "selfsubjectaccessreviews" {
+				continue
+			}
+			for _, verb := range verbs {
+				if verb == "create" || verb == "delete" || verb == "patch" || verb == "update" {
+					return fmt.Errorf("console observer grants mutation verb %q on %s", verb, resource)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func renderChart(ctx context.Context, chart string, values ...string) ([]*unstructured.Unstructured, error) {
@@ -79,7 +176,7 @@ func decodeObjects(manifest []byte) ([]*unstructured.Unstructured, error) {
 	}
 }
 
-func validateInstallContract(chart string, objects []*unstructured.Unstructured) error {
+func validateInstallContract(chart, releaseTag string, objects []*unstructured.Unstructured) error {
 	deployment, err := exactlyOne(objects, "Deployment")
 	if err != nil {
 		return fmt.Errorf("%s: %w", chart, err)
@@ -93,6 +190,9 @@ func validateInstallContract(chart string, objects []*unstructured.Unstructured)
 		return fmt.Errorf("%s: %w", chart, err)
 	}
 	if err := validateRuntimeDefaults(deployment); err != nil {
+		return fmt.Errorf("%s: %w", chart, err)
+	}
+	if err := validateReleaseImageDefaults(deployment, releaseTag); err != nil {
 		return fmt.Errorf("%s: %w", chart, err)
 	}
 	return validateWebhookDisabled(deployment, objects)
@@ -117,18 +217,37 @@ func validateBindings(objects []*unstructured.Unstructured, serviceAccount strin
 }
 
 func validateRuntimeDefaults(deployment *unstructured.Unstructured) error {
-	containers, _, _ := unstructured.NestedSlice(
-		deployment.Object, "spec", "template", "spec", "containers")
-	if len(containers) == 0 {
-		return errors.New("deployment has no manager container")
+	manager, err := managerContainer(deployment)
+	if err != nil {
+		return err
 	}
-	manager := containers[0].(map[string]interface{})
-	image, _ := manager["image"].(string)
+	image, err := requiredString(manager, "image", "manager container")
+	if err != nil {
+		return err
+	}
 	if !strings.HasPrefix(image, operatorImageRepository) {
 		return fmt.Errorf("manager image %q does not use the public operator repository", image)
 	}
 	if value := envValue(manager, "CKODEX_RUNTIME_IMAGE"); value != defaultRuntimeImage {
 		return fmt.Errorf("CKODEX_RUNTIME_IMAGE = %q, want %q", value, defaultRuntimeImage)
+	}
+	return nil
+}
+
+func validateReleaseImageDefaults(deployment *unstructured.Unstructured, releaseTag string) error {
+	manager, err := managerContainer(deployment)
+	if err != nil {
+		return err
+	}
+	image, err := requiredString(manager, "image", "manager container")
+	if err != nil {
+		return err
+	}
+	if image != operatorImageRepository+releaseTag {
+		return fmt.Errorf("manager image %q does not follow the chart appVersion %q", image, releaseTag)
+	}
+	if value := envValue(manager, "CKODEX_HUGGING_FACE_INITIALIZER_IMAGE"); value != initializerImageRepository+releaseTag {
+		return fmt.Errorf("CKODEX_HUGGING_FACE_INITIALIZER_IMAGE = %q, want %q", value, initializerImageRepository+releaseTag)
 	}
 	return nil
 }
@@ -147,7 +266,10 @@ func validateWebhookDisabled(
 	volumes, _, _ := unstructured.NestedSlice(
 		deployment.Object, "spec", "template", "spec", "volumes")
 	for _, raw := range volumes {
-		volume := raw.(map[string]interface{})
+		volume, ok := raw.(map[string]interface{})
+		if !ok {
+			return errors.New("default Deployment contains a malformed volume")
+		}
 		if volume["name"] == "cert" {
 			return errors.New("default Deployment has a dangling webhook certificate volume")
 		}
@@ -193,6 +315,55 @@ func validateWebhookRequiresTLS(ctx context.Context) error {
 	output, err := exec.CommandContext(ctx, "helm", args...).CombinedOutput()
 	if err == nil || !strings.Contains(string(output), "certManager.enabled must be true") {
 		return errors.New("webhook without cert-manager did not fail closed")
+	}
+	return nil
+}
+
+func validateBetaConversionIdentity(ctx context.Context) error {
+	objects, err := renderChart(
+		ctx,
+		"deploy/helm",
+		"fullnameOverride=ckodex-kserve-llm-operator",
+		"webhook.enabled=true",
+		"certManager.enabled=true",
+	)
+	if err != nil {
+		return err
+	}
+	const (
+		serviceName = "ckodex-kserve-llm-operator-webhook-service"
+		certName    = "ckodex-kserve-llm-operator-webhook-cert"
+	)
+	service := findNamed(objects, "Service", serviceName)
+	if service == nil || service.GetNamespace() != "ckodex-system" {
+		return fmt.Errorf("beta conversion service %q is not rendered in ckodex-system", serviceName)
+	}
+	certificate := findNamed(objects, "Certificate", certName)
+	if certificate == nil || certificate.GetNamespace() != "ckodex-system" {
+		return fmt.Errorf("beta conversion Certificate %q is not rendered in ckodex-system", certName)
+	}
+	secretName, _, _ := unstructured.NestedString(certificate.Object, "spec", "secretName")
+	if secretName != certName {
+		return fmt.Errorf("beta conversion Certificate secret %q, want %q", secretName, certName)
+	}
+	for _, kind := range []string{"MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"} {
+		webhook, err := exactlyOne(objects, kind)
+		if err != nil {
+			return err
+		}
+		webhooks, found, err := unstructured.NestedSlice(webhook.Object, "webhooks")
+		if err != nil || !found || len(webhooks) == 0 {
+			return fmt.Errorf("%s has no webhook entries", kind)
+		}
+		entry, ok := webhooks[0].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("%s has an invalid webhook entry", kind)
+		}
+		name, _, _ := unstructured.NestedString(entry, "clientConfig", "service", "name")
+		namespace, _, _ := unstructured.NestedString(entry, "clientConfig", "service", "namespace")
+		if name != serviceName || namespace != "ckodex-system" {
+			return fmt.Errorf("%s targets %s/%s, want ckodex-system/%s", kind, namespace, name, serviceName)
+		}
 	}
 	return nil
 }
@@ -250,6 +421,15 @@ func findNamed(objects []*unstructured.Unstructured, kind, name string) *unstruc
 	return nil
 }
 
+func findSuffix(objects []*unstructured.Unstructured, kind, suffix string) *unstructured.Unstructured {
+	for _, object := range objects {
+		if object.GetKind() == kind && strings.HasSuffix(object.GetName(), suffix) {
+			return object
+		}
+	}
+	return nil
+}
+
 func countKind(objects []*unstructured.Unstructured, kind string) int {
 	count := 0
 	for _, object := range objects {
@@ -263,24 +443,15 @@ func countKind(objects []*unstructured.Unstructured, kind string) int {
 func bindingHasServiceAccount(binding *unstructured.Unstructured, name string) bool {
 	subjects, _, _ := unstructured.NestedSlice(binding.Object, "subjects")
 	for _, raw := range subjects {
-		subject := raw.(map[string]interface{})
+		subject, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
 		if subject["kind"] == "ServiceAccount" && subject["name"] == name {
 			return true
 		}
 	}
 	return false
-}
-
-func envValue(container map[string]interface{}, name string) string {
-	env, _, _ := unstructured.NestedSlice(container, "env")
-	for _, raw := range env {
-		value := raw.(map[string]interface{})
-		if value["name"] == name {
-			result, _ := value["value"].(string)
-			return result
-		}
-	}
-	return ""
 }
 
 func findCertificate(
@@ -293,19 +464,4 @@ func findCertificate(
 		}
 	}
 	return nil
-}
-
-func deploymentSecret(deployment *unstructured.Unstructured, volumeName string) string {
-	volumes, _, _ := unstructured.NestedSlice(
-		deployment.Object, "spec", "template", "spec", "volumes")
-	for _, raw := range volumes {
-		volume := raw.(map[string]interface{})
-		if volume["name"] != volumeName {
-			continue
-		}
-		secret, _ := volume["secret"].(map[string]interface{})
-		name, _ := secret["secretName"].(string)
-		return name
-	}
-	return ""
 }

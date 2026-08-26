@@ -5,8 +5,9 @@ replicaCount: 2
 
 image:
   repository: ghcr.io/ckodex-labs/ckodex-kserve-llm
-  # Release images retain the leading "v" from the Git tag.
-  tag: "v0.18.0-beta.8"
+  # Empty resolves to Chart.appVersion. Set explicitly only for a deliberate
+  # image override; release images retain the leading "v" from the Git tag.
+  tag: ""
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -59,6 +60,52 @@ metrics:
     enabled: false  # opt-in — requires prometheus-operator CRDs installed
     interval: "30s"
 
+audit:
+  persistence:
+    enabled: false
+    storageClass: ""
+    size: 1Gi
+    accessModes:
+      - ReadWriteOnce
+
+console:
+  # The console is an observe-only surface and is opt-in for the beta chart.
+  enabled: false
+  replicas: 1
+  image:
+    repository: ghcr.io/ckodex-labs/ckodex-kserve-llm-console
+    # Empty resolves to Chart.appVersion.
+    tag: ""
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    automountServiceAccountToken: true
+  rbac:
+    create: true
+  spireRegistrationNamespace: spire
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
 probes:
   healthz:
     bindAddress: ":8081"
@@ -68,13 +115,14 @@ leaderElection:
   id: "ckodex-kserve-llm.ckodex.com"
 
 # Default vLLM settings
-# Release tags are explicit here. Production registries should mirror and pin
-# the resolved digest after policy/signature verification.
+# Release tags are resolved from Chart.appVersion unless explicitly overridden.
+# Production registries should mirror and pin the resolved digest after
+# policy/signature verification.
 vllm:
   # v0.25.1 includes the mixed-dtype NVFP4 correctness fix used by Gemma/Qwen.
   defaultImage: "vllm/vllm-openai:v0.25.1"
   # Purpose-built Xet-aware image; dependencies are installed at image build time.
-  huggingFaceInitializerImage: "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.8"
+  huggingFaceInitializerImage: ""
   customStorageInitializerImage: "ckodex/storage-initializer:v0.1.0"
   quantCppImage: "ckodex/quant-cpp:v0.1.0"
   cpuRequest: "2"
@@ -201,8 +249,9 @@ chaos:
 networkPolicies:
   enabled: true
 
-# managedNamespaces lists the namespaces where the operator SA is granted
-# ckodex-operator-namespace-role (namespace-scoped RBAC).
+# managedNamespaces lists namespaces where the operator SA is granted
+# namespace-scoped workload permissions and where the shared ckodex-epp
+# ServiceAccount, Role, and RoleBinding are pre-provisioned.
 # The operator will reconcile LLMInferenceService, Deployments, Services, etc.
 # only in namespaces listed here. Add a namespace here AND label it with
 # ckodex.com/tenant-id=<id> to activate per-tenant quota enforcement.

@@ -261,7 +261,7 @@ func probeOpenAI(t *testing.T, endpoint, model, apiKey string) {
 		t.Fatalf("build OpenAI request: %v", err)
 	}
 
-	response, err := (&http.Client{Timeout: requestTimeout}).Do(request) //nolint:gosec
+	response, err := (&http.Client{Timeout: requestTimeout}).Do(request)
 	if err != nil {
 		t.Fatalf("POST multi-node OpenAI endpoint %s: %v", endpoint, err)
 	}

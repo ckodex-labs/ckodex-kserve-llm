@@ -1,7 +1,7 @@
 # Build stage. Compile on the native builder platform and cross-compile for the
 # requested target so multi-architecture builds do not run the Go compiler
 # through CPU emulation.
-FROM --platform=$BUILDPLATFORM golang:1.26.5-bookworm AS builder-base
+FROM --platform=$BUILDPLATFORM golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 AS builder-base
 
 ARG TARGETOS=linux
 ARG TARGETARCH
@@ -26,7 +26,7 @@ FROM builder-base AS builder
 # native Go compiler while cross-compiling this image; limiting package
 # parallelism keeps the build within the runner's memory/CPU envelope.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -p=1 -trimpath -ldflags="-s -w" -o manager cmd/manager/main.go
+    go build -p=1 -trimpath -ldflags="-s -w" -o manager ./cmd/manager
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -p=1 -trimpath -ldflags="-s -w" -o storage-initializer cmd/storage-initializer/main.go
 
@@ -39,7 +39,7 @@ FROM gcr.io/projectsigstore/cosign:v3.1.1 AS cosign
 # Resolve and unpack target-architecture wheels on the native build platform.
 # The final image still executes a short target-platform import check, but does
 # not run pip's resolver and installer through CPU emulation.
-FROM --platform=$BUILDPLATFORM python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS huggingface-python-deps
+FROM --platform=$BUILDPLATFORM python:3.12.14-slim-trixie@sha256:7a8b475003c4fe15a2cd4e55e5cfc2f3560bdc9333d624f24cdd6d4340fd7a17 AS huggingface-python-deps
 ARG TARGETARCH
 COPY build/huggingface-initializer-requirements.txt /tmp/requirements.txt
 RUN set -eu; \
@@ -63,7 +63,14 @@ RUN set -eu; \
 
 # Hugging Face initializer stage. Dependencies are resolved at image-build time,
 # so model pods do not need PyPI access during startup.
-FROM python:3.12.13-slim-trixie@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS huggingface-initializer
+FROM python:3.12.14-slim-trixie@sha256:7a8b475003c4fe15a2cd4e55e5cfc2f3560bdc9333d624f24cdd6d4340fd7a17 AS huggingface-initializer
+# The official Python image is rebuilt on a release cadence, while Debian
+# security updates can land between image rebuilds. Apply the current security
+# repository updates for the runtime libraries Trivy gates before copying the
+# application payload, then remove package metadata from the final image.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl util-linux \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=huggingface-builder /workspace/huggingface-initializer /huggingface-initializer
 COPY --from=huggingface-python-deps /opt/huggingface-python /usr/local/lib/python3.12/site-packages
 COPY --from=huggingface-python-deps /opt/huggingface-python/bin/hf /usr/local/bin/hf

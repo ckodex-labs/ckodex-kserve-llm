@@ -10,7 +10,7 @@ import (
 // ErrorCode is a typed error code from AIPACK-SPEC v0.1.1 Appendix A.
 type ErrorCode string
 
-// Error codes from AIPACK-SPEC v0.1.1 Appendix A (39 total).
+// Error codes from AIPACK-SPEC v0.1.1 Appendix A plus fail-closed runtime extensions.
 const (
 	// Kind/family validation errors
 	ErrKindUnknown    ErrorCode = "AIPACK-KIND-000"
@@ -47,6 +47,7 @@ const (
 	// Risk valence errors (§13)
 	ErrRVWeightsSumInvalid ErrorCode = "AIPACK-RV-001"
 	ErrRVRedBandBlocked    ErrorCode = "AIPACK-RV-002"
+	ErrRVBandUnknown       ErrorCode = "AIPACK-RV-003"
 
 	// Deprecation errors (§16)
 	ErrDeprecationBlocked ErrorCode = "AIPACK-DEP-001"
@@ -80,6 +81,9 @@ const (
 	ErrVADConsensusFailed  ErrorCode = "AIPACK-VAD-001"
 	ErrVADClassUnknown     ErrorCode = "AIPACK-VAD-002"
 	ErrVADPerturbationFail ErrorCode = "AIPACK-VAD-003"
+
+	// Implementation errors: the requested validation path is not available.
+	ErrNotImplemented ErrorCode = "AIPACK-IMPLEMENTATION-001"
 )
 
 // AIPackError is the canonical error type for AIPACK-SPEC violations.

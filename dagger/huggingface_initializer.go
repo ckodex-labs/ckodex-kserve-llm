@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"dagger/ckodex-operator/internal/dagger"
+
 	"golang.org/x/sync/errgroup"
 )
 

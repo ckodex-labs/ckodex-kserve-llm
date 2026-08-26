@@ -1,0 +1,13 @@
+{
+    "Dashboard": {
+        "infrastructureOverview": "Reconciliation overview",
+        "inferenceFleet": "Inference services",
+        "fabricTerminal": "Command library",
+        "auditEvents": "Audit events",
+        "identityVault": "Identity and authority",
+        "telemetry": "Telemetry",
+        "secureStorage": "Secure storage",
+        "nodeManager": "Node inventory",
+        "matrixAccel": "Accelerators"
+    }
+}

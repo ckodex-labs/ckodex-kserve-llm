@@ -1,0 +1,22 @@
+{
+  "status": "success",
+  "data": {
+    "alerts": [
+      {
+        "activeAt": "2026-08-02T14:31:05Z",
+        "annotations": {
+          "summary": "Reconcile success rate is below the declared threshold",
+          "runbook_url": "https://docs.ckodex.com/runbooks/reconcile-errors"
+        },
+        "labels": {
+          "alertname": "LLMReconcileErrorRate",
+          "model": "model-a",
+          "severity": "warning",
+          "team": "platform"
+        },
+        "state": "firing",
+        "value": "1"
+      }
+    ]
+  }
+}

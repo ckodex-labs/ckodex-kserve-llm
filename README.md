@@ -123,6 +123,10 @@ experimental agents depend on feature gates and cluster services.
 do not execute tools or provide an agent invocation runtime. See
 [Agent Development](docs/agent-development.md).
 
+The observe-only operator console is packaged as an opt-in profile in the
+release Helm chart. It requires an authenticated deployment boundary and does
+not grant mutation authority.
+
 ## Verification
 
 ```bash
@@ -130,6 +134,7 @@ dagger call all --source=.       # hosted fast gate: lint + compile
 dagger call test --source=.      # race tests + coverage gates
 dagger call scan --source=.      # image vulnerability scan
 dagger call lula --source=. export --path=assessment-results.yaml
+make console-check
 ```
 
 The Dagger functions use dependency and tool cache boundaries so repeated local
@@ -147,7 +152,10 @@ hosted path for published artifacts and provenance.
 | Configure tenants | [Tenant Onboarding](docs/tenant-onboarding.md) |
 | Review security controls | [Security Architecture](docs/SECURITY_ARCHITECTURE.md) |
 | Verify releases | [Release Verification](docs/release-verification.md) |
+| Review beta scope and gates | [Beta Contract](docs/beta/README.md) |
 | Inspect component versions | [Component Inventory](COMPONENTS.md) |
+| Add a new inference engine | [Engine Contract](docs/engine-contract.md) |
+| Track planned remediation | [Remediation Plan](docs/remediation-plan.md) |
 | Contribute | [Contributing](CONTRIBUTING.md) |
 
 ## Project Status
@@ -156,6 +164,8 @@ hosted path for published artifacts and provenance.
 - Core LLM API: stable `serving.ckodex.com/v1`
 - Specialized APIs: `serving.ckodex.com/v1alpha2` where no v1 CRD exists
 - Core model-serving path: enabled
+- Observe-only console: opt-in chart profile; release image and provenance are
+  required for beta promotion
 - Experimental agent controllers: disabled by default
 - Security and admission integrations: opt-in and dependency-sensitive
 

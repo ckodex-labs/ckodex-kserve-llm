@@ -21,7 +21,7 @@ and never silent.
 | `v1`        | `LLMInferenceService`   | Stable            | Yes             | Use when the stable schema covers the workload |
 | `v1`        | `LLMLoraAdapter`        | Stable            | Yes             | Use for new adapter resources |
 | `v1`        | Agent/session family    | Stable schema     | Yes             | Product feature gates still apply |
-| `v1alpha2`  | Core resources above    | Deprecated        | No              | Served during migration window |
+| `v1alpha2`  | Core resources above    | Deprecated        | No              | Served through the beta conversion profile during migration window |
 | `v1alpha2`  | Specialized CRDs        | Current alpha API | Varies          | No v1 schema exists for several specialized kinds |
 
 ---
@@ -52,13 +52,14 @@ after v1 reaches General Availability.
 
 | Field (v1alpha2)           | Field (v1)                            | Notes                              |
 |----------------------------|---------------------------------------|------------------------------------|
-| `spec.prefill`             | `spec.experimental.prefill`           | Moved under experimental sub-struct |
-| `spec.worker`              | `spec.experimental.worker`            | Moved under experimental sub-struct |
-| All other `spec.*` fields  | Identical path                        | 1:1 mapping, no data loss          |
-| `status.*`                 | Identical                             | 1:1 mapping                        |
+| `spec.prefill` / `spec.worker` | `spec.experimental.prefill` / `spec.experimental.worker` | Moved under experimental sub-struct |
+| alpha2-only runtime fields | `spec.experimental.*`                | Speculative decoding, quantization, engine, tool surface, and observability are retained under the v1 experimental block |
+| model/storage/route/status fields | Same path or typed v1 equivalent | Conversion preserves hardware-aware storage, external-secret, resilience, and governed status fields |
 
-Conversion is handled automatically by the conversion webhook. Existing v1alpha2 resources
-stored in etcd are transparently converted to v1 on read and written back as v1 on update.
+In the controlled beta profile, conversion is handled by the configured conversion webhook.
+Existing v1alpha2 resources stored in etcd are transparently converted to v1 on read and
+written back as v1 on update. The webhook-disabled development profile does not make this
+runtime guarantee and must not be used as beta acceptance evidence.
 
 ---
 

@@ -94,8 +94,6 @@ spec:
               value: {{ include "ckodex-kserve-llm-operator.huggingFaceInitializerImage" . | quote }}
             - name: CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE
               value: {{ .Values.vllm.customStorageInitializerImage | quote }}
-            - name: CKODEX_QUANT_CPP_IMAGE
-              value: {{ .Values.vllm.quantCppImage | quote }}
             - name: CKODEX_VLLM_CPU_REQUEST
               value: {{ .Values.vllm.cpuRequest | quote }}
             - name: CKODEX_VLLM_MEMORY_REQUEST
@@ -133,16 +131,31 @@ spec:
               value: {{ .Values.vllm.defaultImage | quote }}
             - name: CKODEX_ENVOY_GATEWAY_NAMESPACE
               value: {{ .Values.gateway.dataPlaneNamespace | quote }}
+            - name: CKODEX_AUDIT_LOG_PATH
+              value: /var/log/ckodex/audit.jsonl
+            {{- if .Values.audit.otlpEndpoint }}
+            - name: CKODEX_AUDIT_OTLP_ENDPOINT
+              value: {{ .Values.audit.otlpEndpoint | quote }}
+            {{- end }}
           resources: {{ toYaml .Values.controller.resources | nindent 12 }}
           securityContext: {{ toYaml .Values.controller.securityContext | nindent 12 }}
-          {{- if .Values.webhook.enabled }}
           volumeMounts:
+            - mountPath: /var/log/ckodex
+              name: audit-logs
+          {{- if .Values.webhook.enabled }}
             - mountPath: {{ .Values.webhook.certDir }}
               name: cert
               readOnly: true
           {{- end }}
-      {{- if .Values.webhook.enabled }}
       volumes:
+        - name: audit-logs
+          {{- if .Values.audit.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-audit
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- if .Values.webhook.enabled }}
         - name: cert
           secret:
             defaultMode: 420

@@ -19,7 +19,7 @@ func (m *CkodexOperator) Lint(ctx context.Context,
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
-	out, err := golangciBase(source).WithExec([]string{"golangci-lint", "run", "-v", "--timeout", "8m", "./..."}).Stdout(ctx)
+	out, err := golangciBase(source).WithExec([]string{"/usr/local/bin/golangci-lint", "run", "-v", "--timeout", "8m", "./..."}).Stdout(ctx)
 	if err != nil {
 		return out, fmt.Errorf("golangci-lint: %w", err)
 	}

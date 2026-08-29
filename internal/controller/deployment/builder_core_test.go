@@ -168,10 +168,48 @@ func TestBuilder_Build_DefaultVLLMArgsUseCpuFallback(t *testing.T) {
 	assert.Contains(t, dep.Spec.Template.Spec.Containers[0].Args, "0.0.0.0")
 }
 
+func TestBuilder_Build_SelectsHardwareDefaultBeforeRuntimeFallback(t *testing.T) {
+	service := newDefaultBuildService()
+	builder := &Builder{
+		Client:       fake.NewClientBuilder().Build(),
+		RuntimeImage: "vllm/vllm-openai:v0.28.0",
+	}
+
+	dep := builder.Build(context.Background(), service, 1, HardwareAppleSilicon, nil)
+	container := dep.Spec.Template.Spec.Containers[0]
+	assert.Equal(t, VLLMGenericImage, container.Image)
+	assert.Contains(t, container.Env, corev1.EnvVar{Name: "VLLM_TARGET_DEVICE", Value: "cpu"})
+}
+
+func TestBuilder_Build_UsesStableSelectorWhenModelIdentityChanges(t *testing.T) {
+	builder := &Builder{Client: fake.NewClientBuilder().Build()}
+	first := newDefaultBuildService()
+	second := first.DeepCopy()
+	second.Spec.Model.Name = "new-model"
+
+	firstDeployment := builder.Build(context.Background(), first, 1, HardwareNVIDIA, nil)
+	secondDeployment := builder.Build(context.Background(), second, 1, HardwareNVIDIA, nil)
+	assert.Equal(t, firstDeployment.Spec.Selector.MatchLabels, secondDeployment.Spec.Selector.MatchLabels)
+	assert.Equal(t, "mistralai.Mistral-7B", firstDeployment.Spec.Template.Labels["serving.ckodex.com/model"])
+	assert.Equal(t, "new-model", secondDeployment.Spec.Template.Labels["serving.ckodex.com/model"])
+}
+
+func TestBuilder_Build_PreservesExplicitRuntimeImageOnHardwareMismatch(t *testing.T) {
+	service := newDefaultBuildService()
+	service.Spec.Template.Spec.Containers[0].Image = "registry.example/custom-vllm:v1"
+	builder := &Builder{
+		Client:       fake.NewClientBuilder().Build(),
+		RuntimeImage: "vllm/vllm-openai:v0.28.0",
+	}
+
+	dep := builder.Build(context.Background(), service, 1, HardwareAppleSilicon, nil)
+	assert.Equal(t, "registry.example/custom-vllm:v1", dep.Spec.Template.Spec.Containers[0].Image)
+}
+
 func TestBuilder_Build_RuntimeImageAndMountedModelOverride(t *testing.T) {
 	builder := &Builder{
 		Client:       fake.NewClientBuilder().Build(),
-		RuntimeImage: "registry.example/vllm:v0.25.1",
+		RuntimeImage: "registry.example/vllm:v0.28.0",
 	}
 	llmSvc := &servingv1alpha2.LLMInferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "gemma", Namespace: "default"},
@@ -185,13 +223,13 @@ func TestBuilder_Build_RuntimeImageAndMountedModelOverride(t *testing.T) {
 
 	dep := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA, nil)
 	c := dep.Spec.Template.Spec.Containers[0]
-	assert.Equal(t, "registry.example/vllm:v0.25.1", c.Image)
+	assert.Equal(t, "registry.example/vllm:v0.28.0", c.Image)
 	assert.Equal(t, []string{"--model", api.ModelMountPath}, c.Args[:2])
 	assert.Contains(t, c.Args, "--max-model-len")
 }
 
 func TestBuilder_BuildWithRole_ConfiguresLMCacheTransfer(t *testing.T) {
-	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.25.1"}
+	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.28.0"}
 	llmSvc := &servingv1alpha2.LLMInferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "chat", Namespace: "default"},
 		Spec: servingv1alpha2.LLMInferenceServiceSpec{
@@ -215,7 +253,7 @@ func TestBuilder_BuildWithRole_ConfiguresLMCacheTransfer(t *testing.T) {
 }
 
 func TestBuilder_BuildWithRole_LMCachePreservesExplicitExperimentalFlag(t *testing.T) {
-	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.25.1"}
+	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.28.0"}
 	llmSvc := &servingv1alpha2.LLMInferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "chat", Namespace: "default"},
 		Spec: servingv1alpha2.LLMInferenceServiceSpec{

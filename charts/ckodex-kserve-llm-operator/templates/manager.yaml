@@ -59,8 +59,6 @@ spec:
           value: {{ include "ckodex-kserve-llm-operator.huggingFaceInitializerImage" . | quote }}
         - name: CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE
           value: {{ .Values.runtime.customStorageInitializerImage | quote }}
-        - name: CKODEX_QUANT_CPP_IMAGE
-          value: {{ .Values.runtime.quantCppImage | quote }}
         - name: CKODEX_VLLM_CPU_REQUEST
           value: {{ .Values.runtime.vllmCPURequest | quote }}
         - name: CKODEX_VLLM_MEMORY_REQUEST
@@ -85,6 +83,10 @@ spec:
           value: {{ .Values.config.otelEndpoint | quote }}
         - name: CKODEX_AUDIT_LOG_PATH
           value: "/var/log/ckodex/audit.jsonl"
+        {{- if .Values.audit.otlpEndpoint }}
+        - name: CKODEX_AUDIT_OTLP_ENDPOINT
+          value: {{ .Values.audit.otlpEndpoint | quote }}
+        {{- end }}
         volumeMounts:
         - name: audit-logs
           mountPath: /var/log/ckodex

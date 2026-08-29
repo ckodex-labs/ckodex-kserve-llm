@@ -44,7 +44,7 @@ spec:
 
   task: vision-language
   runtime: vllm
-  # runtimeImage: omitted; uses vllm/vllm-openai:v0.25.1
+  # runtimeImage: omitted; uses vllm/vllm-openai:v0.28.0
 
   # Allow up to 4 images in a single prompt (Qwen2-VL supports multi-image conversations).
   maxImagesPerPrompt: 4

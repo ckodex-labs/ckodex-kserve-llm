@@ -12,6 +12,8 @@ import (
 	"os"
 	"time"
 
+	otelLog "go.opentelemetry.io/otel/log"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -90,11 +92,13 @@ type AuditEvent struct {
 // AuditLogger emits structured audit events to slog, OTel spans, and K8s Events.
 type AuditLogger struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	logger        *slog.Logger
-	redactor      *Redactor
-	auditFilePath string // Path for persistent JSONL file auditor
-	otelEndpoint  string // OIS v0.1: OTLP/HTTP endpoint for direct audit sink
+	Scheme         *runtime.Scheme
+	logger         *slog.Logger
+	redactor       *Redactor
+	auditFilePath  string // Path for persistent JSONL file auditor
+	otelProvider   *sdklog.LoggerProvider
+	otelLogger     otelLog.Logger
+	evidenceHealth *EvidenceHealthMonitor
 }
 
 // NewAuditLogger creates an audit logger with structured JSON output.
@@ -106,6 +110,16 @@ func NewAuditLogger(c client.Client, scheme *runtime.Scheme) *AuditLogger {
 
 // NewAuditLoggerWithOptions creates an audit logger with explicit PII redaction control.
 func NewAuditLoggerWithOptions(c client.Client, scheme *runtime.Scheme, piiRedaction bool) *AuditLogger {
+	audit, err := NewAuditLoggerWithOptionsAndEndpoint(c, scheme, piiRedaction, "")
+	if err != nil {
+		slog.Default().Error("failed to configure audit OTLP export", "error", err)
+	}
+	return audit
+}
+
+// NewAuditLoggerWithOptionsAndEndpoint creates an audit logger and validates
+// the optional OTLP/HTTP logs endpoint before returning.
+func NewAuditLoggerWithOptionsAndEndpoint(c client.Client, scheme *runtime.Scheme, piiRedaction bool, otlpEndpoint string) (*AuditLogger, error) {
 	// For production readiness, we attempt to use /var/log/ckodex/audit.jsonl
 	// if the directory is writable (e.g. via a PV mount).
 	auditPath := os.Getenv("CKODEX_AUDIT_LOG_PATH")
@@ -113,14 +127,46 @@ func NewAuditLoggerWithOptions(c client.Client, scheme *runtime.Scheme, piiRedac
 		auditPath = "/var/log/ckodex/audit.jsonl"
 	}
 
-	return &AuditLogger{
-		Client:        c,
-		Scheme:        scheme,
-		logger:        slog.Default().With("component", "audit"),
-		redactor:      NewRedactor(piiRedaction),
-		auditFilePath: auditPath,
-		otelEndpoint:  os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+	audit := &AuditLogger{
+		Client:         c,
+		Scheme:         scheme,
+		logger:         slog.Default().With("component", "audit"),
+		redactor:       NewRedactor(piiRedaction),
+		auditFilePath:  auditPath,
+		evidenceHealth: &EvidenceHealthMonitor{},
 	}
+	if otlpEndpoint == "" {
+		otlpEndpoint = os.Getenv("CKODEX_AUDIT_OTLP_ENDPOINT")
+	}
+	if otlpEndpoint == "" {
+		otlpEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
+	}
+	if otlpEndpoint == "" {
+		otlpEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	}
+	if otlpEndpoint == "" {
+		return audit, nil
+	}
+	if err := audit.configureOTLP(context.Background(), otlpEndpoint); err != nil {
+		return audit, err
+	}
+	return audit, nil
+}
+
+// Flush forces queued audit records to the configured OTLP exporter.
+func (a *AuditLogger) Flush(ctx context.Context) error {
+	if a.otelProvider == nil {
+		return nil
+	}
+	return a.otelProvider.ForceFlush(ctx)
+}
+
+// Shutdown flushes and closes the optional OTLP exporter.
+func (a *AuditLogger) Shutdown(ctx context.Context) error {
+	if a.otelProvider == nil {
+		return nil
+	}
+	return a.otelProvider.Shutdown(ctx)
 }
 
 // LogCreate records a resource creation event.
@@ -325,8 +371,8 @@ func (a *AuditLogger) emit(ctx context.Context, event AuditEvent) {
 	event = a.redactAuditEvent(event)
 	a.emitToStructuredLog(ctx, event)
 	a.emitToOTelSpan(ctx, event)
+	a.emitToOTLPLog(ctx, event)
 	a.emitToFile(event)
-	a.reportUnavailableOTLP(event)
 	go a.emitK8sEvent(ctx, event)
 }
 
@@ -381,20 +427,4 @@ func (a *AuditLogger) mapToExecKind(action AuditAction) string {
 	default:
 		return ExecKindInference // Default for operator lifecycle
 	}
-}
-
-// LogReceipt records a post-execution record linking outcome and evidence (OIS Section 21).
-func (a *AuditLogger) LogReceipt(ctx context.Context, execID, status, summary string, details map[string]string) {
-	a.emit(ctx, AuditEvent{
-		Action:               "Receipt",
-		Resource:             "ois/receipt",
-		Actor:                "ckodex-operator",
-		Outcome:              AuditSuccess,
-		Timestamp:            time.Now(),
-		ExecID:               execID,
-		ExecKind:             "receipt",
-		ReproducibilityClass: ReproAttested,
-		Reason:               summary,
-		Details:              details,
-	})
 }

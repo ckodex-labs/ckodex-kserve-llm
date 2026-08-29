@@ -111,7 +111,7 @@ func TestLWSReconciler_VLLM024Flags(t *testing.T) {
 }
 
 // TestLWSReconciler_Quantization_GGUF_NotPropagatedToArgs verifies that GGUF
-// is excluded from LWS args (quant-cpp engine handles GGUF; it is not a valid
+// is excluded from LWS args (GGUF is not an admitted runtime and is not a valid
 // vLLM --quantization value for the LWS distributed serving path).
 func TestLWSReconciler_Quantization_GGUF_NotPropagatedToArgs(t *testing.T) {
 	r := &Reconciler{}

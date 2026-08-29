@@ -27,19 +27,62 @@ func (r *LocalModelCacheReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if _, err := r.resolveCacheWorkloadNamespace(ctx, lmc); err != nil {
 		return ctrl.Result{}, err
 	}
+	if err := validateLocalModelCacheQuantities(lmc); err != nil {
+		return ctrl.Result{}, err
+	}
 	modelHash := ModelURIHash(lmc.Spec.SourceModelURI)
 	targetNodes, err := r.resolveTargetNodes(ctx, lmc)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	nodeStatuses, readyCount := r.reconcileTargetCaches(ctx, lmc, targetNodes, modelHash)
-	finalStatuses := mergeNodeCacheStatuses(lmc.Status.NodeStatuses, nodeStatuses, targetNodes, ctx)
+	previousStatuses, err := r.cleanupStaleNodeCaches(ctx, lmc, targetNodes)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	finalStatuses := mergeNodeCacheStatuses(previousStatuses, nodeStatuses, targetNodes, ctx)
 	r.evictAndReport(ctx, lmc, finalStatuses)
 	cachedModels, totalSize := r.buildCachedModelsStatus(lmc, finalStatuses)
 	if err := updateLocalModelCacheStatus(ctx, r, lmc, finalStatuses, readyCount, cachedModels, totalSize); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{RequeueAfter: localModelCacheRequeueInterval}, nil
+}
+
+func validateLocalModelCacheQuantities(lmc *servingv1alpha2.LocalModelCache) error {
+	if _, err := lmc.Spec.ModelSizeQuantity(); err != nil {
+		return fmt.Errorf("validating LocalModelCache %s: %w", lmc.Name, err)
+	}
+	if _, _, err := lmc.Spec.MaxCacheSizeQuantity(); err != nil {
+		return fmt.Errorf("validating LocalModelCache %s: %w", lmc.Name, err)
+	}
+	return nil
+}
+
+func (r *LocalModelCacheReconciler) cleanupStaleNodeCaches(ctx context.Context, lmc *servingv1alpha2.LocalModelCache, targets []string) ([]servingv1alpha2.NodeCacheStatus, error) {
+	targetSet := make(map[string]struct{}, len(targets))
+	for _, node := range targets {
+		targetSet[node] = struct{}{}
+	}
+	namespace, err := r.resolveCacheWorkloadNamespace(ctx, lmc)
+	if err != nil {
+		return nil, err
+	}
+	retained := make([]servingv1alpha2.NodeCacheStatus, 0, len(lmc.Status.NodeStatuses))
+	for _, status := range lmc.Status.NodeStatuses {
+		if _, ok := targetSet[status.NodeName]; ok {
+			retained = append(retained, status)
+			continue
+		}
+		if err := r.deleteCachePVC(ctx, namespace, status.PVCName); err != nil {
+			return nil, fmt.Errorf("cleaning stale node %s: %w", status.NodeName, err)
+		}
+		if err := r.deleteCacheJob(ctx, namespace, warmupJobName(status.ModelURIHash, status.NodeName)); err != nil {
+			return nil, fmt.Errorf("cleaning stale node %s: %w", status.NodeName, err)
+		}
+		r.Recorder.Eventf(lmc, corev1.EventTypeNormal, "CacheNodeRemoved", "Removed cache resources for stale node %s", status.NodeName)
+	}
+	return retained, nil
 }
 
 func (r *LocalModelCacheReconciler) loadLocalModelCache(ctx context.Context, req ctrl.Request) (*servingv1alpha2.LocalModelCache, error) {
@@ -133,7 +176,10 @@ func updateLocalModelCacheStatus(ctx context.Context, r *LocalModelCacheReconcil
 }
 
 func availableCacheSpace(lmc *servingv1alpha2.LocalModelCache, total resource.Quantity) string {
-	maxQ, ok := lmc.Spec.MaxCacheSizeQuantity()
+	maxQ, ok, err := lmc.Spec.MaxCacheSizeQuantity()
+	if err != nil {
+		return ""
+	}
 	if !ok {
 		return ""
 	}

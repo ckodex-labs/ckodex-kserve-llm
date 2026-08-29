@@ -9,7 +9,6 @@ requires a normal operator Deployment rollout.
 | `CKODEX_RUNTIME_IMAGE` | vLLM runtime |
 | `CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE` | non-`hf://` model downloads and cache warmup Jobs |
 | `CKODEX_HUGGING_FACE_INITIALIZER_IMAGE` | `hf://` model downloads |
-| `CKODEX_QUANT_CPP_IMAGE` | quant-cpp/GGUF runtime |
 | `CKODEX_VLLM_CPU_REQUEST`, `CKODEX_VLLM_MEMORY_REQUEST` | vLLM and reranker defaults |
 | `CKODEX_TERMINATION_GRACE_PERIOD_SECONDS` | vLLM pod default |
 | `CKODEX_ASR_CPU_REQUEST`, `CKODEX_ASR_MEMORY_REQUEST` | ASR defaults |

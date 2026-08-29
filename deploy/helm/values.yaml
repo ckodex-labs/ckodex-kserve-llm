@@ -61,6 +61,8 @@ metrics:
     interval: "30s"
 
 audit:
+  # Optional OTLP/HTTP logs endpoint. Empty keeps the audit log sink local.
+  otlpEndpoint: ""
   persistence:
     enabled: false
     storageClass: ""
@@ -119,12 +121,11 @@ leaderElection:
 # Production registries should mirror and pin the resolved digest after
 # policy/signature verification.
 vllm:
-  # v0.25.1 includes the mixed-dtype NVFP4 correctness fix used by Gemma/Qwen.
-  defaultImage: "vllm/vllm-openai:v0.25.1"
+  # v0.28.0 includes the mixed-dtype NVFP4 correctness fix used by Gemma/Qwen.
+  defaultImage: "vllm/vllm-openai:v0.28.0"
   # Purpose-built Xet-aware image; dependencies are installed at image build time.
   huggingFaceInitializerImage: ""
   customStorageInitializerImage: "ckodex/storage-initializer:v0.1.0"
-  quantCppImage: "ckodex/quant-cpp:v0.1.0"
   cpuRequest: "2"
   memoryRequest: "4Gi"
   terminationGracePeriodSeconds: 60
@@ -134,13 +135,13 @@ vllm:
   cacheCPURequest: "1"
   cacheMemoryRequest: "1Gi"
 
-  # v0.19.0 features
+  # v0.20.0 features
   cpuKvOffloading:
     enabled: false     # general CPU KV cache offloading
   dbo:
     enabled: false     # Dual-Batch Overlap for throughput
 
-# hf-mount:// is an explicit opt-in path. Install hf-csi-driver v0.12.1
+# hf-mount:// is an explicit opt-in path. Install hf-csi-driver v0.14.0
 # separately before using it; the chart does not install privileged node software.
 # Plain hf:// downloads do not require the CSI driver.
 
@@ -172,7 +173,7 @@ gemma4:
 
 # EPP Scheduler defaults
 scheduler:
-  image: "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc"
+  image: "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:2e516fa1310da7be59b82beb1445362139597d6d553ef04d546716abe3aaaa70"
   replicas: 1
   resources:
     limits:

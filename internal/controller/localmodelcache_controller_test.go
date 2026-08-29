@@ -273,7 +273,8 @@ func TestResolveTargetNodes_UnschedulableNodes(t *testing.T) {
 func TestBuildCachePVC(t *testing.T) {
 	r := &LocalModelCacheReconciler{Recorder: record.NewFakeRecorder(10)}
 	lmc := makeLocalModelCache("my-cache")
-	pvc := r.buildCachePVC(lmc, "pvc-name", "default", "node-1", "abc123")
+	pvc, err := r.buildCachePVC(lmc, "pvc-name", "default", "node-1", "abc123")
+	require.NoError(t, err)
 
 	assert.Equal(t, "pvc-name", pvc.Name)
 	assert.Equal(t, "abc123", pvc.Labels[labelModelHash])

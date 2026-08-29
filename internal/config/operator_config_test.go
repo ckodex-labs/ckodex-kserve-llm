@@ -66,7 +66,6 @@ func TestDefaultOperatorConfig_ObservabilityDefaults(t *testing.T) {
 
 func TestDefaultOperatorConfig_WorkloadDefaults(t *testing.T) {
 	cfg := config.DefaultOperatorConfig()
-	assert.Equal(t, "ckodex/quant-cpp:v0.1.0", cfg.Defaults.QuantCppImage)
 	assert.Equal(t, "ckodex/storage-initializer:v0.1.0", cfg.Defaults.CustomStorageInitializerImage)
 	assert.Equal(t, "2", cfg.Defaults.VLLMCPURequest)
 	assert.Equal(t, "4Gi", cfg.Defaults.VLLMMemoryRequest)
@@ -117,7 +116,6 @@ func TestLoadFromEnv_StringFields(t *testing.T) {
 	setEnv(t, "CKODEX_PROMETHEUS_URL", "http://prometheus.monitoring:9090")
 	setEnv(t, "CKODEX_HUGGING_FACE_INITIALIZER_IMAGE", "registry.corp/hf-initializer@sha256:1234")
 	setEnv(t, "CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE", "registry.corp/ckodex-storage@sha256:1234")
-	setEnv(t, "CKODEX_QUANT_CPP_IMAGE", "registry.corp/quant-cpp@sha256:1234")
 	setEnv(t, "CKODEX_VLLM_CPU_REQUEST", "8")
 	setEnv(t, "CKODEX_VLLM_MEMORY_REQUEST", "32Gi")
 	setEnv(t, "CKODEX_TERMINATION_GRACE_PERIOD_SECONDS", "180")
@@ -138,7 +136,6 @@ func TestLoadFromEnv_StringFields(t *testing.T) {
 	assert.Equal(t, "http://prometheus.monitoring:9090", cfg.PrometheusURL)
 	assert.Equal(t, "registry.corp/hf-initializer@sha256:1234", cfg.Defaults.HuggingFaceInitializerImage)
 	assert.Equal(t, "registry.corp/ckodex-storage@sha256:1234", cfg.Defaults.CustomStorageInitializerImage)
-	assert.Equal(t, "registry.corp/quant-cpp@sha256:1234", cfg.Defaults.QuantCppImage)
 	assert.Equal(t, "8", cfg.Defaults.VLLMCPURequest)
 	assert.Equal(t, "32Gi", cfg.Defaults.VLLMMemoryRequest)
 	assert.Equal(t, int64(180), cfg.Defaults.TerminationGracePeriodSeconds)
@@ -160,12 +157,14 @@ func TestLoadFromEnv_AllowInsecurePromotionGates(t *testing.T) {
 
 func TestLoadFromEnv_ContractOverrides(t *testing.T) {
 	setEnv(t, "OTEL_EXPORTER_OTLP_ENDPOINT", "http://contract-otel:4318")
+	setEnv(t, "CKODEX_AUDIT_OTLP_ENDPOINT", "https://audit-otel:4318/v1/logs")
 	setEnv(t, "VERSION", "v1.2.3-contract")
 
 	cfg := config.DefaultOperatorConfig()
 	cfg.LoadFromEnv()
 
 	assert.Equal(t, "http://contract-otel:4318", cfg.Observability.OTLPEndpoint)
+	assert.Equal(t, "https://audit-otel:4318/v1/logs", cfg.AuditSink.OTLPEndpoint)
 	assert.Equal(t, "v1.2.3-contract", cfg.Version)
 }
 

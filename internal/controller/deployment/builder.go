@@ -60,12 +60,12 @@ func deploymentSelectorLabels(llmSvc *servingv1alpha2.LLMInferenceService) map[s
 		"app.kubernetes.io/name":       "llminferenceservice",
 		"app.kubernetes.io/instance":   llmSvc.Name,
 		"app.kubernetes.io/managed-by": "ckodex-kserve-llm-operator",
-		"serving.ckodex.com/model":     strings.ReplaceAll(llmSvc.Spec.Model.Name, "/", "."),
 	}
 }
 
 func (b *Builder) deploymentLabels(llmSvc *servingv1alpha2.LLMInferenceService, selectors map[string]string) map[string]string {
 	labels := copyStringMap(llmSvc.Spec.Template.Labels)
+	labels["serving.ckodex.com/model"] = strings.ReplaceAll(llmSvc.Spec.Model.Name, "/", ".")
 	for key, value := range selectors {
 		labels[key] = value
 	}
@@ -80,10 +80,20 @@ func (b *Builder) deploymentLabels(llmSvc *servingv1alpha2.LLMInferenceService, 
 
 func (b *Builder) preparePod(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, hwType HardwareType) *corev1.PodSpec {
 	podSpec := llmSvc.Spec.Template.Spec.DeepCopy()
+	if len(podSpec.Containers) > 0 && podSpec.Containers[0].Image == "" && b.RuntimeImage != "" && b.RuntimeImage != api.VLLMImage {
+		// A configured non-default runtime image is an operator-level override.
+		// Seed it before hardware selection so it is not replaced by a built-in
+		// CPU default.
+		podSpec.Containers[0].Image = b.RuntimeImage
+	}
+	// Select a hardware-specific default before applying the operator fallback.
+	// An image explicitly supplied by the workload remains authoritative because
+	// ApplyHardwareOptimizations only changes empty/default CUDA images. The
+	// standard operator image is intentionally left empty until after this step.
+	ApplyHardwareOptimizations(ctx, hwType, podSpec)
 	if len(podSpec.Containers) > 0 && podSpec.Containers[0].Image == "" && b.RuntimeImage != "" {
 		podSpec.Containers[0].Image = b.RuntimeImage
 	}
-	ApplyHardwareOptimizations(ctx, hwType, podSpec)
 	if podSpec.TerminationGracePeriodSeconds == nil {
 		grace := b.Defaults.TerminationGracePeriodSeconds
 		if grace == 0 {

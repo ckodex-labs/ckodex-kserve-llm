@@ -1,6 +1,6 @@
 # CI/CD Current State — ckodex-kserve-llm-operator
 
-Last updated: 2026-08-24
+Last updated: 2026-08-27
 
 ---
 
@@ -13,11 +13,12 @@ The CI/CD pipeline has one implementation:
 | Dagger module (current GHA) | `dagger call <func>` | Generated Dagger Module SDK (`dag` global) | Active |
 
 The CI implementation is active, but beta acceptance is not fully closed.
-**C — local evidence:** Go, Helm, console, Dagger `all`, and race-enabled Dagger
-`test` are green on the current checkout ([all trace](https://dagger.cloud/MChorfa/traces/7217666ab529a234a4f4f018156b3744),
-[test trace](https://dagger.cloud/MChorfa/traces/0cabb7cd231d375abedb788475a377df)).
-**S — acceptance pending:** exact-head hosted CI, Nightly, public-release,
-runtime, and provenance checks remain open until their evidence is attached.
+**C — hosted evidence:** CI run [33006888854](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33006888854)
+passed on main commit `c3f6b83d932ca0779339e73df67b8866e0157806`.
+**C — hosted failure:** Nightly run [33081386331](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33081386331)
+failed on the same commit during kubeadm bootstrap. **S — acceptance pending:**
+the aligned KIND contract, tagged release, runtime, and provenance paths need
+hosted runs on their committed exact heads. See [the evidence record](hosted-exact-head-2026-08-28.md).
 
 ---
 
@@ -42,10 +43,10 @@ Checkout
 → Console container build
 → Console container HIGH/CRITICAL vulnerability scan
 → Setup Helm
-→ Install GoReleaser v2.15.4
-→ Pre-pull Dagger engine v0.21.7
+→ Install GoReleaser v2.18.0
+→ Pre-pull Dagger engine v0.21.9
 → Run CI Pipeline (dagger call all --source=. ; lint + non-release compile check)
-   ├── lint (golangci-lint v2.12.2, full configured surface including tests)
+   ├── lint (golangci-lint v2.13.1 source-built with the pinned Go builder, full configured surface including tests)
    └── build-check (operator compile check, linux/amd64)
 → Run race-enabled tests + statement-weighted 80% package-family coverage gates
 → Run vulnerability scan (dagger call scan --source=. ; full image rootfs + Trivy)
@@ -60,10 +61,12 @@ Checkout
 
 ```
 Tag push (v*)
-→ verify (lint + go test ./... + make release-readiness)
+→ verify release ref/checkout identity
+→ require successful hosted CI checks on the exact tag SHA
+→ verify (lint + go test ./... + make release-readiness + manager version injection)
 → image-release
-   ├── Install Dagger CLI v0.21.7
-   ├── Install Cosign v3.1.1
+   ├── Install Dagger CLI v0.21.9
+   ├── Install Cosign v3.1.3
    ├── Log in to GHCR
    ├── Generate Dagger SDK (dagger develop)
    ├── Build, scan, and publish image (dagger call publish → digest)
@@ -75,10 +78,10 @@ Tag push (v*)
    ├── Attach BuildKit provenance and SBOM
    ├── Scan published image for unfixed HIGH/CRITICAL vulnerabilities
    └── Sign console image with cosign OIDC
-→ binary-release (GoReleaser v2.15.4 → GitHub release assets and checksums)
-→ image-provenance (slsa-framework/slsa-github-generator container@v2.0.0)
-→ console-image-provenance (slsa-framework/slsa-github-generator container@v2.0.0)
-→ binary-provenance (slsa-framework/slsa-github-generator generic@v2.0.0)
+→ binary-release (GoReleaser v2.18.0 → GitHub release assets and checksums)
+→ image-provenance (slsa-framework/slsa-github-generator container@v2.1.0)
+→ console-image-provenance (slsa-framework/slsa-github-generator container@v2.1.0)
+→ binary-provenance (slsa-framework/slsa-github-generator generic@v2.1.0)
 → helm-release (helm push oci://ghcr.io/<owner>/charts)
 → public-release-contract (anonymous operator, console, initializer, and chart retrieval)
 ```
@@ -89,14 +92,14 @@ Tag push (v*)
 
 | Tool | Version | Source |
 |------|---------|--------|
-| Go | `go.mod` (1.26.6) | go.mod |
-| Dagger CLI | v0.21.7 | installed |
-| golangci-lint | v2.12.2 | `dagger/constants.go` |
+| Go | `go.mod` (1.27.0) | go.mod |
+| Dagger CLI | v0.21.9 | installed |
+| golangci-lint | v2.13.1 (source-built with Go 1.27) | `dagger/constants.go`, `dagger/bases.go` |
 | Trivy | 0.72.0 | `dagger/constants.go` |
-| Cosign | v3.1.1 | `dagger/constants.go` |
+| Cosign | v3.1.3 | `dagger/constants.go` |
 | Lula | v0.16.0 | `dagger/module.go` |
-| GoReleaser | v2.15.4 | `.github/workflows/ci.yml:53` |
-| Helm | latest (azure/setup-helm@v4) | workflows |
+| GoReleaser | v2.18.0 | `.github/workflows/ci.yml:53` |
+| Helm | v5.0.1 action | workflows |
 
 ---
 
@@ -137,6 +140,8 @@ not convert a skipped envtest suite into a successful CI result.
 KIND cluster. It uses `run/e2e.sh`, executes the E2E lifecycle suite, deletes the
 operator pod, and proves the Deployment supplies a new ready pod. Failed runs retain
 cluster resources, events, and controller logs for 14 days; the cluster is always torn down.
+KIND v0.33.0 uses the digest-pinned Kubernetes v1.36.4 image from
+`deploy/kind/acceptance-node-image.txt`; local setup and Make consume the same file.
 
 | Package | Threshold | Rationale |
 |---------|-----------|-----------|

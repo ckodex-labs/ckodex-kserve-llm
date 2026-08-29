@@ -6,6 +6,8 @@ Licensed under the Apache License, Version 2.0.
 package v1alpha2
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -186,19 +188,33 @@ type NodeCacheStatus struct {
 	ModelURIHash string `json:"modelUriHash,omitempty"`
 }
 
-func (s *LocalModelCacheSpec) ModelSizeQuantity() resource.Quantity {
+func (s *LocalModelCacheSpec) ModelSizeQuantity() (resource.Quantity, error) {
 	if s.ModelSize == "" {
-		return resource.MustParse("20Gi") // Default for LLM
+		return resource.MustParse("20Gi"), nil // Default for LLM
 	}
-	return resource.MustParse(s.ModelSize)
+	quantity, err := resource.ParseQuantity(s.ModelSize)
+	if err != nil {
+		return resource.Quantity{}, fmt.Errorf("invalid modelSize %q: %w", s.ModelSize, err)
+	}
+	if quantity.Sign() <= 0 {
+		return resource.Quantity{}, fmt.Errorf("modelSize must be greater than zero")
+	}
+	return quantity, nil
 }
 
 // MaxCacheSizeQuantity returns the parsed max cache size, or zero if unset.
-func (s *LocalModelCacheSpec) MaxCacheSizeQuantity() (resource.Quantity, bool) {
+func (s *LocalModelCacheSpec) MaxCacheSizeQuantity() (resource.Quantity, bool, error) {
 	if s.MaxCacheSize == "" {
-		return resource.Quantity{}, false
+		return resource.Quantity{}, false, nil
 	}
-	return resource.MustParse(s.MaxCacheSize), true
+	quantity, err := resource.ParseQuantity(s.MaxCacheSize)
+	if err != nil {
+		return resource.Quantity{}, false, fmt.Errorf("invalid maxCacheSize %q: %w", s.MaxCacheSize, err)
+	}
+	if quantity.Sign() <= 0 {
+		return resource.Quantity{}, false, fmt.Errorf("maxCacheSize must be greater than zero")
+	}
+	return quantity, true, nil
 }
 
 func init() {

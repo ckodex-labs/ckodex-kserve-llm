@@ -50,8 +50,7 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if session.Status.Phase == servingv1alpha2.SessionPhaseIdle {
 		if expired := r.isExpired(&session); expired {
 			logger.Info("session expired, evicting KV-cache")
-			session.Status.Phase = servingv1alpha2.SessionPhaseEvicted
-			session.Status.KVCacheSize = 0
+			terminateSession(&session, servingv1alpha2.SessionPhaseEvicted)
 			if err := r.Status().Update(ctx, &session); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -62,7 +61,7 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// 2. Check max turns
 	if session.Spec.MaxTurns > 0 && session.Status.TurnCount >= session.Spec.MaxTurns {
 		logger.Info("session reached max turns", "turns", session.Status.TurnCount)
-		session.Status.Phase = servingv1alpha2.SessionPhaseCompleted
+		terminateSession(&session, servingv1alpha2.SessionPhaseCompleted)
 		if err := r.Status().Update(ctx, &session); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -70,7 +69,7 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// 3. Ensure bound endpoint is still valid
-	if session.Status.BoundEndpoint != "" {
+	if session.Status.BoundEndpoint != "" && !isTerminalSessionPhase(session.Status.Phase) {
 		if err := r.validateEndpoint(ctx, &session); err != nil {
 			logger.Info("bound endpoint invalid, rebinding", "error", err)
 			session.Status.BoundEndpoint = ""
@@ -79,11 +78,13 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// 4. Bind session to an endpoint if unbound
-	if session.Status.BoundEndpoint == "" && session.Status.Phase != servingv1alpha2.SessionPhaseEvicted {
+	if session.Status.BoundEndpoint == "" && !isTerminalSessionPhase(session.Status.Phase) {
 		endpoint, err := r.selectEndpoint(ctx, &session)
 		if err != nil {
-			// Session binding depends on eventually-ready endpoints; requeue without surfacing a terminal reconcile error.
-			//nolint:nilerr
+			// Persist a cleared stale binding before waiting for endpoint recovery.
+			if updateErr := r.Status().Update(ctx, &session); updateErr != nil {
+				return ctrl.Result{}, updateErr
+			}
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		session.Status.BoundEndpoint = endpoint
@@ -103,6 +104,16 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+func terminateSession(session *servingv1alpha2.InferenceSession, phase servingv1alpha2.SessionPhase) {
+	session.Status.Phase = phase
+	session.Status.BoundEndpoint = ""
+	session.Status.KVCacheSize = 0
+}
+
+func isTerminalSessionPhase(phase servingv1alpha2.SessionPhase) bool {
+	return phase == servingv1alpha2.SessionPhaseEvicted || phase == servingv1alpha2.SessionPhaseCompleted
 }
 
 // isExpired checks if the session TTL has elapsed since last activity.
@@ -172,11 +183,11 @@ func (r *SessionReconciler) selectEndpoint(ctx context.Context, session *serving
 	var slices discoveryv1.EndpointSliceList
 	if err := r.List(ctx, &slices, client.InNamespace(session.Namespace), client.MatchingLabels{
 		"kubernetes.io/service-name": session.Spec.ModelRef,
-	}); err != nil || len(slices.Items) == 0 {
-		// Fallback to service DNS
-		//nolint:nilerr
-		return fmt.Sprintf("%s.%s.svc.cluster.local:8000",
-			llmSvc.Name, llmSvc.Namespace), nil
+	}); err != nil {
+		return "", fmt.Errorf("listing ready endpoints for model %s: %w", session.Spec.ModelRef, err)
+	}
+	if len(slices.Items) == 0 {
+		return "", fmt.Errorf("no endpointslices found for model %s", session.Spec.ModelRef)
 	}
 
 	// Count active sessions per endpoint to pick the least-loaded
@@ -212,8 +223,7 @@ func (r *SessionReconciler) selectEndpoint(ctx context.Context, session *serving
 	}
 
 	if bestEndpoint == "" {
-		return fmt.Sprintf("%s.%s.svc.cluster.local:8000",
-			llmSvc.Name, llmSvc.Namespace), nil
+		return "", fmt.Errorf("no ready endpoints found for model %s", llmSvc.Name)
 	}
 
 	return bestEndpoint, nil

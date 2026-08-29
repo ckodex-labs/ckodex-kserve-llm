@@ -208,7 +208,7 @@ spec:
                     description: |-
                       Method selects the quantization algorithm.
                       "awq" and "gptq" require pre-quantized model weights.
-                      "gguf" routes to the quant-cpp engine automatically.
+                      "gguf" is rejected because no conformant LLM runtime is admitted for it.
                       "bitsandbytes" and "fp8" quantize at load time.
                     enum:
                     - awq

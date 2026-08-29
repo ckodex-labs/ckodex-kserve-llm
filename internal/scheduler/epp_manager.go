@@ -10,11 +10,13 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -26,13 +28,16 @@ const (
 	// EPPImage is the Endpoint Picker Pod container image.
 	// Pinned — :latest is a supply chain risk and air-gapped deployment blocker.
 	// Must match OperatorConfig.Scheduler.Image default.
-	EPPImage = "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc"
+	EPPImage = "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:2e516fa1310da7be59b82beb1445362139597d6d553ef04d546716abe3aaaa70"
 	// EPPPort is the EPP gRPC port (Gateway ExtensionRef).
 	EPPPort int32 = 9002
 	// EPPMetricsPort is the metrics/health port.
 	EPPMetricsPort int32 = 9090
 	// EPPHealthPort is the dedicated gRPC health port introduced by llm-d Router.
 	EPPHealthPort int32 = 9003
+	// EPPAppProtocol identifies the TLS-backed HTTP/2 protocol used by the
+	// Envoy AI Gateway endpoint-picker cluster.
+	EPPAppProtocol = "http2"
 	// EPPServiceAccountName is pre-provisioned by the platform/Helm profile in
 	// each managed namespace. The operator does not create or mutate RBAC.
 	EPPServiceAccountName = "ckodex-epp"
@@ -49,6 +54,7 @@ type EPPManager struct {
 }
 
 // +kubebuilder:rbac:groups=inference.networking.x-k8s.io,resources=inferencemodelrewrites;inferenceobjectives,verbs=get;list;watch
+// +kubebuilder:rbac:groups=llm-d.ai,resources=inferencemodelrewrites;inferenceobjectives,verbs=get;list;watch
 
 // Reconcile creates/updates the EPP Deployment and Service.
 func (m *EPPManager) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
@@ -112,7 +118,6 @@ func (m *EPPManager) requireEPPServiceAccount(ctx context.Context, llmSvc *servi
 func (m *EPPManager) reconcileService(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {
 	labels := eppLabels(llmSvc)
 	name := eppName(llmSvc.Name)
-
 	desired := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name, Namespace: llmSvc.Namespace, Labels: labels,
@@ -120,7 +125,7 @@ func (m *EPPManager) reconcileService(ctx context.Context, llmSvc *servingv1alph
 		Spec: corev1.ServiceSpec{
 			Selector: labels,
 			Ports: []corev1.ServicePort{
-				{Name: "grpc", Port: EPPPort, TargetPort: intstr.FromInt32(EPPPort), Protocol: corev1.ProtocolTCP},
+				{Name: "grpc", Port: EPPPort, TargetPort: intstr.FromInt32(EPPPort), Protocol: corev1.ProtocolTCP, AppProtocol: ptr.To(EPPAppProtocol)},
 			},
 			Type: corev1.ServiceTypeClusterIP,
 		},
@@ -137,13 +142,17 @@ func (m *EPPManager) reconcileService(ctx context.Context, llmSvc *servingv1alph
 		}
 		return err
 	}
+	original := existing.DeepCopy()
 	if err := controllerutil.SetControllerReference(llmSvc, &existing, m.Scheme); err != nil {
 		return fmt.Errorf("set existing epp service owner reference: %w", err)
 	}
 	existing.Labels = labels
 	existing.Spec.Ports = desired.Spec.Ports
 	existing.Spec.Selector = desired.Spec.Selector
-	return m.Update(ctx, &existing)
+	if apiequality.Semantic.DeepEqual(&existing, original) {
+		return nil
+	}
+	return m.Patch(ctx, &existing, client.MergeFrom(original))
 }
 
 func eppLabels(llmSvc *servingv1alpha2.LLMInferenceService) map[string]string {

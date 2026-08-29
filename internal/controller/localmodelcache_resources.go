@@ -15,12 +15,16 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
 
-func (r *LocalModelCacheReconciler) buildCachePVC(lmc *servingv1alpha2.LocalModelCache, pvcName, namespace, nodeName, modelHash string) *corev1.PersistentVolumeClaim {
-	pvc := &corev1.PersistentVolumeClaim{ObjectMeta: cachePVCMetadata(lmc, pvcName, namespace, nodeName, modelHash), Spec: cachePVCSpec(lmc)}
+func (r *LocalModelCacheReconciler) buildCachePVC(lmc *servingv1alpha2.LocalModelCache, pvcName, namespace, nodeName, modelHash string) (*corev1.PersistentVolumeClaim, error) {
+	spec, err := cachePVCSpec(lmc)
+	if err != nil {
+		return nil, err
+	}
+	pvc := &corev1.PersistentVolumeClaim{ObjectMeta: cachePVCMetadata(lmc, pvcName, namespace, nodeName, modelHash), Spec: spec}
 	if lmc.Spec.StorageClassName != nil {
 		pvc.Spec.StorageClassName = lmc.Spec.StorageClassName
 	}
-	return pvc
+	return pvc, nil
 }
 
 func cachePVCMetadata(lmc *servingv1alpha2.LocalModelCache, pvcName, namespace, nodeName, modelHash string) metav1.ObjectMeta {
@@ -31,11 +35,15 @@ func cachePVCMetadata(lmc *servingv1alpha2.LocalModelCache, pvcName, namespace, 
 	}
 }
 
-func cachePVCSpec(lmc *servingv1alpha2.LocalModelCache) corev1.PersistentVolumeClaimSpec {
+func cachePVCSpec(lmc *servingv1alpha2.LocalModelCache) (corev1.PersistentVolumeClaimSpec, error) {
+	modelSize, err := lmc.Spec.ModelSizeQuantity()
+	if err != nil {
+		return corev1.PersistentVolumeClaimSpec{}, err
+	}
 	return corev1.PersistentVolumeClaimSpec{
 		AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-		Resources:   corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: lmc.Spec.ModelSizeQuantity()}},
-	}
+		Resources:   corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: modelSize}},
+	}, nil
 }
 
 func (r *LocalModelCacheReconciler) buildWarmupJob(lmc *servingv1alpha2.LocalModelCache, jobName, pvcName, namespace, nodeName string) *batchv1.Job {

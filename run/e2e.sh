@@ -51,6 +51,7 @@ helm upgrade --install ckodex-kserve-llm-operator deploy/helm \
   --set-string image.repository="$OPERATOR_IMAGE_REPOSITORY" \
   --set-string image.tag="$OPERATOR_IMAGE_TAG" \
   --set image.pullPolicy=IfNotPresent \
+  --set 'managedNamespaces[0]=default' \
   --set replicaCount=1 \
   --set leaderElection.enabled=false \
   --set webhook.enabled=true \

@@ -5,7 +5,10 @@ Licensed under the Apache License, Version 2.0.
 
 package validation
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestValidateInferenceEngine(t *testing.T) {
 	tests := []struct {
@@ -15,7 +18,8 @@ func TestValidateInferenceEngine(t *testing.T) {
 	}{
 		{name: "default", engine: ""},
 		{name: "vllm", engine: EngineVLLM},
-		{name: "quant cpp", engine: EngineQuantCpp},
+		{name: "sglang", engine: EngineSGLang},
+		{name: "unverified quant cpp", engine: "quant-cpp", wantErr: true},
 		{name: "unsupported", engine: "other", wantErr: true},
 	}
 	for _, test := range tests {
@@ -25,5 +29,17 @@ func TestValidateInferenceEngine(t *testing.T) {
 				t.Fatalf("ValidateInferenceEngine(%q) error = %v, wantErr %t", test.engine, err, test.wantErr)
 			}
 		})
+	}
+}
+
+func TestAdmittedInferenceEnginesReturnsDefensiveCopy(t *testing.T) {
+	engines := AdmittedInferenceEngines()
+	want := []string{EngineSGLang, EngineVLLM}
+	if !reflect.DeepEqual(engines, want) {
+		t.Fatalf("AdmittedInferenceEngines() = %v, want %v", engines, want)
+	}
+	engines[0] = "mutated"
+	if got := AdmittedInferenceEngines(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("AdmittedInferenceEngines() leaked mutable state: %v", got)
 	}
 }

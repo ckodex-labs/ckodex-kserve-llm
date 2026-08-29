@@ -11,17 +11,40 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestApplyEngineSelectionUsesQuantCppForExplicitEngineAndGGUF(t *testing.T) {
+func TestApplyEngineSelectionUsesRegisteredVLLMAdapter(t *testing.T) {
 	for _, service := range []*servingv1alpha2.LLMInferenceService{
-		{Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "quant-cpp"}},
-		{Spec: servingv1alpha2.LLMInferenceServiceSpec{Quantization: &servingv1alpha2.QuantizationSpec{Method: "gguf"}}},
+		{Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "vllm"}},
+		{Spec: servingv1alpha2.LLMInferenceServiceSpec{}},
 	} {
 		pod := &corev1.PodSpec{Containers: []corev1.Container{{}}}
 		(&Builder{}).applyEngineSelection(service, pod, HardwareAppleSilicon)
-		assert.Equal(t, api.QuantCppImage, pod.Containers[0].Image)
-		assert.Contains(t, pod.Containers[0].Args, "-m")
-		assert.Contains(t, pod.Containers[0].Args, "--n-gpu-layers")
+		assert.Equal(t, api.VLLMImage, pod.Containers[0].Image)
+		assert.Contains(t, pod.Containers[0].Args, "--model")
+		assert.Contains(t, pod.Containers[0].Args, "--host")
 	}
+}
+
+func TestApplyEngineSelectionUsesDigestPinnedSGLangAdapter(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{Spec: servingv1alpha2.LLMInferenceServiceSpec{
+		Engine: "sglang", Model: servingv1alpha2.ModelSpec{Name: "served-model"},
+	}}
+	pod := &corev1.PodSpec{Containers: []corev1.Container{{Image: api.VLLMImage}}}
+	(&Builder{RuntimeImage: api.VLLMImage}).applyEngineSelection(service, pod, HardwareNVIDIA)
+
+	assert.Equal(t, "lmsysorg/sglang:v0.5.18@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1", pod.Containers[0].Image)
+	assert.Equal(t, []string{"python3", "-m", "sglang.launch_server"}, pod.Containers[0].Args[:3])
+	assert.Contains(t, pod.Containers[0].Args, "--model-path")
+	assert.Contains(t, pod.Containers[0].Args, "--enable-metrics")
+}
+
+func TestApplyEngineSelectionRejectsUnmappedSGLangFields(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{Spec: servingv1alpha2.LLMInferenceServiceSpec{
+		Engine: "sglang", KVCache: &servingv1alpha2.KVCacheSpec{Dtype: "fp8"},
+	}}
+	pod := &corev1.PodSpec{Containers: []corev1.Container{{Image: "unverified:test", Args: []string{"serve"}}}}
+	(&Builder{}).applyEngineSelection(service, pod, HardwareNVIDIA)
+	assert.Empty(t, pod.Containers[0].Image)
+	assert.Empty(t, pod.Containers[0].Args)
 }
 
 func TestApplyEngineSelectionUnsupportedEngineLeavesContainerUnrunnable(t *testing.T) {
@@ -30,6 +53,16 @@ func TestApplyEngineSelectionUnsupportedEngineLeavesContainerUnrunnable(t *testi
 	}}
 	pod := &corev1.PodSpec{Containers: []corev1.Container{{}}}
 	(&Builder{RuntimeImage: "vllm:test"}).applyEngineSelection(service, pod, HardwareNVIDIA)
+	assert.Empty(t, pod.Containers[0].Image)
+	assert.Empty(t, pod.Containers[0].Args)
+}
+
+func TestApplyEngineSelectionUnverifiedGGUFLeavesContainerUnrunnable(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{Spec: servingv1alpha2.LLMInferenceServiceSpec{
+		Quantization: &servingv1alpha2.QuantizationSpec{Method: "gguf"},
+	}}
+	pod := &corev1.PodSpec{Containers: []corev1.Container{{Image: "unverified:test", Args: []string{"serve"}}}}
+	(&Builder{}).applyEngineSelection(service, pod, HardwareNVIDIA)
 	assert.Empty(t, pod.Containers[0].Image)
 	assert.Empty(t, pod.Containers[0].Args)
 }
@@ -52,9 +85,16 @@ func TestRewriteImageAddsRegistryWithoutChangingPath(t *testing.T) {
 	assert.Equal(t, "image:tag", (&Builder{}).rewriteImage("image:tag"))
 }
 
-func TestApplyEngineSelectionQuantCppRewritesImageInAirGappedMode(t *testing.T) {
-	service := &servingv1alpha2.LLMInferenceService{Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "quant-cpp"}}
+func TestApplyEngineSelectionVLLMRewritesImageInAirGappedMode(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "vllm"}}
 	pod := &corev1.PodSpec{Containers: []corev1.Container{{}}}
 	(&Builder{AirGappedMode: true, LocalRegistry: "registry.local"}).applyEngineSelection(service, pod, HardwareNVIDIA)
-	assert.Equal(t, "registry.local/"+api.QuantCppImage, pod.Containers[0].Image)
+	assert.Equal(t, "registry.local/"+api.VLLMImage, pod.Containers[0].Image)
+}
+
+func TestApplyEngineSelectionSGLangRewritesPinnedImageInAirGappedMode(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "sglang"}}
+	pod := &corev1.PodSpec{Containers: []corev1.Container{{}}}
+	(&Builder{AirGappedMode: true, LocalRegistry: "registry.local"}).applyEngineSelection(service, pod, HardwareNVIDIA)
+	assert.Equal(t, "registry.local/lmsysorg/sglang:v0.5.18@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1", pod.Containers[0].Image)
 }

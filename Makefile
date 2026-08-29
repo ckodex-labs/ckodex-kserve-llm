@@ -4,12 +4,12 @@ STORAGE_INITIALIZER_IMG ?= ghcr.io/ckodex-labs/ckodex-kserve-llm-storage-initial
 CONSOLE_IMG ?= ghcr.io/ckodex-labs/ckodex-kserve-llm-console:dev
 CONTROLLER_GEN ?= $(shell which controller-gen 2>/dev/null || echo $(GOBIN)/controller-gen)
 ENVTEST ?= $(shell which setup-envtest 2>/dev/null || echo $(GOBIN)/setup-envtest)
-GOLANGCI_LINT ?= $(shell which golangci-lint 2>/dev/null || echo $(GOBIN)/golangci-lint)
-CONTROLLER_GEN_VERSION ?= v0.20.1
-ENVTEST_VERSION ?= v0.0.0-20260318145839-6c9615a2a166
-GOLANGCI_LINT_VERSION ?= v2.12.2
+GOLANGCI_LINT ?= $(GOBIN)/golangci-lint
+CONTROLLER_GEN_VERSION ?= v0.21.0
+ENVTEST_VERSION ?= v0.24.1
+GOLANGCI_LINT_VERSION ?= v2.13.1
 KIND_CLUSTER_NAME ?= kserve-017
-KIND_NODE_IMAGE ?= kindest/node:v1.35.0
+KIND_NODE_IMAGE ?= $(shell tr -d '\r\n' < deploy/kind/acceptance-node-image.txt)
 GOBIN ?= $(shell go env GOPATH)/bin
 DOCKER_BUILD ?= docker buildx build --load
 
@@ -54,7 +54,7 @@ conformance: ## Run specification-backed conformance vectors
 
 .PHONY: integration-test
 integration-test: envtest ## Run envtest integration suite; fails if assets are unavailable
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use -p path '1.35.x!')" REQUIRE_ENVTEST=1 go test -race -count=1 -p 1 ./test/integration/...
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use -p path '1.36.x!')" REQUIRE_ENVTEST=1 go test -race -count=1 -p 1 ./test/integration/...
 
 ##@ Build
 
@@ -148,7 +148,7 @@ envtest: ## Install setup-envtest if not present
 
 .PHONY: golangci-lint
 golangci-lint: ## Install golangci-lint if not present
-	@test -x $(GOLANGCI_LINT) || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@GOBIN=$(GOBIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 .PHONY: e2e-setup
 e2e-setup: kind-setup kind-load deploy ## Bootstrap E2E cluster from scratch

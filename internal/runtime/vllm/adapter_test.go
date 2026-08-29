@@ -12,6 +12,7 @@ import (
 
 func TestAdapterRendersGovernedArguments(t *testing.T) {
 	service := &servingv1alpha2.LLMInferenceService{}
+	service.Spec.Model.Name = "served-model"
 	service.Spec.Parallelism = &servingv1alpha2.ParallelismSpec{
 		Tensor: ptr.To(int32(2)), Data: ptr.To(int32(3)), DataLocal: ptr.To(int32(1)),
 		Pipeline: ptr.To(int32(4)), Expert: true, EPLBEnabled: true,
@@ -33,8 +34,19 @@ func TestAdapterRendersGovernedArguments(t *testing.T) {
 	assertArgumentPair(t, rendered.Args, "--spec-tokens", "5")
 	assertArgumentPair(t, rendered.Args, "--spec-model", "draft/model")
 	assertArgumentPair(t, rendered.Args, "--quantization", "awq")
+	assertArgumentPair(t, rendered.Args, "--served-model-name", "served-model")
 	require.Contains(t, rendered.Args, "--enable-expert-parallel")
 	require.Contains(t, rendered.Args, "--enable-eplb")
+}
+
+func TestAdapterPreservesExplicitServedModelName(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{}
+	rendered := (Adapter{}).Render(inferenceruntime.RenderRequest{
+		Service:      service,
+		ModelPath:    "/models/model",
+		ExistingArgs: []string{"--served-model-name", "custom-name"},
+	})
+	assertArgumentPair(t, rendered.Args, "--served-model-name", "custom-name")
 }
 
 func TestAdapterPreservesExplicitArguments(t *testing.T) {
@@ -52,6 +64,9 @@ func TestAdapterDeclaresLegacyCapabilitiesHonestly(t *testing.T) {
 	adapter := Adapter{}
 	require.Equal(t, "vllm", adapter.Name())
 	require.Equal(t, inferenceruntime.ConformanceTierServed, adapter.Tier())
+	require.True(t, adapter.Image().Valid())
+	require.Equal(t, "/health", adapter.HealthContract().Path)
+	require.Equal(t, "/metrics", adapter.MetricsContract().Path)
 	capabilities := adapter.Capabilities()
 	require.Equal(t, inferenceruntime.CapabilityEmulated, capabilities.KVTransfer)
 	require.Equal(t, inferenceruntime.CapabilityEmulated, capabilities.LoRAHotSwap)
@@ -72,6 +87,12 @@ func TestAdapterRejectsIgnoredCheckpointPath(t *testing.T) {
 	service := &servingv1alpha2.LLMInferenceService{}
 	service.Spec.Quantization = &servingv1alpha2.QuantizationSpec{CheckpointPath: "/models/checkpoint"}
 	require.Equal(t, "spec.quantization.checkpointPath", (Adapter{}).Validate(service)[0].Field)
+}
+
+func TestAdapterRejectsGGUFWithoutVerifiedRuntimePlugin(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{}
+	service.Spec.Quantization = &servingv1alpha2.QuantizationSpec{Method: "gguf"}
+	require.Equal(t, "spec.quantization.method", (Adapter{}).Validate(service)[0].Field)
 }
 
 func assertArgumentPair(t *testing.T, args []string, flag, value string) {

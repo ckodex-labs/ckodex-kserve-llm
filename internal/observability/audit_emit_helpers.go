@@ -47,6 +47,7 @@ func (a *AuditLogger) emitToStructuredLog(ctx context.Context, event AuditEvent)
 		slog.String("reason", event.Reason),
 		slog.String(AttrExecID, event.ExecID),
 		slog.String(AttrExecKind, event.ExecKind),
+		slog.Any("details", event.Details),
 	)
 }
 
@@ -76,14 +77,4 @@ func auditSpanAttributes(event AuditEvent) []attribute.KeyValue {
 		attrs = append(attrs, attribute.String(key, value))
 	}
 	return attrs
-}
-
-func (a *AuditLogger) reportUnavailableOTLP(event AuditEvent) {
-	if a.otelEndpoint == "" {
-		return
-	}
-	a.logger.Error("direct OTLP audit export is unavailable; event was not exported",
-		"endpoint", a.otelEndpoint,
-		"exec.id", event.ExecID,
-	)
 }

@@ -19,7 +19,9 @@ builds:
       - -s -w -X github.com/ckodex-labs/kserve-llm-operator/internal/version.Version={{.Version}}
 
   - id: storage-initializer
-    main: ./cmd/storage-initializer/main.go
+    # Compile the package, not only main.go, so package-local transaction and
+    # recovery helpers are included in release binaries.
+    main: ./cmd/storage-initializer
     binary: storage-initializer
     env:
       - CGO_ENABLED=0

@@ -121,15 +121,17 @@ type LLMInferenceServiceSpec struct {
 	KVCache *KVCacheSpec `json:"kvCache,omitempty"`
 
 	// Quantization configures weight quantization for reduced memory footprint.
-	// AWQ and GPTQ require pre-quantized model weights. GGUF routes to the
-	// quant-cpp engine automatically. bitsandbytes and fp8 quantize at load time.
+	// AWQ and GPTQ require pre-quantized model weights. GGUF remains unadmitted
+	// because the API does not yet resolve a concrete file for llama.cpp.
+	// bitsandbytes and fp8 quantize at load time.
 	// +optional
 	Quantization *QuantizationSpec `json:"quantization,omitempty"`
 
 	// Engine specifies the inference engine to use.
-	// Defaults to 'vllm'. Supported: 'vllm', 'quant-cpp'.
+	// Defaults to 'vllm'. Engines without a registered, conformant runtime are
+	// rejected by admission.
 	// +kubebuilder:default="vllm"
-	// +kubebuilder:validation:Enum=vllm;quant-cpp
+	// +kubebuilder:validation:Enum=sglang;vllm
 	// +optional
 	Engine string `json:"engine,omitempty"`
 

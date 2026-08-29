@@ -1,0 +1,9 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+  labels:
+    app.kubernetes.io/part-of: ckodex-kserve-llm
+    app.kubernetes.io/managed-by: ckodex-kserve-llm-local
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller

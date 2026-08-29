@@ -136,6 +136,14 @@ func BuildHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters []serv
 						BackendRefs: []gwapiv1.HTTPBackendRef{backendRef},
 						Timeouts:    timeouts,
 					},
+					// OpenAI-compatible text completion: /v1/completions
+					{
+						Matches: []gwapiv1.HTTPRouteMatch{
+							{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/v1/completions")}},
+						},
+						BackendRefs: []gwapiv1.HTTPBackendRef{backendRef},
+						Timeouts:    timeouts,
+					},
 					// Embeddings: /v1/embeddings
 					{
 						Matches: []gwapiv1.HTTPRouteMatch{
@@ -152,7 +160,7 @@ func BuildHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters []serv
 						BackendRefs: []gwapiv1.HTTPBackendRef{backendRef},
 						Timeouts:    timeouts,
 					},
-					// vLLM v0.25.1 Rust frontend: metadata endpoints
+					// vLLM v0.28.0 Rust frontend: metadata endpoints
 					{
 						Matches: []gwapiv1.HTTPRouteMatch{
 							{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/version")}},
@@ -167,7 +175,7 @@ func BuildHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters []serv
 						BackendRefs: []gwapiv1.HTTPBackendRef{backendRef},
 						Timeouts:    timeouts,
 					},
-					// vLLM v0.25.1 Responses API (Anthropic Messages-compatible endpoint)
+					// vLLM v0.28.0 Responses API (Anthropic Messages-compatible endpoint)
 					{
 						Matches: []gwapiv1.HTTPRouteMatch{
 							{Path: &gwapiv1.HTTPPathMatch{Type: &pathPrefix, Value: strPtr("/v1/responses")}},
@@ -283,6 +291,7 @@ func BuildCanaryHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters 
 					{Matches: []gwapiv1.HTTPRouteMatch{{Path: &gwapiv1.HTTPPathMatch{Type: &pathPrefix, Value: strPtr("/v2/models/")}}}, BackendRefs: twoBackends, Timeouts: timeouts},
 					{Matches: []gwapiv1.HTTPRouteMatch{{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/v2")}}}, BackendRefs: twoBackends, Timeouts: timeouts},
 					{Matches: []gwapiv1.HTTPRouteMatch{{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/v1/chat/completions")}}}, BackendRefs: twoBackends, Timeouts: timeouts},
+					{Matches: []gwapiv1.HTTPRouteMatch{{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/v1/completions")}}}, BackendRefs: twoBackends, Timeouts: timeouts},
 					{Matches: []gwapiv1.HTTPRouteMatch{{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/v1/embeddings")}}}, BackendRefs: twoBackends, Timeouts: timeouts},
 					{Matches: []gwapiv1.HTTPRouteMatch{{Path: &gwapiv1.HTTPPathMatch{Type: &pathExact, Value: strPtr("/v1/models")}}}, BackendRefs: twoBackends, Timeouts: timeouts},
 				}...)

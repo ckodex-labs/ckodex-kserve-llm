@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/ckodex-labs/kserve-llm-operator/internal/provenance"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -68,14 +69,50 @@ func TestEmitK8sEvent_UsesAuditedResourceIdentity(t *testing.T) {
 	require.Equal(t, "model", capture.event.InvolvedObject.Name)
 }
 
-func TestEmit_ReportsUnavailableDirectOTLPExport(t *testing.T) {
+func TestEmitToStructuredLog_IncludesDetails(t *testing.T) {
+	var output bytes.Buffer
+	audit := &AuditLogger{logger: slog.New(slog.NewJSONHandler(&output, nil))}
+	audit.emitToStructuredLog(context.Background(), AuditEvent{
+		Action:  AuditModelAccess,
+		Details: map[string]string{"tenant_id": "tenant-a"},
+	})
+
+	require.Contains(t, output.String(), "tenant_id")
+	require.Contains(t, output.String(), "tenant-a")
+}
+
+func TestNewAuditLogger_RejectsInvalidOTLPEndpoint(t *testing.T) {
+	_, err := NewAuditLoggerWithOptionsAndEndpoint(nil, nil, false, "otel.example.test")
+	require.ErrorContains(t, err, "absolute http(s) URL")
+}
+
+func TestLogReceipt_RuntimeToSpec_EmitsOnlyUnverifiedContentCommitment(t *testing.T) {
 	var output bytes.Buffer
 	audit := &AuditLogger{
-		logger:       slog.New(slog.NewTextHandler(&output, nil)),
-		otelEndpoint: "https://otel.example.test",
+		logger:         slog.New(slog.NewJSONHandler(&output, nil)),
+		evidenceHealth: &EvidenceHealthMonitor{},
 	}
-	audit.emit(context.Background(), AuditEvent{Action: AuditCreate})
+	audit.LogReceipt(context.Background(), "exec-1", "ok", "secret model output", map[string]string{"prompt": "secret prompt"})
 
-	require.Contains(t, output.String(), "direct OTLP audit export is unavailable")
-	require.Contains(t, output.String(), "https://otel.example.test")
+	require.NotContains(t, output.String(), "secret model output")
+	require.NotContains(t, output.String(), "secret prompt")
+	require.Contains(t, output.String(), "evidence.commitment")
+	require.Contains(t, output.String(), "unverified")
+	require.Contains(t, output.String(), "cryptographic receipt unavailable")
+}
+
+func TestLogVerifiedReceiptSequence_SpecToRuntime_WiresFailureToReadiness(t *testing.T) {
+	key := healthTestKey(7)
+	receipt := healthReceipt(t, key, "received", 1, "")
+	audit := &AuditLogger{
+		logger:         slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
+		evidenceHealth: &EvidenceHealthMonitor{},
+	}
+	verifier := healthVerifier(t, key)
+	require.NoError(t, audit.LogVerifiedReceiptSequence(context.Background(), []string{"received"}, []provenance.EvidenceReceipt{receipt}, verifier))
+	require.NoError(t, audit.EvidenceHealthCheck(nil))
+
+	receipt.SubjectDigest = healthDigest("tampered")
+	require.Error(t, audit.LogVerifiedReceiptSequence(context.Background(), []string{"received"}, []provenance.EvidenceReceipt{receipt}, verifier))
+	require.Error(t, audit.EvidenceHealthCheck(nil))
 }

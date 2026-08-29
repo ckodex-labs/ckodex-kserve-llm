@@ -56,20 +56,28 @@ capabilities:
     evidence: [api/v1, api/v1alpha2, api/v1alpha2/conversion_test.go, config/crd/kustomization.yaml, config/crd/patches/llminferenceservice-conversion.yaml, internal/webhook/conversion.go, internal/webhook/llminferenceservice_v1.go, internal/webhook/llminferenceservice_v1_test.go, deploy/helm/templates/cert-manager.yaml, test/conformance, local/05-test-inference.sh, run/e2e.sh, docs/beta/install.md]
     exit_criterion: supported-profile runtime acceptance passes, including v1 create/update/read through the configured conversion path
 
+  - id: llm-engine-adapters
+    capability: vLLM and SGLang LLM runtime adapters resolve through one immutable registry
+    classification: S
+    status: local_adapter_verified_live_runtime_pending
+    owner: runtime
+    evidence: [internal/runtime/contracts.go, internal/runtime/registry, internal/runtime/vllm, internal/runtime/sglang, internal/validation/inference_engine.go, test/conformance/engine, COMPONENTS.md]
+    exit_criterion: each admitted engine passes live image pull, readiness, inference, failure, recovery, and EndpointPicker acceptance on its declared hardware profile
+
   - id: scheduler-dependency-contract
     capability: the supported scheduler profile has its external CRDs and least-privilege EPP/operator permissions
     classification: S
     status: local_runtime_verified_hosted_pending
     owner: runtime
-    evidence: [local/02-prereqs.sh, internal/scheduler/epp_manager.go, internal/scheduler/epp_manager_test.go, deploy/helm/templates/epp-rbac.yaml, deploy/helm/templates/rbac.yaml, config/rbac/role.yaml, docs/overview.md]
+    evidence: [local/02-prereqs.sh, internal/scheduler/epp_manager.go, internal/scheduler/config.go, internal/scheduler/epp_manager_test.go, deploy/helm/templates/epp-rbac.yaml, deploy/helm/templates/rbac.yaml, config/rbac/role.yaml, docs/dependency-alignment.md, docs/evidence/local-kind-2026-08-26.md, docs/evidence/dependency-refresh-2026-08-27.md]
     exit_criterion: fresh-cluster hosted acceptance renders the managed-namespace EPP identity, creates InferencePool, and reaches scheduler readiness without authorization errors
 
   - id: default-cpu-storage-path
     capability: the default CPU profile uses the supported signed initializer path without optional privileged CSI/FUSE software
     classification: S
-    status: local_default_switched_rerun_pending
+    status: local_runtime_verified_hosted_pending
     owner: runtime
-    evidence: [local/02-prereqs.sh, local/04-llm-inference-service.yaml, local/README.md, docs/getting-started.md, docs/overview.md]
+    evidence: [local/02-prereqs.sh, local/04-llm-inference-service.yaml, local/README.md, docs/getting-started.md, docs/overview.md, docs/evidence/local-kind-2026-08-26.md]
     exit_criterion: fresh-cluster CPU acceptance completes model initialization and inference with default settings; hf-mount remains separately qualified
 
   - id: release-image-chart-alignment
@@ -85,7 +93,7 @@ capabilities:
     classification: S
     status: local_harness_fixed_hosted_pending
     owner: runtime
-    evidence: [local/05-test-inference.sh, run/e2e.sh, Makefile, .dockerignore, .github/workflows/nightly-chaos.yml, docs/beta/readiness-ledger.md]
+    evidence: [local/05-test-inference.sh, run/e2e.sh, Makefile, .dockerignore, .github/workflows/nightly-chaos.yml, docs/beta/readiness-ledger.md, docs/evidence/local-kind-2026-08-26.md]
     exit_criterion: hosted KIND acceptance reaches and validates a successful Gateway or port-forward JSON completion response
 
   - id: local-image-build
@@ -101,7 +109,7 @@ capabilities:
     classification: S
     status: local_fixed_rerun_pending
     owner: release
-    evidence: [deploy/kind/kind-config.yaml, local/01-kind-setup.sh, run/e2e.sh]
+    evidence: [deploy/kind/acceptance-kind-version.txt, deploy/kind/acceptance-node-image.txt, deploy/kind/kind-config.yaml, local/01-kind-setup.sh, .github/workflows/nightly-chaos.yml, docs/ci/hosted-exact-head-2026-08-28.md]
     exit_criterion: a fresh cluster boots on the pinned node image and hosted acceptance uses the same qualified environment contract
 
   - id: qualified-readiness-observation

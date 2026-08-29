@@ -18,7 +18,7 @@ type EvalProfileSpec struct {
 	// +optional
 	MandatoryMetrics map[string]float64 `json:"mandatoryMetrics,omitempty"`
 
-	// TargetEngine specifies the engine to run the eval on (e.g., vllm, quant-cpp).
+	// TargetEngine specifies the admitted engine to run the eval on (e.g., vllm).
 	// +optional
 	TargetEngine string `json:"targetEngine,omitempty"`
 

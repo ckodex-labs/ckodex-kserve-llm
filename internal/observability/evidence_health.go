@@ -5,45 +5,47 @@ Licensed under the Apache License, Version 2.0.
 
 package observability
 
-// EvidenceReceipt is a signed evidence receipt observed by the health tracker.
-type EvidenceReceipt struct {
-	ID             string
-	SignatureValid bool
-}
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"sync"
+
+	"github.com/ckodex-labs/kserve-llm-operator/internal/provenance"
+)
 
 // EvidenceHealthResult is the fail-closed evaluation of an evidence sequence.
 type EvidenceHealthResult struct {
-	Healthy            bool
-	Valid              bool
-	ExpectedReceipts   []string
-	ObservedReceipts   []string
-	MissingReceipts    []string
-	UnexpectedReceipts []string
-	DuplicateReceipts  []string
-	SignatureFailures  []string
-	SequenceGaps       []string
+	Healthy                 bool
+	Valid                   bool
+	ExpectedReceipts        []string
+	ObservedReceipts        []string
+	MissingReceipts         []string
+	UnexpectedReceipts      []string
+	DuplicateReceipts       []string
+	SignatureFailures       []string
+	ProducerBindingFailures []string
+	IntegrityFailures       []string
+	SequenceGaps            []string
 }
 
-// EvidenceHealthTracker records receipts against one expected sequence.
+// EvidenceHealthTracker verifies receipts against one expected sequence.
 type EvidenceHealthTracker struct {
-	expected          []string
-	observed          []EvidenceReceipt
-	signatureFailures []string
+	expected []string
+	observed []provenance.EvidenceReceipt
+	verifier *provenance.ReceiptVerifier
 }
 
-// NewEvidenceHealthTracker creates a tracker for the supplied receipt order.
-func NewEvidenceHealthTracker(expected []string) *EvidenceHealthTracker {
-	return &EvidenceHealthTracker{expected: cloneStrings(expected)}
+// NewEvidenceHealthTracker creates a tracker for the supplied receipt order
+// and producer trust configuration.
+func NewEvidenceHealthTracker(expected []string, verifier *provenance.ReceiptVerifier) *EvidenceHealthTracker {
+	return &EvidenceHealthTracker{expected: cloneStrings(expected), verifier: verifier}
 }
 
-// RecordReceipt records one observed receipt for later evaluation.
-func (t *EvidenceHealthTracker) RecordReceipt(receipt EvidenceReceipt) {
-	if t == nil {
-		return
-	}
-	t.observed = append(t.observed, receipt)
-	if receipt.ID == "" || !receipt.SignatureValid {
-		t.signatureFailures = append(t.signatureFailures, receipt.ID)
+// RecordReceipt records one observed receipt for later verification.
+func (t *EvidenceHealthTracker) RecordReceipt(receipt provenance.EvidenceReceipt) {
+	if t != nil {
+		t.observed = append(t.observed, receipt)
 	}
 }
 
@@ -52,14 +54,12 @@ func (t *EvidenceHealthTracker) Evaluate() EvidenceHealthResult {
 	if t == nil {
 		return EvidenceHealthResult{}
 	}
-	result := EvidenceHealthResult{
-		ExpectedReceipts:  cloneStrings(t.expected),
-		SignatureFailures: cloneStrings(t.signatureFailures),
-	}
+	result := EvidenceHealthResult{ExpectedReceipts: cloneStrings(t.expected)}
 	seen := make(map[string]int, len(t.observed))
 	for _, receipt := range t.observed {
 		result.ObservedReceipts = append(result.ObservedReceipts, receipt.ID)
 		seen[receipt.ID]++
+		classifyReceiptVerification(&result, receipt.ID, t.verifier, receipt)
 		if !contains(t.expected, receipt.ID) && receipt.ID != "" {
 			result.UnexpectedReceipts = appendUnique(result.UnexpectedReceipts, receipt.ID)
 		}
@@ -72,29 +72,90 @@ func (t *EvidenceHealthTracker) Evaluate() EvidenceHealthResult {
 			result.MissingReceipts = append(result.MissingReceipts, expectedID)
 		}
 	}
-	result.SequenceGaps = findSequenceGaps(t.expected, result.ObservedReceipts)
-	result.Valid = len(t.expected) > 0 && len(result.MissingReceipts) == 0 &&
-		len(result.UnexpectedReceipts) == 0 && len(result.DuplicateReceipts) == 0 &&
-		len(result.SignatureFailures) == 0 && len(result.SequenceGaps) == 0
+	result.SequenceGaps = findReceiptSequenceGaps(t.expected, t.observed)
+	result.Valid = len(t.expected) > 0 && t.verifier != nil && result.failureCount() == 0
 	result.Healthy = result.Valid
 	return result
 }
 
-func findSequenceGaps(expected, observed []string) []string {
-	observedExpected := make([]string, 0, len(observed))
-	for _, receiptID := range observed {
-		if contains(expected, receiptID) {
-			observedExpected = append(observedExpected, receiptID)
+func classifyReceiptVerification(result *EvidenceHealthResult, receiptID string, verifier *provenance.ReceiptVerifier, receipt provenance.EvidenceReceipt) {
+	err := verifier.Verify(receipt)
+	if err == nil {
+		return
+	}
+	switch {
+	case errors.Is(err, provenance.ErrReceiptSignature):
+		result.SignatureFailures = appendUnique(result.SignatureFailures, receiptID)
+	case errors.Is(err, provenance.ErrReceiptProducer):
+		result.ProducerBindingFailures = appendUnique(result.ProducerBindingFailures, receiptID)
+	default:
+		result.IntegrityFailures = appendUnique(result.IntegrityFailures, receiptID)
+	}
+}
+
+func (r EvidenceHealthResult) failureCount() int {
+	return len(r.MissingReceipts) + len(r.UnexpectedReceipts) + len(r.DuplicateReceipts) +
+		len(r.SignatureFailures) + len(r.ProducerBindingFailures) + len(r.IntegrityFailures) + len(r.SequenceGaps)
+}
+
+func findReceiptSequenceGaps(expected []string, observed []provenance.EvidenceReceipt) []string {
+	var gaps []string
+	for index, receipt := range observed {
+		if index >= len(expected) || receipt.ID != expected[index] || receipt.Sequence != uint64(index+1) {
+			gaps = appendUnique(gaps, receipt.ID)
+		}
+		if index == 0 {
+			if receipt.PreviousDigest != "" {
+				gaps = appendUnique(gaps, receipt.ID)
+			}
+			continue
+		}
+		if receipt.PreviousDigest != observed[index-1].Digest {
+			gaps = appendUnique(gaps, receipt.ID)
 		}
 	}
-
-	var gaps []string
-	for index, expectedID := range expected {
-		if index >= len(observedExpected) || observedExpected[index] != expectedID {
-			gaps = append(gaps, expectedID)
-		}
+	for index := len(observed); index < len(expected); index++ {
+		gaps = appendUnique(gaps, expected[index])
 	}
 	return gaps
+}
+
+// EvidenceHealthMonitor makes verified receipt failures visible through a
+// manager health check. Failures are sticky for the process lifetime.
+type EvidenceHealthMonitor struct {
+	mu      sync.RWMutex
+	failure error
+}
+
+func (m *EvidenceHealthMonitor) Observe(result EvidenceHealthResult) {
+	if result.Healthy {
+		return
+	}
+	failures := result.failureCount()
+	if failures == 0 {
+		failures = 1
+	}
+	m.RecordFailure(fmt.Errorf("evidence receipt verification failed (%d failures)", failures))
+}
+
+func (m *EvidenceHealthMonitor) RecordFailure(err error) {
+	if m == nil || err == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.failure == nil {
+		m.failure = err
+	}
+}
+
+func (m *EvidenceHealthMonitor) Check(_ *http.Request) error {
+	if m == nil {
+		return errors.New("evidence health monitor is unavailable")
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.failure
 }
 
 func cloneStrings(values []string) []string {

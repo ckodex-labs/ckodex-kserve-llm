@@ -125,6 +125,7 @@ rules:
   - watch
 - apiGroups:
   - inference.networking.x-k8s.io
+  - llm-d.ai
   resources:
   - inferencemodelrewrites
   - inferenceobjectives

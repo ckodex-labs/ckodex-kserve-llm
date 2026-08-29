@@ -218,7 +218,8 @@ func (r *Reconciler) buildVLLMArgs(llmSvc *servingv1alpha2.LLMInferenceService) 
 		}
 	}
 
-	// Weight quantization (vLLM v0.24.0); GGUF uses quant-cpp.
+	// Weight quantization (vLLM v0.24.0); unsupported GGUF is rejected before
+	// the multi-node path is reached.
 	if q := llmSvc.Spec.Quantization; q != nil && q.Method != "gguf" {
 		args = append(args, "--quantization", q.Method)
 	}

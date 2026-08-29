@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
-	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 )
 
 // assertContainsArgPair fails if args does not contain flag immediately followed by value.
@@ -78,7 +77,7 @@ func TestBuilder_Quantization_AWQ(t *testing.T) {
 }
 
 // TestBuilder_Quantization_GPTQ_WithCheckpointPath verifies the legacy API
-// field does not emit the removed vLLM v0.24 checkpoint-path flag.
+// field fails closed instead of emitting the removed vLLM checkpoint flag.
 func TestBuilder_Quantization_GPTQ_WithCheckpointPath(t *testing.T) {
 	b := builderForQuantTest(t)
 	svc := baseQuantLLMSvc("gptq-test")
@@ -89,9 +88,10 @@ func TestBuilder_Quantization_GPTQ_WithCheckpointPath(t *testing.T) {
 
 	dep := b.Build(context.Background(), svc, 1, HardwareNVIDIA, nil)
 	require.NotNil(t, dep)
-	args := dep.Spec.Template.Spec.Containers[0].Args
-	assertContainsArgPair(t, args, "--quantization", "gptq")
-	assertNotContainsFlag(t, args, "--gptq-ckpt-path")
+	container := dep.Spec.Template.Spec.Containers[0]
+	require.Empty(t, container.Image)
+	assertNotContainsFlag(t, container.Args, "--quantization")
+	assertNotContainsFlag(t, container.Args, "--gptq-ckpt-path")
 }
 
 // TestBuilder_Quantization_BitsAndBytes verifies --quantization bitsandbytes.
@@ -118,9 +118,9 @@ func TestBuilder_Quantization_FP8(t *testing.T) {
 	assertContainsArgPair(t, args, "--quantization", "fp8")
 }
 
-// TestBuilder_Quantization_GGUF_UsesQuantCppEngine verifies that GGUF routes
-// to the quant-cpp image and does NOT emit --quantization.
-func TestBuilder_Quantization_GGUF_UsesQuantCppEngine(t *testing.T) {
+// TestBuilder_Quantization_GGUF_FailsClosed verifies that GGUF does not select
+// the unresolved legacy quant-cpp runtime or silently run as vLLM.
+func TestBuilder_Quantization_GGUF_FailsClosed(t *testing.T) {
 	b := builderForQuantTest(t)
 	svc := baseQuantLLMSvc("gguf-test")
 	svc.Spec.Quantization = &servingv1alpha2.QuantizationSpec{Method: "gguf"}
@@ -129,10 +129,7 @@ func TestBuilder_Quantization_GGUF_UsesQuantCppEngine(t *testing.T) {
 	require.NotNil(t, dep)
 
 	c := dep.Spec.Template.Spec.Containers[0]
-	if c.Image != api.QuantCppImage {
-		t.Errorf("GGUF must use quant-cpp image, got %q, want %q", c.Image, api.QuantCppImage)
-	}
-	// --quantization must NOT be passed for GGUF (engine handles it via args)
+	require.Empty(t, c.Image)
 	assertNotContainsFlag(t, c.Args, "--quantization")
 }
 

@@ -35,8 +35,8 @@ func (r *ModelOnboardingReconciler) executeValidationStage(
 	llmSvc *servingv1alpha2.LLMInferenceService,
 	stage servingv1alpha2.OnboardingStage,
 ) error {
-	if !llmSvc.Status.ModelReady {
-		return fmt.Errorf("LLMInferenceService %q is not ready (validation gate)", ob.Spec.ModelRef)
+	if err := ensureOnboardingResidencyReady(llmSvc); err != nil {
+		return fmt.Errorf("LLMInferenceService %q is not ready (validation gate): %w", ob.Spec.ModelRef, err)
 	}
 	log.FromContext(ctx).Info("validation stage passed", "stage", stage.Name, "type", stage.Type)
 	return nil
@@ -49,6 +49,9 @@ func (r *ModelOnboardingReconciler) executeCanaryStage(
 ) error {
 	if llmSvc.Status.Replicas < 1 {
 		return fmt.Errorf("no ready replicas for canary stage (got %d)", llmSvc.Status.Replicas)
+	}
+	if err := ensureOnboardingResidencyReady(llmSvc); err != nil {
+		return fmt.Errorf("model is not resident for canary stage: %w", err)
 	}
 	log.FromContext(ctx).Info("canary stage passed", "stage", stage.Name, "type", stage.Type,
 		"readyReplicas", llmSvc.Status.Replicas)
@@ -78,8 +81,8 @@ func (r *ModelOnboardingReconciler) executePromotionStage(
 	llmSvc *servingv1alpha2.LLMInferenceService,
 	stage servingv1alpha2.OnboardingStage,
 ) error {
-	if !llmSvc.Status.ModelReady {
-		return fmt.Errorf("LLMInferenceService %q not ready for promotion", ob.Spec.ModelRef)
+	if err := ensureOnboardingResidencyReady(llmSvc); err != nil {
+		return fmt.Errorf("LLMInferenceService %q not ready for promotion: %w", ob.Spec.ModelRef, err)
 	}
 	log.FromContext(ctx).Info("promotion stage passed", "stage", stage.Name, "type", stage.Type)
 	return nil

@@ -40,8 +40,8 @@ When `CKODEX_AIRGAPPED_MODE` is active, the operator automatically rewrites all 
 
 The operator also rewrites all the infrastructure images it manages to ensure they are pulled from the local registry:
 
-- `kserve/storage-initializer:v0.19.0` -> `registry.corp.internal/kserve/storage-initializer:v0.19.0`
-- `vllm/vllm-openai:v0.25.1` -> `registry.corp.internal/vllm/vllm-openai:v0.25.1`
+- `kserve/storage-initializer:v0.20.0` -> `registry.corp.internal/kserve/storage-initializer:v0.20.0`
+- `vllm/vllm-openai:v0.28.0` -> `registry.corp.internal/vllm/vllm-openai:v0.28.0`
 
 ## 4. Offline Security Verification
 

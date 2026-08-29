@@ -213,9 +213,6 @@ type DefaultsConfig struct {
 	// StorageInitializerImage is the default storage initializer image.
 	StorageInitializerImage string `json:"storageInitializerImage"`
 
-	// QuantCppImage is the default quant-cpp runtime image.
-	QuantCppImage string `json:"quantCppImage"`
-
 	// CustomStorageInitializerImage handles non-hf:// model sources.
 	CustomStorageInitializerImage string `json:"customStorageInitializerImage"`
 
@@ -277,7 +274,7 @@ type ProxyConfig struct {
 type SecurityConfig struct {
 	// AllowedRegistries are container image registry prefixes accepted by the
 	// LLMImageAllowlist OPA constraint. Override via operator config or env.
-	// Default list includes ckodex, vllm, kserve, and distroless images.
+	// Default list includes ckodex, vllm, lmsysorg, kserve, and distroless images.
 	AllowedRegistries []string `json:"allowedRegistries"`
 
 	// MaxGPUsPerNamespace is the GPU ceiling enforced by LLMResourceQuota constraint.
@@ -307,29 +304,6 @@ type AuthConfig struct {
 	JWKSCacheTTL time.Duration `json:"jwksCacheTTL"`
 }
 
-// AuditSinkConfig configures where and how audit events are persisted.
-type AuditSinkConfig struct {
-	// Type selects the audit sink backend.
-	// Supported values: "stdout" (default), "file", "otlp-log".
-	// +kubebuilder:validation:Enum=stdout;file;otlp-log
-	Type string `json:"type"`
-
-	// FilePath is the log file path when Type="file".
-	// The file is appended-to and rotated at midnight UTC.
-	// +optional
-	FilePath string `json:"filePath,omitempty"`
-
-	// RetentionDays is how long audit log files are retained before deletion.
-	// HIPAA requires 7 years (2555 days). SOC2 requires 1 year (365 days).
-	// 0 = keep forever (default).
-	RetentionDays int `json:"retentionDays"`
-
-	// PIIRedaction enables regex-based PII detection and redaction in audit
-	// event details before they are written to any sink.
-	// Should be true in all production environments.
-	PIIRedaction bool `json:"piiRedaction"`
-}
-
 // ObservabilityConfig configures OpenTelemetry.
 type ObservabilityConfig struct {
 	// OTLPEndpoint is the OTLP collector gRPC endpoint.
@@ -348,11 +322,10 @@ func DefaultOperatorConfig() OperatorConfig {
 		Features: DefaultFeatureGates(),
 		Defaults: DefaultsConfig{
 			// Pinned to a specific version — :latest is a supply chain risk and air-gapped blocker.
-			RuntimeImage:                     "vllm/vllm-openai:v0.25.1",
+			RuntimeImage:                     "vllm/vllm-openai:v0.28.0",
 			KServeMultiNodeRuntime:           "kserve-huggingfaceserver-multinode",
-			SchedulerImage:                   "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc",
-			StorageInitializerImage:          "kserve/storage-initializer:v0.19.0",
-			QuantCppImage:                    "ckodex/quant-cpp:v0.1.0",
+			SchedulerImage:                   "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:2e516fa1310da7be59b82beb1445362139597d6d553ef04d546716abe3aaaa70",
+			StorageInitializerImage:          "kserve/storage-initializer:v0.20.0",
 			CustomStorageInitializerImage:    "ckodex/storage-initializer:v0.1.0",
 			HuggingFaceInitializerImage:      "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.8",
 			DefaultReplicas:                  1,
@@ -377,6 +350,7 @@ func DefaultOperatorConfig() OperatorConfig {
 		Security: defaultSecurityConfig(),
 		AuditSink: AuditSinkConfig{
 			Type:          "stdout",
+			OTLPEndpoint:  "",
 			RetentionDays: 0,
 			PIIRedaction:  true, // on by default — opt out explicitly if needed
 		},
@@ -395,7 +369,7 @@ func DefaultOperatorConfig() OperatorConfig {
 
 func defaultSchedulerDefaults() SchedulerDefaults {
 	return SchedulerDefaults{
-		Image: "registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc",
+		Image: "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:2e516fa1310da7be59b82beb1445362139597d6d553ef04d546716abe3aaaa70",
 		DefaultPlugins: []string{
 			"prefix-cache-scorer", "queue-scorer", "kv-cache-utilization-scorer", "max-score-picker",
 		},
@@ -405,7 +379,7 @@ func defaultSchedulerDefaults() SchedulerDefaults {
 func defaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
 		AllowedRegistries: []string{
-			"ghcr.io/ckodex/", "vllm/", "kserve/", "gcr.io/distroless/", "public.ecr.aws/q9t5s3a7/",
+			"ghcr.io/ckodex/", "vllm/", "lmsysorg/", "kserve/", "gcr.io/distroless/", "public.ecr.aws/q9t5s3a7/",
 		},
 		MaxGPUsPerNamespace:   8,
 		MaxReplicasPerService: 16,
@@ -418,7 +392,6 @@ func (c *OperatorConfig) LoadFromEnv() {
 
 	envStr("CKODEX_RUNTIME_IMAGE", &c.Defaults.RuntimeImage)
 	envStr("CKODEX_KSERVE_MULTINODE_RUNTIME", &c.Defaults.KServeMultiNodeRuntime)
-	envStr("CKODEX_QUANT_CPP_IMAGE", &c.Defaults.QuantCppImage)
 	envStr("CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE", &c.Defaults.CustomStorageInitializerImage)
 	envStr("CKODEX_HUGGING_FACE_INITIALIZER_IMAGE", &c.Defaults.HuggingFaceInitializerImage)
 	envStr("CKODEX_VLLM_CPU_REQUEST", &c.Defaults.VLLMCPURequest)
@@ -449,6 +422,8 @@ func (c *OperatorConfig) LoadFromEnv() {
 	envStr("VERSION", &c.Version)
 	envStr("OTEL_EXPORTER_OTLP_ENDPOINT", &c.Observability.OTLPEndpoint)
 	envStr("CKODEX_OTEL_ENDPOINT", &c.Observability.OTLPEndpoint)
+	envStr("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", &c.AuditSink.OTLPEndpoint)
+	envStr("CKODEX_AUDIT_OTLP_ENDPOINT", &c.AuditSink.OTLPEndpoint)
 
 	// VCluster Overrides
 	envBool("CKODEX_VCLUSTER_MODE", &c.VClusterMode)

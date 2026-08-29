@@ -4,18 +4,34 @@ import (
 	"os"
 
 	operatorconfig "github.com/ckodex-labs/kserve-llm-operator/internal/config"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/controller"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/health"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/webhook"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 )
 
-func setupWebhooksAndHealth(mgr ctrl.Manager, cfg operatorconfig.OperatorConfig) {
+func setupWebhooksAndHealth(mgr ctrl.Manager, cfg operatorconfig.OperatorConfig, reconciler *controller.LLMInferenceServiceReconciler) {
 	setupWebhooks(mgr, cfg)
 	mustAddHealthCheck("healthz", mgr.AddHealthzCheck("healthz", healthz.Ping), "unable to set up health check")
 	mustAddReadyCheck("readyz", mgr.AddReadyzCheck("readyz", healthz.Ping), "unable to set up ready check")
+	if reconciler != nil {
+		mustAddReadyCheck("evidence", registerEvidenceReadiness(mgr, reconciler.Audit), "unable to register evidence readiness check")
+	}
 	setupSubsystemReadiness(mgr, cfg)
+}
+
+type readinessRegistrar interface {
+	AddReadyzCheck(string, healthz.Checker) error
+}
+
+func registerEvidenceReadiness(registrar readinessRegistrar, audit *observability.AuditLogger) error {
+	if audit == nil {
+		return nil
+	}
+	return registrar.AddReadyzCheck("evidence", audit.EvidenceHealthCheck)
 }
 
 func setupWebhooks(mgr ctrl.Manager, cfg operatorconfig.OperatorConfig) {

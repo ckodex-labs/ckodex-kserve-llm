@@ -54,6 +54,9 @@ rules:
 - apiGroups: [inference.networking.x-k8s.io]
   resources: [inferencemodelrewrites, inferenceobjectives]
   verbs: [get, list, watch]
+- apiGroups: [llm-d.ai]
+  resources: [inferencemodelrewrites, inferenceobjectives]
+  verbs: [get, list, watch]
 - apiGroups: [serving.ckodex.com]
   resources:
     - agents

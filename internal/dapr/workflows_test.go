@@ -166,6 +166,27 @@ func TestSagaExecutor_SecondStepFails_CompensatesFirst(t *testing.T) {
 	assert.True(t, found, "compensation activity should be logged")
 }
 
+func TestSagaExecutor_CompensationFailureIsSurfaced(t *testing.T) {
+	exec := &SagaExecutor{
+		Activities: map[string]ActivityFunc{
+			"step-a":       noop,
+			"compensate-a": failWith("rollback unavailable"),
+			"step-b":       failWith("step-b failed"),
+		},
+	}
+	steps := []WorkflowStep{
+		{Activity: "step-a", Compensate: "compensate-a"},
+		{Activity: "step-b", Compensate: ""},
+	}
+
+	result, err := exec.Execute(context.Background(), "comp-fail-wf", steps, testInput)
+	require.Error(t, err)
+	assert.Equal(t, "compensation-failed", result.Status)
+	assert.Contains(t, err.Error(), "rollback unavailable")
+	require.Len(t, result.Activities, 3)
+	assert.Equal(t, "compensation-failed", result.Activities[2].Status)
+}
+
 func TestSagaExecutor_ThirdStepFails_CompensatesInReverseOrder(t *testing.T) {
 	var order []string
 

@@ -6,8 +6,9 @@ Licensed under the Apache License, Version 2.0.
 package v1alpha2
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/scheme"
 )
 
 var (
@@ -15,7 +16,7 @@ var (
 	SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: GroupVersion}
 
 	// SchemeBuilder is used to add go types to the GroupVersionResource scheme.
-	SchemeBuilder = &scheme.Builder{GroupVersion: SchemeGroupVersion}
+	SchemeBuilder = &schemeBuilder{}
 
 	// AddToScheme adds the types in this group-version to the given scheme.
 	AddToScheme = SchemeBuilder.AddToScheme
@@ -24,4 +25,16 @@ var (
 // Resource takes an unqualified resource and returns a Group qualified GroupResource.
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
+}
+
+type schemeBuilder struct {
+	runtime.SchemeBuilder
+}
+
+func (b *schemeBuilder) Register(objects ...runtime.Object) {
+	b.SchemeBuilder.Register(func(scheme *runtime.Scheme) error {
+		scheme.AddKnownTypes(SchemeGroupVersion, objects...)
+		metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
+		return nil
+	})
 }

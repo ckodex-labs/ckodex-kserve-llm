@@ -36,14 +36,13 @@ featureGates:
   enableLocalModelCache: false
 
 runtime:
-  # v0.25.1 includes the mixed-dtype NVFP4 correctness fix used by Gemma/Qwen.
-  defaultImage: "vllm/vllm-openai:v0.25.1"
+  # v0.28.0 includes the mixed-dtype NVFP4 correctness fix used by Gemma/Qwen.
+  defaultImage: "vllm/vllm-openai:v0.28.0"
   # Installed KServe ClusterServingRuntime for v0.19 workerSpec workloads.
   kserveMultiNodeRuntime: "kserve-huggingfaceserver-multinode"
   # Empty follows Chart.appVersion; set a digest-pinned override when required.
   huggingFaceInitializerImage: ""
   customStorageInitializerImage: "ckodex/storage-initializer:v0.1.0"
-  quantCppImage: "ckodex/quant-cpp:v0.1.0"
   vllmCPURequest: "2"
   vllmMemoryRequest: "4Gi"
   terminationGracePeriodSeconds: 60
@@ -62,12 +61,10 @@ config:
   hfMirror: ""
   # OpenTelemetry collector endpoint
   otelEndpoint: "localhost:4317"
-  # Quant.cpp defaults
-  quantCpp:
-    ctxSize: 32768
-    nGpuLayersDetect: true
 
 audit:
+  # Optional OTLP/HTTP logs endpoint. Empty keeps the audit log sink local.
+  otlpEndpoint: ""
   persistence:
     enabled: false
     storageClass: ""

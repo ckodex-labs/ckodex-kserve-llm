@@ -6,9 +6,14 @@ on:
       - "v*"
 
 permissions:
+  actions: read
+  checks: read
   contents: write
   packages: write
   id-token: write
+
+env:
+  RELEASE_VERSION: ${{ github.ref_name }}
 
 jobs:
   verify:
@@ -16,18 +21,45 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
+      - name: Verify release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/$RELEASE_VERSION"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+
+      - name: Require hosted CI on the exact release head
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          checks="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?filter=latest&per_page=100")"
+          for required in "Lint + Build + Scan" "Hugging Face initializer (arm64)"; do
+            conclusion="$(jq -r --arg name "$required" \
+              '[.check_runs[] | select(.name == $name)] | sort_by(.completed_at) | last | .conclusion // "missing"' \
+              <<<"$checks")"
+            if [[ "$conclusion" != "success" ]]; then
+              echo "Required exact-head check '$required' is $conclusion for $GITHUB_SHA" >&2
+              exit 1
+            fi
+          done
+
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5.0.1
 
       - name: Install GoReleaser
         shell: bash
@@ -35,8 +67,8 @@ jobs:
           tool_dir="$(mktemp -d)"
           archive="$tool_dir/goreleaser_Linux_x86_64.tar.gz"
           curl --fail --location --show-error --output "$archive" \
-            https://github.com/goreleaser/goreleaser/releases/download/v2.15.4/goreleaser_Linux_x86_64.tar.gz
-          echo "aae00c71a4a6d55e08cce9273a1516bdce33c1e07cffb7e502fa6fec4377dede  $archive" | sha256sum --check -
+            https://github.com/goreleaser/goreleaser/releases/download/v2.18.0/goreleaser_Linux_x86_64.tar.gz
+          echo "41cdf49b653784b03a08013dd99e382cd5d463049e915c2d818eaed182ae6197  $archive" | sha256sum --check -
           tar -xzf "$archive" -C "$tool_dir" goreleaser
           sudo install -m 0755 "$tool_dir/goreleaser" /usr/local/bin/goreleaser
           goreleaser --version
@@ -44,36 +76,44 @@ jobs:
       - name: Install golangci-lint
         shell: bash
         run: |
-          tool_dir="$(mktemp -d)"
-          archive="$tool_dir/golangci-lint-2.12.2-linux-amd64.tar.gz"
-          curl --fail --location --show-error --output "$archive" \
-            https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz
-          echo "8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553  $archive" | sha256sum --check -
-          tar -xzf "$archive" -C "$tool_dir"
-          sudo install -m 0755 "$tool_dir/golangci-lint-2.12.2-linux-amd64/golangci-lint" /usr/local/bin/golangci-lint
-          golangci-lint --version
+          tool_dir="$(go env GOPATH)/bin"
+          GOBIN="$tool_dir" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
+          "$tool_dir/golangci-lint" --version
 
       - name: Run release verification gates
         shell: bash
         run: |
           git ls-files --error-unmatch console/package.json console/package-lock.json console/Dockerfile
-          golangci-lint run -v --timeout 10m ./...
+          "$(go env GOPATH)/bin/golangci-lint" run -v --timeout 10m ./...
           go test ./...
           go run ./hack/helm-contract
           make release-readiness
+
+      - name: Verify manager release-version injection
+        shell: bash
+        run: |
+          manager="$RUNNER_TEMP/manager-version-contract"
+          go build -trimpath \
+            -ldflags="-s -w -X github.com/ckodex-labs/kserve-llm-operator/internal/version.Version=${RELEASE_VERSION}" \
+            -o "$manager" ./cmd/manager
+          actual="$($manager --version)"
+          if [[ "$actual" != "$RELEASE_VERSION" ]]; then
+            echo "Manager reported version '$actual', want '$RELEASE_VERSION'" >&2
+            exit 1
+          fi
 
   hf-initializer-arm64:
     name: Hugging Face initializer (arm64)
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Pre-pull Dagger engine
         shell: bash
         run: |
           for attempt in 1 2 3; do
-            if docker pull registry.dagger.io/engine:v0.21.7; then
+            if docker pull registry.dagger.io/engine:v0.21.9; then
               exit 0
             fi
             sleep $((attempt * 5))
@@ -81,12 +121,12 @@ jobs:
           exit 1
 
       - name: Scan native arm64 Hugging Face initializer
-        uses: dagger/dagger-for-github@v8.4.0
+        uses: dagger/dagger-for-github@v8.4.1
         timeout-minutes: 15
         env:
           DAGGER_NO_NAG: "1"
         with:
-          version: v0.21.7
+          version: v0.21.9
           verb: call
           args: scan-hugging-face-initializer-arch --source=. --arch=arm64
           dagger-flags: --progress plain
@@ -103,12 +143,12 @@ jobs:
       hf-initializer-name: ${{ steps.build-hf-initializer.outputs.name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
           cache: true
@@ -117,21 +157,21 @@ jobs:
         shell: bash
         run: |
           tool_dir="$(mktemp -d)"
-          archive="$tool_dir/dagger_v0.21.7_linux_amd64.tar.gz"
+          archive="$tool_dir/dagger_v0.21.9_linux_amd64.tar.gz"
           curl --fail --location --show-error --output "$archive" \
-            https://dl.dagger.io/dagger/releases/0.21.7/dagger_v0.21.7_linux_amd64.tar.gz
-          echo "44430afc6f9c390fc47c4f352b15de9309a5e97ebd1ae563839617d6df8e8cc5  $archive" | sha256sum --check -
+            https://dl.dagger.io/dagger/releases/0.21.9/dagger_v0.21.9_linux_amd64.tar.gz
+          echo "33eea0b08d6be444bada18e64b2216459100d6070abcb4b5345cee40c9fff982  $archive" | sha256sum --check -
           tar -xzf "$archive" -C "$tool_dir" dagger
           sudo install -m 0755 "$tool_dir/dagger" /usr/local/bin/dagger
           dagger version
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.0.0
+        uses: sigstore/cosign-installer@v4.1.2
         with:
-          cosign-release: v3.1.1
+          cosign-release: v3.1.3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -146,8 +186,8 @@ jobs:
         shell: bash
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
-          IMAGE_REF: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-          IMAGE_VERSION: ${{ github.ref_name }}
+          IMAGE_REF: ghcr.io/${{ github.repository }}:${{ env.RELEASE_VERSION }}
+          IMAGE_VERSION: ${{ env.RELEASE_VERSION }}
           REGISTRY_USERNAME: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -174,7 +214,7 @@ jobs:
         shell: bash
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
-          IMAGE_REF: ghcr.io/${{ github.repository }}-huggingface-initializer:${{ github.ref_name }}
+          IMAGE_REF: ghcr.io/${{ github.repository }}-huggingface-initializer:${{ env.RELEASE_VERSION }}
           REGISTRY_USERNAME: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -198,7 +238,7 @@ jobs:
         shell: bash
         env:
           DAGGER_CLOUD_TOKEN: ${{ secrets.DAGGER_CLOUD_TOKEN }}
-          IMAGE_REF: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          IMAGE_REF: ghcr.io/${{ github.repository }}:${{ env.RELEASE_VERSION }}
           REGISTRY_USERNAME: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -211,13 +251,13 @@ jobs:
             export --path=sbom/manager.cdx.json
           dagger call sbom \
             --source=. \
-            --image-ref="${IMAGE_REF%:*}-huggingface-initializer:${{ github.ref_name }}" \
+            --image-ref="${IMAGE_REF%:*}-huggingface-initializer:${RELEASE_VERSION}" \
             --registry-username="$REGISTRY_USERNAME" \
             --registry-token=env:GITHUB_TOKEN \
             export --path=sbom/huggingface-initializer.cdx.json
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: sbom
           path: sbom/
@@ -237,16 +277,16 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4.2.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.3.0
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -254,13 +294,13 @@ jobs:
 
       - name: Build and publish console image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7.3.0
         with:
           context: ./console
           file: ./console/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ckodex-kserve-llm-console:${{ github.ref_name }}
+          tags: ghcr.io/${{ github.repository_owner }}/ckodex-kserve-llm-console:${{ env.RELEASE_VERSION }}
           provenance: mode=max
           sbom: true
 
@@ -279,9 +319,9 @@ jobs:
             "${CONSOLE_REF}"
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.0.0
+        uses: sigstore/cosign-installer@v4.1.2
         with:
-          cosign-release: v3.1.1
+          cosign-release: v3.1.3
 
       - name: Sign console image with cosign (OIDC)
         env:
@@ -298,23 +338,23 @@ jobs:
       hashes: ${{ steps.hashes.outputs.hashes }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.0.0
+        uses: sigstore/cosign-installer@v4.1.2
         with:
-          cosign-release: v3.1.1
+          cosign-release: v3.1.3
       - name: Run GoReleaser
         id: goreleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7.2.3
         with:
           distribution: goreleaser
-          version: v2.15.4
+          version: v2.18.0
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -348,7 +388,7 @@ jobs:
       actions: read
       id-token: write
       packages: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
       image: ${{ needs.image-release.outputs.image-name }}
       digest: ${{ needs.image-release.outputs.image-digest }}
@@ -363,7 +403,7 @@ jobs:
       actions: read
       id-token: write
       packages: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
       image: ${{ needs.console-image-release.outputs.image-name }}
       digest: ${{ needs.console-image-release.outputs.image-digest }}
@@ -378,7 +418,7 @@ jobs:
       actions: read
       id-token: write
       packages: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
       image: ${{ needs.image-release.outputs.hf-initializer-name }}
       digest: ${{ needs.image-release.outputs.hf-initializer-digest }}
@@ -395,7 +435,7 @@ jobs:
       actions: read
       id-token: write
       contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: "${{ needs.binary-release.outputs.hashes }}"
       upload-assets: true
@@ -409,14 +449,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5.0.1
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Package & Push Chart
-        env:
-          RELEASE_VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           chart_version="${RELEASE_VERSION#v}"
@@ -448,9 +486,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
           cache: true
@@ -461,7 +499,7 @@ jobs:
             --repository="ghcr.io/${{ github.repository }}" \
             --console-repository="ghcr.io/${{ github.repository_owner }}/ckodex-kserve-llm-console" \
             --chart-repository="ghcr.io/${{ github.repository_owner }}/charts/ckodex-kserve-llm-operator" \
-            --version="${{ github.ref_name }}" \
+            --version="${RELEASE_VERSION}" \
             --operator-digest="${{ needs.image-release.outputs.image-digest }}" \
             --console-digest="${{ needs.console-image-release.outputs.image-digest }}" \
             --initializer-digest="${{ needs.image-release.outputs.hf-initializer-digest }}"

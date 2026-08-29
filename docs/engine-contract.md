@@ -3,7 +3,7 @@
 Normative contract for inference runtimes served by this operator.
 
 **Implementation classification: S.** The contract is design-locked and the
-current vLLM adapter implements a tier-1 subset. Compile-enforced totality,
+current vLLM and SGLang adapters implement tier-1 subsets. Compile-enforced totality,
 image, metrics, receipt, health, workload extraction, and higher tiers remain
 implementation work tracked in [open-loops.md](open-loops.md).
 

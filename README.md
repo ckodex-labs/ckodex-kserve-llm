@@ -48,7 +48,8 @@ Prerequisites: Docker, KIND, `kubectl`, Helm, `curl`, `jq`, and network access.
 
 This creates or reuses a KIND cluster, installs the required local
 dependencies, builds the operator and storage initializer, applies a
-CPU-capable Qwen model, and probes `/v1/chat/completions`.
+CPU-sized GPT-2 completion fixture, and probes `/v1/completions` through the
+managed Gateway path.
 
 Inspect the result:
 

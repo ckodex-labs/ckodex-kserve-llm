@@ -48,7 +48,8 @@ func (p *RequestPipeline) runInference(ctx context.Context, conn *EndpointConn, 
 		return err
 	}
 
-	// In the current architecture we only need the call to complete successfully.
+	// TODO(ckodex): expose the v2 response payload through InferenceResponse when
+	// this pipeline becomes the response owner.
 	_ = v2Resp
 	return nil
 }

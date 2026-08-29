@@ -36,7 +36,7 @@ type ExperimentalSpec struct {
 	Quantization *QuantizationSpec `json:"quantization,omitempty"`
 
 	// Engine selects the inference engine.
-	// +kubebuilder:validation:Enum=vllm;quant-cpp
+	// +kubebuilder:validation:Enum=sglang;vllm
 	// +optional
 	Engine string `json:"engine,omitempty"`
 

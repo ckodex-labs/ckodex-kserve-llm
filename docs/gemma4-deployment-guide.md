@@ -6,15 +6,15 @@ This guide documents the operator defaults currently associated with the Gemma 4
 
 | Model       | Resource Profile            | Hardware Tier           | Type    | Image                     |
 | :---------- | :-------------------------- | :---------------------- | :------ | :------------------------ |
-| **E2B**     | 8 CPU / 32Gi / 1 GPU        | Consumer (8GB VRAM)     | Dense   | `vllm/vllm-openai:v0.25.1` |
-| **E4B**     | 16 CPU / 64Gi / 1 GPU       | Mid-range (16GB VRAM)   | Dense   | `vllm/vllm-openai:v0.25.1` |
-| **26B-A4B** | 32 CPU / 128Gi / 1 GPU      | High-end (24GB VRAM)    | **MoE** | `vllm/vllm-openai:v0.25.1` |
-| **31B**     | 32 CPU / 256Gi / **2 GPUs** | Enterprise (48GB+ VRAM) | Dense   | `vllm/vllm-openai:v0.25.1` |
+| **E2B**     | 8 CPU / 32Gi / 1 GPU        | Consumer (8GB VRAM)     | Dense   | `vllm/vllm-openai:v0.28.0` |
+| **E4B**     | 16 CPU / 64Gi / 1 GPU       | Mid-range (16GB VRAM)   | Dense   | `vllm/vllm-openai:v0.28.0` |
+| **26B-A4B** | 32 CPU / 128Gi / 1 GPU      | High-end (24GB VRAM)    | **MoE** | `vllm/vllm-openai:v0.28.0` |
+| **31B**     | 32 CPU / 256Gi / **2 GPUs** | Enterprise (48GB+ VRAM) | Dense   | `vllm/vllm-openai:v0.28.0` |
 
 ## Prerequisites
 
 1. **GPU Nodes**: Ensure your cluster has nodes with `nvidia.com/gpu` available.
-2. **Operator Config**: Keep `vllm.defaultImage` at v0.25.1 or set an explicitly validated newer image.
+2. **Operator Config**: Keep `vllm.defaultImage` at v0.28.0 or set an explicitly validated newer image.
 3. **HuggingFace Secret**: For models like 31B, you may need an account and token to access the official Google repositories.
 
 ## Deployment Steps
@@ -112,7 +112,7 @@ kubectl get llmisvc gemma-4-31b -o jsonpath='{.status.conditions[?(@.type=="GPUC
 
 ## Optimization Tips
 
-- **NVFP4**: Use vLLM v0.25.1 or newer for the mixed-dtype Gemma/Qwen NVFP4 correctness fix. Kernel selection is a runtime observation and must be confirmed from the serving pod logs.
+- **NVFP4**: Use vLLM v0.28.0 or newer for the mixed-dtype Gemma/Qwen NVFP4 correctness fix. Kernel selection is a runtime observation and must be confirmed from the serving pod logs.
 - **CUDA compatibility mode**: The operator does not force `VLLM_ENABLE_CUDA_COMPATIBILITY`. vLLM documents that mode for drivers older than the image's CUDA toolkit, and its compatibility libraries can produce CUDA error 803 on unsupported RTX systems. Enable it explicitly only after validating that host/image combination.
 - **Persistent kernel tuning cache**: FlashInfer autotuning can generate dozens of kernel configurations during the first startup. Keep those artifacts across pod replacements with a dedicated writable PVC; do not persist all of `/tmp` and do not write into a read-only model-volume mount:
 

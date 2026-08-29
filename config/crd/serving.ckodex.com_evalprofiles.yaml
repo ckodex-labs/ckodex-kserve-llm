@@ -56,8 +56,8 @@ spec:
                   type: string
                 type: array
               targetEngine:
-                description: TargetEngine specifies the engine to run the eval on
-                  (e.g., vllm, quant-cpp).
+                description: TargetEngine specifies the admitted engine to run the
+                  eval on (e.g., vllm).
                 type: string
             type: object
           status:

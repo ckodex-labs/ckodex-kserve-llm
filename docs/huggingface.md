@@ -57,7 +57,7 @@ does not install that cluster-wide prerequisite.
 
 ```bash
 helm install hf-csi oci://ghcr.io/huggingface/charts/hf-csi-driver \
-  --version 0.12.1 \
+  --version 0.14.0 \
   --namespace kube-system
 kubectl get csidriver hf.csi.huggingface.co
 ```

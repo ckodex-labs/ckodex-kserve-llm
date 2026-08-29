@@ -1,7 +1,7 @@
 # Build stage. Compile on the native builder platform and cross-compile for the
 # requested target so multi-architecture builds do not run the Go compiler
 # through CPU emulation.
-FROM --platform=$BUILDPLATFORM golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 AS builder-base
+FROM --platform=$BUILDPLATFORM golang:1.27.0-bookworm@sha256:ded31c68586d2e49e760acc2e65a884b23d032e9bbbed0ae0c55abd3fcaf4452 AS builder-base
 
 ARG TARGETOS=linux
 ARG TARGETARCH
@@ -28,13 +28,13 @@ FROM builder-base AS builder
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -p=1 -trimpath -ldflags="-s -w" -o manager ./cmd/manager
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -p=1 -trimpath -ldflags="-s -w" -o storage-initializer cmd/storage-initializer/main.go
+    go build -p=1 -trimpath -ldflags="-s -w" -o storage-initializer ./cmd/storage-initializer
 
 FROM builder-base AS huggingface-builder
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -p=1 -trimpath -ldflags="-s -w" -o huggingface-initializer cmd/huggingface-initializer/main.go
+    go build -p=1 -trimpath -ldflags="-s -w" -o huggingface-initializer ./cmd/huggingface-initializer
 
-FROM gcr.io/projectsigstore/cosign:v3.1.1 AS cosign
+FROM gcr.io/projectsigstore/cosign:v3.1.3 AS cosign
 
 # Resolve and unpack target-architecture wheels on the native build platform.
 # The final image still executes a short target-platform import check, but does

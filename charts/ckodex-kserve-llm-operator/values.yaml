@@ -21,8 +21,9 @@ rbac:
   create: true
 
 # managedNamespaces lists namespaces where the platform pre-provisions the
-# shared ckodex-epp ServiceAccount, Role, and RoleBinding. The operator will
-# fail closed for scheduler workloads outside this list.
+# shared ckodex-epp ServiceAccount, Role, and RoleBinding. If unset, the
+# operator namespace is used as the implicit managed namespace to avoid a
+# silent no-op install. Add additional workload namespaces explicitly.
 managedNamespaces: []
 
 crds:

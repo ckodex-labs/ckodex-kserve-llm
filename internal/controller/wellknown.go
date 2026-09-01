@@ -19,19 +19,21 @@ import (
 // Returns nil if the model is not well-known.
 func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceConfigSpec {
 	// Helper to check for Gemma 4 variants regardless of URI scheme (hf://, oci://, swfs://, etc.)
+	// Matchers use token-boundary comparison (containsToken): a preset fires
+	// only when both the family and the size appear as standalone version
+	// tokens. Raw substring matching misfires on storage URIs whose directory
+	// name embeds a family as a prefix — "pvc://qwen38-27b-weights" contains
+	// "qwen3" (inside "qwen38") and "7b" (inside "27b") and used to trigger
+	// the Qwen3-7B preset, whose merged default args crashed the pod.
 	isGemma4 := func(variant string) bool {
 		// Matches patterns like "google/gemma-4-E2B-it", "oci://registry/gemma-4-e2b", "swfs://filer/gemma-4-e2b", etc.
-		normalizedMatch := strings.ToLower(modelURI)
-		return strings.Contains(normalizedMatch, "gemma-4") &&
-			strings.Contains(normalizedMatch, strings.ToLower(variant))
+		return containsToken(modelURI, "gemma-4") && containsToken(modelURI, variant)
 	}
 	isDeepSeek := func(variant string) bool {
-		norm := strings.ToLower(modelURI)
-		return strings.Contains(norm, "deepseek") && strings.Contains(norm, strings.ToLower(variant))
+		return containsToken(modelURI, "deepseek") && containsToken(modelURI, variant)
 	}
 	isQwen3 := func(size string) bool {
-		norm := strings.ToLower(modelURI)
-		return strings.Contains(norm, "qwen3") && strings.Contains(norm, strings.ToLower(size))
+		return containsToken(modelURI, "qwen3") && containsToken(modelURI, size)
 	}
 	qwen3ToolArgs := func() []string {
 		norm := strings.ToLower(modelURI)
@@ -292,151 +294,13 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 				},
 			},
 		}
-	case strings.Contains(strings.ToLower(modelURI), "qwen3"):
+	case containsToken(modelURI, "qwen3"):
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{Args: qwen3ToolArgs()},
 		}
 	}
 
 	return nil
-}
-
-// ApplyConfigToSpec applies a configuration spec to an LLMInferenceServiceSpec.
-func (r *LLMInferenceServiceReconciler) ApplyConfigToSpec(spec *servingv1alpha2.LLMInferenceServiceSpec, cfg *servingv1alpha2.LLMInferenceServiceConfigSpec) {
-	if cfg == nil {
-		return
-	}
-
-	if cfg.Parallelism != nil {
-		if spec.Parallelism == nil {
-			spec.Parallelism = cfg.Parallelism.DeepCopy()
-		} else {
-			// Merge parallelism fields - ONLY if not already set by user
-			if cfg.Parallelism.Tensor != nil && spec.Parallelism.Tensor == nil {
-				spec.Parallelism.Tensor = cfg.Parallelism.Tensor
-			}
-			if cfg.Parallelism.Data != nil && spec.Parallelism.Data == nil {
-				spec.Parallelism.Data = cfg.Parallelism.Data
-			}
-			// Expert parallelism is a boolean flag, if WellKnown says true and user hasn't set it (implicit false),
-			// we can't easily distinguish "User set false" vs "User didn't set".
-			// But usually, if the user didn't specify Parallelism at all, we use defaults.
-			// If they DID specify something, we respect their explicit choice for Expert.
-		}
-	}
-
-	if cfg.Scaling != nil {
-		if spec.Scaling == nil {
-			spec.Scaling = cfg.Scaling.DeepCopy()
-		}
-	}
-
-	if cfg.Template != nil {
-		mergePodSpec(&spec.Template.Spec, &cfg.Template.Spec)
-	}
-
-	if cfg.VLLMDefaults != nil {
-		// Apply defaults to the primary container (index 0)
-		if len(spec.Template.Spec.Containers) > 0 {
-			c := &spec.Template.Spec.Containers[0]
-			if cfg.VLLMDefaults.Image != "" && c.Image == "" {
-				c.Image = cfg.VLLMDefaults.Image
-			}
-			if len(cfg.VLLMDefaults.Args) > 0 {
-				// Only append args that aren't already present
-				for _, arg := range cfg.VLLMDefaults.Args {
-					found := false
-					conflicted := false
-
-					for _, existing := range c.Args {
-						if existing == arg {
-							found = true
-							break
-						}
-						// Specific logic for A/B testing: suppress --enable if --disable is present
-						if arg == "--enable-turboquant" && existing == "--disable-turboquant" {
-							conflicted = true
-							break
-						}
-					}
-					if !found && !conflicted {
-						c.Args = append(c.Args, arg)
-					}
-				}
-			}
-			if cfg.VLLMDefaults.Resources != nil {
-				mergeResources(&c.Resources, cfg.VLLMDefaults.Resources)
-			}
-			// Handle an explicitly configured TurboQuant extension.
-			if cfg.VLLMDefaults.EnableTurboQuant {
-				// Only inject if not already overridden by user
-				found := false
-				for _, e := range c.Env {
-					if e.Name == "VLLM_TURBOQUANT" {
-						found = true
-						break
-					}
-				}
-				if !found {
-					c.Env = append(c.Env, corev1.EnvVar{Name: "VLLM_TURBOQUANT", Value: "true"})
-				}
-			}
-			// Inject request IDs for the vLLM v0.24.0 Rust frontend.
-			{
-				found := false
-				for _, a := range c.Args {
-					if a == "--enable-request-id-headers" {
-						found = true
-						break
-					}
-				}
-				if !found {
-					c.Args = append(c.Args, "--enable-request-id-headers")
-				}
-			}
-		}
-	}
-}
-
-// MergeConfigs merges two configuration specs. base is updated with values from override.
-func (r *LLMInferenceServiceReconciler) MergeConfigs(base, override *servingv1alpha2.LLMInferenceServiceConfigSpec) {
-	if override == nil {
-		return
-	}
-
-	if override.Template != nil {
-		if base.Template == nil {
-			base.Template = override.Template.DeepCopy()
-		} else {
-			mergePodSpec(&base.Template.Spec, &override.Template.Spec)
-		}
-	}
-
-	if override.VLLMDefaults != nil {
-		if base.VLLMDefaults == nil {
-			base.VLLMDefaults = override.VLLMDefaults.DeepCopy()
-		} else {
-			if override.VLLMDefaults.Image != "" {
-				base.VLLMDefaults.Image = override.VLLMDefaults.Image
-			}
-			if len(override.VLLMDefaults.Args) > 0 {
-				base.VLLMDefaults.Args = append(base.VLLMDefaults.Args, override.VLLMDefaults.Args...)
-			}
-			if override.VLLMDefaults.EnableTurboQuant {
-				base.VLLMDefaults.EnableTurboQuant = true
-			}
-			if override.VLLMDefaults.TurboQuantMetadataPath != "" {
-				base.VLLMDefaults.TurboQuantMetadataPath = override.VLLMDefaults.TurboQuantMetadataPath
-			}
-			if override.VLLMDefaults.Resources != nil {
-				if base.VLLMDefaults.Resources == nil {
-					base.VLLMDefaults.Resources = override.VLLMDefaults.Resources.DeepCopy()
-				} else {
-					mergeResources(base.VLLMDefaults.Resources, override.VLLMDefaults.Resources)
-				}
-			}
-		}
-	}
 }
 
 func mergePodSpec(base, override *corev1.PodSpec) {

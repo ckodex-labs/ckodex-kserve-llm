@@ -161,6 +161,7 @@ hosted path for published artifacts and provenance.
 | Verify releases | [Release Verification](docs/release-verification.md) |
 | Review beta scope and gates | [Beta Contract](docs/beta/README.md) |
 | Follow the local-first execution plan | [Serving Plan](docs/roadmap/local-first-serving-plan.md) |
+| Assess Kueue and multi-user stability | [Kueue Assessment](docs/roadmap/kueue-multi-user-stability.md) |
 | Inspect component versions | [Component Inventory](COMPONENTS.md) |
 | Add a new inference engine | [Engine Contract](docs/engine-contract.md) |
 | Track planned remediation | [Remediation Plan](docs/remediation-plan.md) |

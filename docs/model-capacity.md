@@ -23,8 +23,9 @@ deployment:
   expert parallelism.
 - `LocalModelCache` supports node-local model prewarm, `modelSize`, and
   `maxCacheSize`.
-- `TenantQuotaReconciler` enforces per-tenant GPU, CPU, memory, and
-  service-count limits.
+- `TenantQuotaReconciler` enforces GPU, CPU, memory, and service-count limits per
+  labelled tenant namespace. It does not aggregate usage across multiple
+  namespaces sharing one tenant ID.
 
 That means the schema can represent frontier-model placement and sizing.
 
@@ -35,8 +36,8 @@ docs:
 
 - `local/04-llm-inference-service.yaml` uses a single replica and an 8 GiB
   container memory limit.
-- `DefaultTenantQuota()` caps a tenant at 5 LLM services, 8 GPUs, 64 CPU, and
-  256 GiB memory.
+- `DefaultTenantQuota()` caps each labelled tenant namespace at 5 LLM services,
+  8 GPUs, 64 CPU, and 256 GiB memory.
 - `LimitRange` sets a per-container maximum of 32 CPU and 128 GiB memory.
 - `LocalModelCache.ModelSizeQuantity()` defaults to 20 GiB when `modelSize` is
   omitted.

@@ -23,10 +23,10 @@
           <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm">
             View repository
           </a>
-          <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.8">
+          <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.5">
             Latest release
           </a>
-          <a class="button button--secondary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.6">
+          <a class="button button--secondary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7">
             Latest release candidate
           </a>
           <a class="button button--secondary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/overview.md">
@@ -64,18 +64,18 @@
       <section class="release" aria-label="Current release">
         <div>
           <p class="eyebrow">Current public release</p>
-          <h2>v0.18.0-beta.8</h2>
+          <h2>v0.18.0-beta.5</h2>
           <p>
-            The current GitHub release is marked Latest and publishes binaries,
-            checksums, Sigstore metadata, container image provenance, binary
-            provenance, SBOM output, and the Helm chart package.
+            The current stable GitHub release is marked Latest and publishes
+            binaries, checksums, Sigstore metadata, container image provenance,
+            binary provenance, SBOM output, and the Helm chart package.
           </p>
           <p>
             Published candidate:
-            <a href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.6">v0.18.0-rc.6</a>
+            <a href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7">v0.18.0-rc.7</a>
             (prerelease; GitHub does not mark prereleases as Latest). Its hosted
             release workflow passed at
-            <a href="https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/31348471363">run 31348471363</a>.
+            <a href="https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052">run 33457020052</a>.
           </p>
         </div>
         <dl class="release__facts">
@@ -93,7 +93,7 @@
           </div>
           <div>
             <dt>Release page</dt>
-            <dd><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.8">open</a></dd>
+            <dd><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.5">open</a></dd>
           </div>
         </dl>
       </section>
@@ -104,13 +104,15 @@
           <li><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/getting-started.md">Getting started</a></li>
           <li><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/overview.md">Big picture</a></li>
           <li><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/release-verification.md">Release verification</a></li>
+          <li><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/docs/runbooks/glm5-next-tiny.md">Tiny GLM fixture</a></li>
           <li><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/blob/main/SECURITY.md">Security</a></li>
         </ul>
       </section>
 
       <section class="code-block">
         <h2>Quick proof commands</h2>
-        <pre><code>TAG=v0.18.0-beta.8
+        <pre><code>TAG=v0.18.0-rc.7
 helm pull oci://ghcr.io/ckodex-labs/charts/ckodex-kserve-llm-operator --version "${TAG#v}"
 gh release download "$TAG" --repo ckodex-labs/ckodex-kserve-llm --dir release-assets
 (cd release-assets && sha256sum -c checksums.txt)</code></pre>

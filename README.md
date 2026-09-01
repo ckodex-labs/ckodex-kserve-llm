@@ -51,6 +51,11 @@ dependencies, builds the operator and storage initializer, applies a
 CPU-sized GPT-2 completion fixture, and probes `/v1/completions` through the
 managed Gateway path.
 
+For a small-machine `glm5_next` architecture fixture, run the
+[tiny GLM preflight and runbook](docs/runbooks/glm5-next-tiny.md). The fixture
+is pinned for configuration and CPU-forward testing; it is not a quality,
+NVFP4, GPU, or production-serving claim.
+
 Inspect the result:
 
 ```bash
@@ -148,6 +153,7 @@ hosted path for published artifacts and provenance.
 |---|---|
 | Understand the product | [Big Picture](docs/overview.md) |
 | Run a local deployment | [Getting Started](docs/getting-started.md) |
+| Test the tiny GLM architecture fixture | [GLM-5.3-Flash Tiny](docs/runbooks/glm5-next-tiny.md) |
 | Onboard or promote a model | [Model Onboarding](docs/onboarding-guide.md) |
 | Plan model capacity | [Model Capacity](docs/model-capacity.md) |
 | Configure tenants | [Tenant Onboarding](docs/tenant-onboarding.md) |
@@ -161,7 +167,9 @@ hosted path for published artifacts and provenance.
 
 ## Project Status
 
-- Chart metadata: `v0.18.0-beta.8`
+- Latest published release candidate: [`v0.18.0-rc.7`](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7)
+- Release workflow: [passed](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052)
+- Source chart defaults: `v0.18.0-beta.8`; tag-driven packaging injects the release version and image tags
 - Core LLM API: stable `serving.ckodex.com/v1`
 - Specialized APIs: `serving.ckodex.com/v1alpha2` where no v1 CRD exists
 - Core model-serving path: enabled
@@ -169,6 +177,8 @@ hosted path for published artifacts and provenance.
   required for beta promotion
 - Experimental agent controllers: disabled by default
 - Security and admission integrations: opt-in and dependency-sensitive
+- Tiny `glm5_next` fixture: local CPU configuration and generation evidence;
+  full GLM-5.3 and NVFP4 serving remain unverified
 
 Do not infer API stability from the number of available CRDs. Check feature
 gates, controller registration, and the relevant runbook before adopting an

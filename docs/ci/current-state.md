@@ -1,6 +1,6 @@
 # CI/CD Current State — ckodex-kserve-llm-operator
 
-Last updated: 2026-08-27
+Last updated: 2026-09-01
 
 ---
 
@@ -13,12 +13,15 @@ The CI/CD pipeline has one implementation:
 | Dagger module (current GHA) | `dagger call <func>` | Generated Dagger Module SDK (`dag` global) | Active |
 
 The CI implementation is active, but beta acceptance is not fully closed.
-**C — hosted evidence:** CI run [33006888854](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33006888854)
-passed on main commit `c3f6b83d932ca0779339e73df67b8866e0157806`.
+**C — hosted evidence:** CI run [33455614072](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33455614072)
+passed on merge commit `eccb4d71d0229fad6abb7740738af16926e466ac`.
 **C — hosted failure:** Nightly run [33081386331](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33081386331)
 failed on the same commit during kubeadm bootstrap. **S — acceptance pending:**
-the aligned KIND contract, tagged release, runtime, and provenance paths need
-hosted runs on their committed exact heads. See [the evidence record](hosted-exact-head-2026-08-28.md).
+**C — release evidence:** tagged release [v0.18.0-rc.7](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7)
+passed verification, publication, provenance, chart packaging, and anonymous
+artifact acceptance in [run 33457020052](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052).
+**S — runtime acceptance pending:** the Nightly KIND and live model-profile gates
+remain separate from release publication. See [the evidence record](hosted-exact-head-2026-08-28.md).
 
 ---
 

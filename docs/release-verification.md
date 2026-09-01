@@ -27,7 +27,7 @@ The summary artifact is written to `bin/release-readiness.json`.
 
 ## Hosted Release Contract
 
-On a real tag such as `v0.18.0-rc.6`, GitHub Actions is expected to:
+On a real tag such as `v0.18.0-rc.7`, GitHub Actions is expected to:
 
 1. build and push container images through the Dagger release pipeline,
 2. build and push a signed multi-architecture standalone console image,
@@ -46,30 +46,28 @@ Local green checks are not enough to claim public release readiness unless that 
 
 ## Current Stable Release and Published Candidate
 
-The latest stable beta release is `v0.18.0-beta.8`.
+The latest stable beta release is `v0.18.0-beta.5`.
 
-- GitHub release: <https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.8>
+- GitHub release: <https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.5>
 - Source commit: `634a79b7fb91f2fbf95cb5fe17caf9061b0998aa`
 - Hosted release run: <https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/28995564785>
 - Published assets include manager archives, storage-initializer archives, `checksums.txt`, `checksums.txt.sigstore.json`, binary provenance, image provenance, container image signature, SBOM output, and the Helm chart package.
 
-The latest published release candidate is `v0.18.0-rc.6`. It is a GitHub
+The latest published release candidate is `v0.18.0-rc.7`. It is a GitHub
 prerelease, so GitHub intentionally does not mark it as **Latest**; that label
-belongs to the stable beta above. RC6 is nevertheless published and its hosted
-release workflow completed successfully.
+belongs to the stable beta above. RC7 is published and its hosted release
+workflow completed successfully, including anonymous artifact acceptance.
 
-- GitHub release: <https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.6>
-- Source commit: `4b596ef490c3bdf241ac478a9b29792bbdac4bfd`
-- Hosted release run: <https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/31348471363>
-- Published assets include checksums and Sigstore metadata, the beta CRD bundle,
-  manager and storage-initializer archives, and SLSA provenance.
+- GitHub release: <https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7>
+- Source commit: `eccb4d71d0229fad6abb7740738af16926e466ac`
+- Hosted release run: <https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052>
+- Published assets include checksums and Sigstore metadata, the CRD bundle,
+  manager and storage-initializer archives, console and operator images, and
+  SLSA provenance.
 
-The RC6 chart also explains why the candidate could look inconsistent after
-publication: its OCI digest is `sha256:f3794c02e29d27e7d17c80a49d942399c46a1fe60ab8043f0dcd525f04dc4da9`,
-its chart `appVersion` is `0.18.0-rc.6`, but its default operator and initializer
-image values still reference `v0.18.0-beta.8`. The next release path now renders
-the packaged chart and fails unless all release-owned images use the candidate
-tag.
+The RC7 release path rendered the packaged chart with the candidate version and
+verified that release-owned images resolve to the candidate tag before anonymous
+artifact acceptance.
 
 ## Downstream Verification Commands
 

@@ -160,6 +160,7 @@ hosted path for published artifacts and provenance.
 | Review security controls | [Security Architecture](docs/SECURITY_ARCHITECTURE.md) |
 | Verify releases | [Release Verification](docs/release-verification.md) |
 | Review beta scope and gates | [Beta Contract](docs/beta/README.md) |
+| Follow the local-first execution plan | [Serving Plan](docs/roadmap/local-first-serving-plan.md) |
 | Inspect component versions | [Component Inventory](COMPONENTS.md) |
 | Add a new inference engine | [Engine Contract](docs/engine-contract.md) |
 | Track planned remediation | [Remediation Plan](docs/remediation-plan.md) |

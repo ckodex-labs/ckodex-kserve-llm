@@ -69,6 +69,11 @@ implementation. Status, events, metrics, and evidence are the feedback.
 
 ## What Is Available Today
 
+The items below describe implemented control-plane surfaces. A surface being
+implemented does not by itself mean that every runtime profile, dependency,
+authentication boundary, or promotion gate has passed acceptance; see
+[the beta readiness ledger](beta/readiness-ledger.md) for that distinction.
+
 ### Core Runtime
 
 - `LLMInferenceService` manages model-serving desired state.

@@ -12,7 +12,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-CI-001 — Migrate GHA workflows to `dagger call`
 
-- **Status:** in-progress
+- **Status:** done
 - **Priority:** P2
 - **Context:** Both workflows migrated (2026-06-14):
   - `ci.yml`: replaced `go run ./ci/main.go` with Dagger hosted fast gate (`dagger call all --source=.`: lint + non-release compile check) and vulnerability scan. Coverage remains available via `dagger call coverage --source=.` outside the hosted fast path.
@@ -22,7 +22,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-CI-002 — Retire `ci/main.go` standalone path
 
-- **Status:** in-progress
+- **Status:** done
 - **Priority:** P3
 - **Context:** Removed `ci/main.go`, `ci/pkg/`, and the root standalone Dagger
   SDK dependency on 2026-07-04. The typed Dagger Module is now the only CI
@@ -31,7 +31,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-CI-003 — Add `dagger call lula` for OSCAL validation
 
-- **Status:** in-progress
+- **Status:** done
 - **Priority:** P2
 - **Context:** `dagger/module.go:Lula` added (2026-06-13). Downloads binary,
   verifies checksum via sha256sum, runs `lula validate`, returns assessment file.
@@ -93,9 +93,9 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-REL-004 — Align packaged chart defaults with the release tag
 
-- **Status:** in-progress
+- **Status:** done
 - **Priority:** P0
-- **Context:** RC6 was published, but its OCI chart (`sha256:f3794c02e29d27e7d17c80a49d942399c46a1fe60ab8043f0dcd525f04dc4da9`) retained beta8 defaults for the operator and Hugging Face initializer. Empty chart tags now resolve from `Chart.appVersion`, the release workflow passes the leading `v` into the packaged app version, and both release-readiness and hosted packaging render the archive before push.
+- **Context:** RC6 was published, but its OCI chart (`sha256:f3794c02e29d27e7d17c80a49d942399c46a1fe60ab8043f0dcd525f04dc4da9`) retained beta8 defaults for the operator and Hugging Face initializer. Empty chart tags now resolve from `Chart.appVersion`, the release workflow passes the leading `v` into the packaged app version, and both release-readiness and hosted packaging render the archive before push. RC7 release run [33457020052](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052) passed the packaged-chart and anonymous-artifact checks.
 - **Reference:** `deploy/helm/values.yaml`, `deploy/helm/templates/_helpers.tpl`, `.github/workflows/release.yml`, `hack/helm-contract/main.go`
 
 ### L-REL-005 — Pin the disposable KIND node image
@@ -465,12 +465,14 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-CI-005 — Prove the hosted unit-test gate
 
-- **Status:** in-progress
+- **Status:** done
 - **Priority:** P0
 - **Context:** `ci.yml` invokes the race-enabled Dagger test gate. Coverage is
   calculated from covered statements rather than averaged function
-  percentages, and every governed package family has an 80% floor. Local
-  non-Dagger gates are green; Dagger and hosted exact-head evidence remain open.
+  percentages, and every governed package family has an 80% floor. The RC7
+  hosted release verification [33457020052](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052)
+  passed the exact-head test and coverage gates. This closes the CI gate only;
+  it does not close live KIND or GPU acceptance.
 - **Reference:** `.github/workflows/ci.yml`, `dagger/policy.go`
 
 ### L-CI-006 — Lint excludes tests and the injection rule families

@@ -15,7 +15,7 @@ runtime loop, resource map, and current product boundaries in one place.
 
 | User | What they provide | What they receive |
 |---|---|---|
-| Model scientist | Model URI, model name, runtime resources, acceptance criteria | A reachable inference service with status and metrics |
+| Model scientist | Model URI, model name, runtime resources, acceptance criteria | A declared inference service with status and metrics |
 | Platform developer | Kubernetes, storage, Gateway API, compute, policy, observability | A repeatable control plane for model-serving workloads |
 | Security reviewer | Identity, network, and evidence requirements | Inspectable resources, conditions, OSCAL results, and release artifacts |
 
@@ -170,9 +170,11 @@ hosted path for published artifacts and provenance.
 - Latest published release candidate: [`v0.18.0-rc.7`](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7)
 - Release workflow: [passed](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052)
 - Source chart defaults: `v0.18.0-beta.8`; tag-driven packaging injects the release version and image tags
-- Core LLM API: stable `serving.ckodex.com/v1`
+- Core LLM API schema: stable `serving.ckodex.com/v1`; live v1 admission and
+  conversion acceptance remain tracked separately
 - Specialized APIs: `serving.ckodex.com/v1alpha2` where no v1 CRD exists
-- Core model-serving path: enabled
+- Core model-serving control plane: implemented; live runtime acceptance remains
+  profile-specific and partially open
 - Observe-only console: opt-in chart profile; release image and provenance are
   required for beta promotion
 - Experimental agent controllers: disabled by default

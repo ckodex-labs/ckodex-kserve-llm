@@ -92,9 +92,9 @@ Tag push (v*)
 
 | Tool | Version | Source |
 |------|---------|--------|
-| Go | `go.mod` (1.27.0) | go.mod |
+| Go | `go.mod` (`go 1.26.0`, `toolchain go1.26.7`) | go.mod |
 | Dagger CLI | v0.21.9 | installed |
-| golangci-lint | v2.13.1 (source-built with Go 1.27) | `dagger/constants.go`, `dagger/bases.go` |
+| golangci-lint | v2.13.1 (source-built in the Go 1.27 Dagger builder) | `dagger/constants.go`, `dagger/bases.go` |
 | Trivy | 0.72.0 | `dagger/constants.go` |
 | Cosign | v3.1.3 | `dagger/constants.go` |
 | Lula | v0.16.0 | `dagger/module.go` |

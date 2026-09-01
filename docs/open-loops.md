@@ -485,9 +485,9 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 - **Status:** done
 - **Priority:** P2
-- **Context:** `go.mod` uses the `go 1.27` language directive plus an explicit
-  `toolchain go1.27.0` pin; the Makefile, Dagger module, and release workflow
-  build the pinned linter with that toolchain.
+- **Context:** `go.mod` uses the `go 1.26.0` language directive plus an explicit
+  `toolchain go1.26.7` pin so Dagger v0.21.9's type-definition generator and the
+  hosted release workflow share a supported toolchain contract.
 - **Reference:** `go.mod`
 
 ### L-CI-008 — No surface-conformance gate

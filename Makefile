@@ -200,10 +200,6 @@ console-check: ## CI-visible console production gate
 crd-bundle: manifests ## Build a checksummed, installable CRD release bundle
 	bash hack/crd-bundle.sh
 
-.PHONY: crd-bundle
-crd-bundle: manifests ## Build a checksummed, installable CRD release bundle
-	bash hack/crd-bundle.sh
-
 .PHONY: release-readiness
 release-readiness: ## Rehearse local release artifacts and fail on hidden repo mutations
 	bash hack/release-readiness.sh

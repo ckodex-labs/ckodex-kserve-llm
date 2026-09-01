@@ -135,6 +135,10 @@ dependencies. Review `deploy/helm/values.yaml` before use.
 For a concrete public-model smoke test, gated-repository credentials, and the
 optional CSI/FUSE path, follow [Hugging Face: First Model](huggingface.md).
 
+For a small-machine `glm5_next` architecture fixture, use the [GLM-5.3-Flash
+Tiny runbook](runbooks/glm5-next-tiny.md). It validates runtime and operator
+wiring only; it does not validate the full model's quality or NVFP4 execution.
+
 ## Repository Verification
 
 ```bash

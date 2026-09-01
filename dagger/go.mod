@@ -2,7 +2,7 @@
 // After generation, `dagger call lint`, `dagger call test`, etc. work.
 module dagger/ckodex-operator
 
-go 1.27.0
+go 1.26.7
 
 require (
 	github.com/Khan/genqlient v0.8.1

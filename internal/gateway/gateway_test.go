@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
@@ -74,6 +75,7 @@ func TestBuildHTTPRoute_BackendRef(t *testing.T) {
 func TestBuildHTTPRoute_SchedulerUsesInferencePool(t *testing.T) {
 	llmSvc := baseLLMSvc("scheduled")
 	llmSvc.Spec.Router.Scheduler = &servingv1alpha2.SchedulerSpec{}
+	markSchedulerReady(t, llmSvc)
 	route := BuildHTTPRoute(llmSvc, nil)
 	ref := route.Spec.Rules[0].BackendRefs[0].BackendObjectReference
 	if ref.Group == nil || string(*ref.Group) != "inference.networking.k8s.io" {
@@ -84,6 +86,51 @@ func TestBuildHTTPRoute_SchedulerUsesInferencePool(t *testing.T) {
 	}
 	if ref.Port == nil || *ref.Port != 8000 {
 		t.Fatalf("backend port = %v", ref.Port)
+	}
+}
+
+// TestBuildHTTPRoute_SchedulerNotReady_FallsBackToService reproduces the rc.7
+// incident: when Router.Scheduler is configured but the SchedulerReady
+// condition is False (EPP/InferencePool unavailable), the HTTPRoute must fall
+// back to direct Service routing instead of pointing at a nonexistent
+// InferencePool backend.
+func TestBuildHTTPRoute_SchedulerNotReady_FallsBackToService(t *testing.T) {
+	llmSvc := baseLLMSvc("scheduled")
+	llmSvc.Spec.Router.Scheduler = &servingv1alpha2.SchedulerSpec{}
+	meta.SetStatusCondition(&llmSvc.Status.Conditions, metav1.Condition{
+		Type:   servingv1alpha2.ConditionSchedulerReady,
+		Status: metav1.ConditionFalse,
+		Reason: "SchedulerReconcileFailed",
+	})
+	route := BuildHTTPRoute(llmSvc, nil)
+	ref := route.Spec.Rules[0].BackendRefs[0].BackendObjectReference
+	if ref.Group != nil {
+		t.Fatalf("backend group = %v, want nil (direct Service)", *ref.Group)
+	}
+	if ref.Kind != nil {
+		t.Fatalf("backend kind = %v, want nil (direct Service)", *ref.Kind)
+	}
+	if string(ref.Name) != "scheduled" {
+		t.Fatalf("backend name = %q, want %q (direct Service)", ref.Name, "scheduled")
+	}
+	if ref.Port == nil || *ref.Port != 80 {
+		t.Fatalf("backend port = %v, want 80 (direct Service)", ref.Port)
+	}
+}
+
+// TestBuildHTTPRoute_SchedulerNoCondition_FallsBackToService verifies that a
+// scheduler configured with no status condition (never reconciled) also falls
+// back to direct Service routing.
+func TestBuildHTTPRoute_SchedulerNoCondition_FallsBackToService(t *testing.T) {
+	llmSvc := baseLLMSvc("scheduled")
+	llmSvc.Spec.Router.Scheduler = &servingv1alpha2.SchedulerSpec{}
+	route := BuildHTTPRoute(llmSvc, nil)
+	ref := route.Spec.Rules[0].BackendRefs[0].BackendObjectReference
+	if ref.Group != nil {
+		t.Fatalf("backend group = %v, want nil (direct Service)", *ref.Group)
+	}
+	if ref.Port == nil || *ref.Port != 80 {
+		t.Fatalf("backend port = %v, want 80 (direct Service)", ref.Port)
 	}
 }
 
@@ -226,6 +273,15 @@ func TestCommonLabels(t *testing.T) {
 }
 
 // --- helpers ---
+
+func markSchedulerReady(t *testing.T, llmSvc *servingv1alpha2.LLMInferenceService) {
+	t.Helper()
+	meta.SetStatusCondition(&llmSvc.Status.Conditions, metav1.Condition{
+		Type:   servingv1alpha2.ConditionSchedulerReady,
+		Status: metav1.ConditionTrue,
+		Reason: "EndpointPickerReady",
+	})
+}
 
 func baseLLMSvc(name string) *servingv1alpha2.LLMInferenceService {
 	return &servingv1alpha2.LLMInferenceService{

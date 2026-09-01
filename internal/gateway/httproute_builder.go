@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -29,7 +30,7 @@ func BuildHTTPRoute(llmSvc *servingv1alpha2.LLMInferenceService, adapters []serv
 	svcPort := gwapiv1.PortNumber(80)
 	var backendGroup *gwapiv1.Group
 	var backendKind *gwapiv1.Kind
-	if llmSvc.Spec.Router.Scheduler != nil {
+	if llmSvc.Spec.Router.Scheduler != nil && schedulerReady(llmSvc) {
 		group := gwapiv1.Group("inference.networking.k8s.io")
 		kind := gwapiv1.Kind("InferencePool")
 		backendGroup = &group
@@ -346,3 +347,16 @@ func BuildRerankerHTTPRoute(svc *servingv1alpha2.RerankerInferenceService, paren
 }
 
 func strPtr(s string) *string { return &s }
+
+// schedulerReady reports whether the SchedulerReady condition on the
+// LLMInferenceService is True. BuildHTTPRoute uses this to avoid pointing the
+// HTTPRoute at an InferencePool backend when the scheduler/EPP is not ready or
+// has failed reconciliation. When this returns false, the route falls back to
+// direct Service routing, which prevents 500s from a nonexistent backend.
+func schedulerReady(llmSvc *servingv1alpha2.LLMInferenceService) bool {
+	cond := meta.FindStatusCondition(llmSvc.Status.Conditions, servingv1alpha2.ConditionSchedulerReady)
+	if cond == nil {
+		return false
+	}
+	return cond.Status == metav1.ConditionTrue
+}

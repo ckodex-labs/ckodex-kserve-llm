@@ -82,13 +82,6 @@ ENV HOME=/tmp \
 USER 65532:65532
 ENTRYPOINT ["/huggingface-initializer"]
 
-# Runtime stage — distroless for minimal attack surface
-FROM gcr.io/distroless/static:nonroot AS manager
-WORKDIR /
-COPY --from=builder /workspace/manager .
-USER 65532:65532
-ENTRYPOINT ["/manager"]
-
 # Storage Initializer stage
 FROM gcr.io/distroless/static:nonroot AS storage-initializer
 WORKDIR /
@@ -96,3 +89,13 @@ COPY --from=builder /workspace/storage-initializer .
 COPY --from=cosign /ko-app/cosign /cosign
 USER 65532:65532
 ENTRYPOINT ["/storage-initializer"]
+
+# Runtime stage — distroless for minimal attack surface.
+# This is the final stage so that `docker build` without --target produces the
+# manager image expected by the Helm chart. The storage-initializer and
+# huggingface-initializer images are built with explicit --target flags.
+FROM gcr.io/distroless/static:nonroot AS manager
+WORKDIR /
+COPY --from=builder /workspace/manager .
+USER 65532:65532
+ENTRYPOINT ["/manager"]

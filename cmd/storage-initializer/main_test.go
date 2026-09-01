@@ -22,6 +22,17 @@ func TestAssessProvenance_FindsArtifacts(t *testing.T) {
 	assert.False(t, assessment.CryptographicallyVerified)
 }
 
+func TestAssessProvenance_AllowsNonOCIContentWithoutPromotionProof(t *testing.T) {
+	tempDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "config.json"), []byte("{}"), 0o600))
+
+	assessment, err := assessProvenance("hf://org/model", "hf", tempDir, verifierConfig{})
+	require.NoError(t, err)
+	assert.False(t, assessment.Record.Verified(), "non-OCI content must not become promotion-verified")
+	assert.True(t, assessment.Record.ContentIntegrityVerified)
+	assert.NotEmpty(t, assessment.Record.ContentDigest)
+}
+
 func TestAssessProvenance_FailsWhenOfflineKeyMissing(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -119,4 +130,46 @@ func TestLoadCachedRuntimeVerificationRecord(t *testing.T) {
 	encodedLoaded, err := json.Marshal(loaded)
 	require.NoError(t, err)
 	assert.JSONEq(t, string(encodedExpected), string(encodedLoaded))
+}
+
+func TestPrepareStagingDirectoryRecoversOwnedDownload(t *testing.T) {
+	destination := t.TempDir()
+	staging, _, err := prepareStagingDirectory(destination, "hf://org/model")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(staging, "partial.bin"), []byte("incomplete"), 0o600))
+
+	recovered, cleanup, err := prepareStagingDirectory(destination, "hf://org/model")
+	require.NoError(t, err)
+	defer cleanup()
+	assert.Equal(t, filepath.Join(destination, stagingDirectory), recovered)
+	_, err = os.Stat(filepath.Join(recovered, "partial.bin"))
+	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestPrepareStagingDirectoryRefusesForeignTransaction(t *testing.T) {
+	destination := t.TempDir()
+	staging := filepath.Join(destination, stagingDirectory)
+	require.NoError(t, os.Mkdir(staging, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(staging, "partial.bin"), []byte("foreign"), 0o600))
+
+	_, _, err := prepareStagingDirectory(destination, "hf://org/model")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unrecognized staging transaction")
+}
+
+func TestCommitStagingDirectoryMovesPayloadAfterVerification(t *testing.T) {
+	destination := t.TempDir()
+	staging, cleanup, err := prepareStagingDirectory(destination, "hf://org/model")
+	require.NoError(t, err)
+	defer cleanup()
+	require.NoError(t, os.WriteFile(filepath.Join(staging, "config.json"), []byte("{}"), 0o600))
+
+	require.NoError(t, commitStagingDirectory(staging, destination, "hf://org/model"))
+	content, err := os.ReadFile(filepath.Join(destination, "config.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "{}", string(content))
+	state, err := loadStagingState(staging)
+	require.NoError(t, err)
+	assert.Equal(t, "committing", state.Phase)
+	assert.Equal(t, []string{"config.json"}, state.Files)
 }

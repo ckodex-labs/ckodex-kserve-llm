@@ -11,11 +11,13 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -67,7 +69,7 @@ func eppArgs(llmSvc *servingv1alpha2.LLMInferenceService) []string {
 		"--pool-name=" + llmSvc.Name, "--pool-namespace=" + llmSvc.Namespace,
 		"--pool-group=inference.networking.k8s.io", "--config-file=/config/scheduler.yaml",
 		fmt.Sprintf("--grpc-port=%d", EPPPort), fmt.Sprintf("--metrics-port=%d", EPPMetricsPort),
-		fmt.Sprintf("--grpc-health-port=%d", EPPHealthPort), "--secure-serving=false",
+		fmt.Sprintf("--grpc-health-port=%d", EPPHealthPort), "--secure-serving",
 		"--metrics-endpoint-auth=false", "--tracing=false",
 	}
 }
@@ -106,10 +108,14 @@ func (m *EPPManager) createOrUpdateDeployment(ctx context.Context, llmSvc *servi
 		}
 		return err
 	}
+	original := existing.DeepCopy()
 	if err := controllerutil.SetControllerReference(llmSvc, &existing, m.Scheme); err != nil {
 		return fmt.Errorf("set existing epp deployment owner reference: %w", err)
 	}
 	existing.Labels = desired.Labels
 	existing.Spec = desired.Spec
-	return m.Update(ctx, &existing)
+	if apiequality.Semantic.DeepEqual(&existing, original) {
+		return nil
+	}
+	return m.Patch(ctx, &existing, client.MergeFrom(original))
 }

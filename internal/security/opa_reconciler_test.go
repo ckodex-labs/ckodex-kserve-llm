@@ -31,13 +31,14 @@ func TestDefaultOPAConfig_MaxReplicas(t *testing.T) {
 
 func TestDefaultOPAConfig_AllowedRegistries_Count(t *testing.T) {
 	cfg := DefaultOPAConfig()
-	assert.Len(t, cfg.AllowedRegistries, 4)
+	assert.Len(t, cfg.AllowedRegistries, 5)
 }
 
 func TestDefaultOPAConfig_AllowedRegistries_Values(t *testing.T) {
 	cfg := DefaultOPAConfig()
 	assert.Contains(t, cfg.AllowedRegistries, "ghcr.io/ckodex/")
 	assert.Contains(t, cfg.AllowedRegistries, "vllm/")
+	assert.Contains(t, cfg.AllowedRegistries, "lmsysorg/")
 	assert.Contains(t, cfg.AllowedRegistries, "kserve/")
 	assert.Contains(t, cfg.AllowedRegistries, "gcr.io/distroless/")
 }

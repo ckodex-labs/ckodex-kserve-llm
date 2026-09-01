@@ -107,17 +107,17 @@ func TestCircuitBreaker_Open_AllowsAfterTimeout(t *testing.T) {
 
 	time.Sleep(5 * time.Millisecond) // well past 1ms timeout
 	assert.True(t, cb.Allow(), "circuit must allow probe after timeout elapses (half-open probe)")
+	assert.Equal(t, StateHalfOpen, cb.State(), "timeout must transition the circuit to half-open")
+	assert.False(t, cb.Allow(), "only one half-open probe may run at a time")
 }
 
 // ---- CircuitBreaker — recovery (half-open → closed) ------------------------
 
 func TestCircuitBreaker_RecoverToClosedOnSuccessThreshold(t *testing.T) {
-	// Allow() signals half-open readiness but leaves state at StateOpen;
-	// RecordSuccess closes only when state is explicitly StateHalfOpen.
-	// Directly set StateHalfOpen (white-box) to test the close transition.
 	cb := NewCircuitBreaker(CircuitBreakerConfig{FailureThreshold: 1, SuccessThreshold: 2, Timeout: 30 * time.Second})
 	cb.mu.Lock()
 	cb.state = StateHalfOpen
+	cb.halfOpenProbe = true
 	cb.mu.Unlock()
 
 	cb.RecordSuccess()
@@ -125,6 +125,17 @@ func TestCircuitBreaker_RecoverToClosedOnSuccessThreshold(t *testing.T) {
 
 	cb.RecordSuccess()
 	assert.Equal(t, StateClosed, cb.State(), "must close after success threshold")
+}
+
+func TestCircuitBreaker_HalfOpenFailureReopens(t *testing.T) {
+	cb := NewCircuitBreaker(CircuitBreakerConfig{FailureThreshold: 1, SuccessThreshold: 1, Timeout: time.Second})
+	cb.mu.Lock()
+	cb.state = StateHalfOpen
+	cb.halfOpenProbe = true
+	cb.mu.Unlock()
+
+	cb.RecordFailure(context.Background())
+	assert.Equal(t, StateOpen, cb.State(), "a failed half-open probe must reopen the circuit")
 }
 
 func TestCircuitBreaker_RecordSuccess_InClosed_NoStateChange(t *testing.T) {

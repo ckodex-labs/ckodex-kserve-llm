@@ -29,7 +29,10 @@ type localModelCacheEntry struct {
 }
 
 func (r *LocalModelCacheReconciler) evictLRU(ctx context.Context, lmc *servingv1alpha2.LocalModelCache, statuses []servingv1alpha2.NodeCacheStatus) error {
-	maxQ, ok := lmc.Spec.MaxCacheSizeQuantity()
+	maxQ, ok, err := lmc.Spec.MaxCacheSizeQuantity()
+	if err != nil {
+		return err
+	}
 	if !ok {
 		return nil
 	}
@@ -95,6 +98,8 @@ func (r *LocalModelCacheReconciler) deleteCachePVC(ctx context.Context, namespac
 		if err := r.Delete(ctx, pvc); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("deleting evicted PVC %s: %w", name, err)
 		}
+	} else if !errors.IsNotFound(err) {
+		return fmt.Errorf("getting PVC %s for deletion: %w", name, err)
 	}
 	return nil
 }
@@ -106,6 +111,8 @@ func (r *LocalModelCacheReconciler) deleteCacheJob(ctx context.Context, namespac
 		if err := r.Delete(ctx, job, &client.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("deleting evicted Job %s: %w", name, err)
 		}
+	} else if !errors.IsNotFound(err) {
+		return fmt.Errorf("getting Job %s for deletion: %w", name, err)
 	}
 	return nil
 }

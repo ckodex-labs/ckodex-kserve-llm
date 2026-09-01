@@ -54,7 +54,7 @@ func (r *LLMInferenceServiceReconciler) reconcileGPUCapacity(ctx context.Context
 	totalGpus := deployment.GetClusterGPUCapacity(nodes)
 	ok, msg := deployment.CheckGPURequirements(llmSvc, totalGpus)
 	if !ok {
-		r.Recorder.Eventf(llmSvc, corev1.EventTypeWarning, "InsufficientGPUCapacity", msg)
+		r.Recorder.Eventf(llmSvc, corev1.EventTypeWarning, "InsufficientGPUCapacity", "%s", msg)
 		return r.StatusReconciler.SetCondition(ctx, llmSvc, "GPUCapacity", metav1.ConditionFalse, "InsufficientGPUs", msg)
 	}
 	return r.StatusReconciler.SetCondition(ctx, llmSvc, "GPUCapacity", metav1.ConditionTrue, "SufficientGPUs", "Cluster has enough GPU capacity")

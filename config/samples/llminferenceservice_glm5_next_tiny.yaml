@@ -1,0 +1,42 @@
+# Local development fixture only.
+# This checkpoint preserves the glm5_next component structure at reduced sizes;
+# it is not a quality-preserving GLM-5.3 model and is not an NVFP4 test.
+apiVersion: serving.ckodex.com/v1
+kind: LLMInferenceService
+metadata:
+  name: glm53-next-tiny
+  # The local KIND bootstrap watches default; use another namespace only after
+  # adding it to the operator's managedNamespaces configuration.
+  namespace: default
+  labels:
+    serving.ckodex.com/profile: local-architecture-fixture
+spec:
+  model:
+    name: inference-optimization/GLM-5.3-Flash-0.1B-A0.1B
+    uri: hf://inference-optimization/GLM-5.3-Flash-0.1B-A0.1B
+    revision: 8311399447eba9c9b215e3209ab6f25e59c7d21e
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: vllm
+          args:
+            - --max-model-len
+            - "2048"
+            - --max-num-seqs
+            - "1"
+          env:
+            - name: VLLM_CPU_KVCACHE_SPACE
+              value: "1"
+            - name: VLLM_CPU_OMP_THREADS_BIND
+              value: "0-2"
+            - name: OMP_NUM_THREADS
+              value: "3"
+          resources:
+            requests:
+              cpu: "2"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+  router: {}

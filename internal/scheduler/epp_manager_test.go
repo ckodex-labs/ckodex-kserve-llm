@@ -145,7 +145,8 @@ func TestReconcileDeployment_ContainsPoolArgs(t *testing.T) {
 	assert.Contains(t, args, "--pool-group=inference.networking.k8s.io")
 	assert.Contains(t, args, "--config-file=/config/scheduler.yaml")
 	assert.Contains(t, args, "--grpc-health-port=9003")
-	assert.Contains(t, args, "--secure-serving=false")
+	assert.Contains(t, args, "--secure-serving")
+	assert.NotContains(t, args, "--secure-serving=false")
 	assert.Equal(t, EPPHealthPort, dep.Spec.Template.Spec.Containers[0].ReadinessProbe.GRPC.Port)
 	require.Len(t, dep.Spec.Template.Spec.Volumes, 1)
 	assert.Equal(t, "mistral-scheduler-config", dep.Spec.Template.Spec.Volumes[0].ConfigMap.Name)
@@ -194,6 +195,8 @@ func TestReconcileService_CreatesService(t *testing.T) {
 	require.Len(t, service.Spec.Ports, 1)
 	assert.Equal(t, EPPPort, service.Spec.Ports[0].Port)
 	assert.Equal(t, "grpc", service.Spec.Ports[0].Name)
+	require.NotNil(t, service.Spec.Ports[0].AppProtocol)
+	assert.Equal(t, EPPAppProtocol, *service.Spec.Ports[0].AppProtocol)
 }
 
 func TestReconcileService_UpdatesExistingService(t *testing.T) {
@@ -212,6 +215,31 @@ func TestReconcileService_UpdatesExistingService(t *testing.T) {
 	require.NoError(t, m.Get(context.Background(),
 		types.NamespacedName{Name: "gemma-epp", Namespace: "staging"}, &service))
 	assert.Equal(t, EPPPort, service.Spec.Ports[0].Port)
+}
+
+func TestReconcileService_IsIdempotent(t *testing.T) {
+	scheme := eppScheme(t)
+	svc := eppSvc("gemma", "staging")
+
+	m := &EPPManager{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(svc).Build(),
+		Scheme: scheme,
+	}
+
+	require.NoError(t, m.reconcileService(context.Background(), svc))
+	var first corev1.Service
+	require.NoError(t, m.Get(context.Background(), types.NamespacedName{
+		Name: "gemma-epp", Namespace: "staging",
+	}, &first))
+
+	require.NoError(t, m.reconcileService(context.Background(), svc))
+	var second corev1.Service
+	require.NoError(t, m.Get(context.Background(), types.NamespacedName{
+		Name: "gemma-epp", Namespace: "staging",
+	}, &second))
+
+	assert.Equal(t, first.ResourceVersion, second.ResourceVersion,
+		"unchanged desired state must not issue another EPP Service write")
 }
 
 // ---- Reconcile (full dispatch) ---------------------------------------------

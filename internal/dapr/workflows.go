@@ -8,6 +8,7 @@ package dapr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -62,7 +63,7 @@ type WorkflowInput struct {
 // WorkflowResult is the common result from all workflows.
 type WorkflowResult struct {
 	WorkflowID string        `json:"workflowId"`
-	Status     string        `json:"status"` // completed, failed, compensated
+	Status     string        `json:"status"` // completed, failed, compensated, compensation-failed
 	Activities []ActivityLog `json:"activities"`
 	Duration   time.Duration `json:"duration"`
 }
@@ -70,7 +71,7 @@ type WorkflowResult struct {
 // ActivityLog records the execution of a single activity.
 type ActivityLog struct {
 	Name     string        `json:"name"`
-	Status   string        `json:"status"` // completed, failed, compensated
+	Status   string        `json:"status"` // completed, failed, compensated, compensation-failed
 	Duration time.Duration `json:"duration"`
 	Error    string        `json:"error,omitempty"`
 }
@@ -179,18 +180,12 @@ func (s *SagaExecutor) Execute(ctx context.Context, name string, steps []Workflo
 				Duration: time.Since(actStart), Error: err.Error(),
 			})
 
-			// Compensate in reverse order
-			for i := len(completedSteps) - 1; i >= 0; i-- {
-				if completedSteps[i].Compensate != "" {
-					if compFn, ok := s.Activities[completedSteps[i].Compensate]; ok {
-						_ = compFn(ctx, input) // Best-effort compensation
-						result.Activities = append(result.Activities, ActivityLog{
-							Name: completedSteps[i].Compensate, Status: "compensated",
-						})
-					}
-				}
+			compensationErrors := s.compensate(ctx, input, completedSteps, result)
+			if len(compensationErrors) > 0 {
+				result.Status = "compensation-failed"
+				result.Duration = time.Since(start)
+				return result, fmt.Errorf("workflow %s failed at %s: %w (compensation failures: %w)", name, step.Activity, err, errors.Join(compensationErrors...))
 			}
-
 			result.Status = "compensated"
 			result.Duration = time.Since(start)
 			return result, fmt.Errorf("workflow %s failed at %s: %w", name, step.Activity, err)
@@ -205,4 +200,28 @@ func (s *SagaExecutor) Execute(ctx context.Context, name string, steps []Workflo
 	result.Status = "completed"
 	result.Duration = time.Since(start)
 	return result, nil
+}
+
+func (s *SagaExecutor) compensate(ctx context.Context, input WorkflowInput, steps []WorkflowStep, result *WorkflowResult) []error {
+	var compensationErrors []error
+	for i := len(steps) - 1; i >= 0; i-- {
+		name := steps[i].Compensate
+		if name == "" {
+			continue
+		}
+		compFn, ok := s.Activities[name]
+		if !ok {
+			err := fmt.Errorf("compensation activity %s is not registered", name)
+			compensationErrors = append(compensationErrors, err)
+			result.Activities = append(result.Activities, ActivityLog{Name: name, Status: "compensation-failed", Error: err.Error()})
+			continue
+		}
+		if err := compFn(ctx, input); err != nil {
+			compensationErrors = append(compensationErrors, fmt.Errorf("%s: %w", name, err))
+			result.Activities = append(result.Activities, ActivityLog{Name: name, Status: "compensation-failed", Error: err.Error()})
+			continue
+		}
+		result.Activities = append(result.Activities, ActivityLog{Name: name, Status: "compensated"})
+	}
+	return compensationErrors
 }

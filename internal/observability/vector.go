@@ -21,7 +21,7 @@ import (
 
 const (
 	// VectorImage is the Vector container image for log aggregation.
-	VectorImage = "timberio/vector:0.43.1-distroless-static"
+	VectorImage = "timberio/vector:0.58.0-distroless-static"
 
 	// VectorConfigKey is the ConfigMap key for the Vector pipeline config.
 	VectorConfigKey = "vector.yaml"

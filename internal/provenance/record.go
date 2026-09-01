@@ -14,11 +14,15 @@ type RuntimeVerificationRecord struct {
 	SignatureDigest     string `json:"signatureDigest,omitempty"`
 	AttestationURI      string `json:"attestationUri,omitempty"`
 	SBOMDigest          string `json:"sbomDigest,omitempty"`
-	KeyRef              string `json:"keyRef,omitempty"`
-	CertificateIdentity string `json:"certificateIdentity,omitempty"`
-	CertificateIssuer   string `json:"certificateIssuer,omitempty"`
-	VerifiedAt          string `json:"verifiedAt,omitempty"`
-	Error               string `json:"error,omitempty"`
+	ContentDigest       string `json:"contentDigest,omitempty"`
+	// ContentIntegrityVerified means the initializer recorded and can recheck
+	// the payload digest; it does not imply cryptographic provenance.
+	ContentIntegrityVerified bool   `json:"contentIntegrityVerified,omitempty"`
+	KeyRef                   string `json:"keyRef,omitempty"`
+	CertificateIdentity      string `json:"certificateIdentity,omitempty"`
+	CertificateIssuer        string `json:"certificateIssuer,omitempty"`
+	VerifiedAt               string `json:"verifiedAt,omitempty"`
+	Error                    string `json:"error,omitempty"`
 }
 
 // Verified reports whether every proof surface required by the runtime policy

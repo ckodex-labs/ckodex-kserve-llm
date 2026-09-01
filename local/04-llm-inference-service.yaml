@@ -5,15 +5,28 @@ metadata:
   namespace: default
 spec:
   model:
-    name: qwen-0.5b
+    name: gpt2
     # The default beta proof uses the signed hf:// storage initializer.
     # hf-mount:// is an optional CSI/FUSE profile; see local/04-llm-inference-service-hfmount.yaml.
-    uri: hf://Qwen/Qwen2.5-0.5B-Instruct
-  autoOptimize: true
+    uri: hf://openai-community/gpt2
   template:
     spec:
       containers:
       - name: vllm
+        args:
+        - --enforce-eager
+        - --max-model-len
+        - "1024"
+        # Keep the smoke profile within its 8 GiB memory limit after model
+        # weights and runtime overhead; production profiles must size this
+        # value for their model and node memory budget.
+        env:
+        - name: VLLM_CPU_KVCACHE_SPACE
+          value: "1"
+        - name: VLLM_CPU_OMP_THREADS_BIND
+          value: "0-2"
+        - name: OMP_NUM_THREADS
+          value: "3"
         resources:
           limits:
             cpu: "4"

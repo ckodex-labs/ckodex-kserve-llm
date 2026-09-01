@@ -17,6 +17,7 @@ import (
 )
 
 type releaseWorkflow struct {
+	Env  map[string]string      `yaml:"env"`
 	Jobs map[string]workflowJob `yaml:"jobs"`
 }
 
@@ -41,6 +42,7 @@ func TestReleaseWorkflowRunsAnonymousContractAfterPublishing(t *testing.T) {
 
 	var workflow releaseWorkflow
 	require.NoError(t, yaml.Unmarshal(content, &workflow))
+	assert.Equal(t, "${{ github.ref_name }}", workflow.Env["RELEASE_VERSION"])
 	job, found := workflow.Jobs["public-release-contract"]
 	require.True(t, found, "release workflow has no public-release-contract job")
 	assert.ElementsMatch(t, []string{
@@ -61,6 +63,15 @@ func TestReleaseWorkflowRunsAnonymousContractAfterPublishing(t *testing.T) {
 	verifyJob, found := workflow.Jobs["verify"]
 	require.True(t, found, "release workflow has no verify job")
 	require.NotEmpty(t, stepContaining(verifyJob.Steps, "git ls-files --error-unmatch console/package.json"), "release verification must require ordinary console source files")
+	exactHead := stepContaining(verifyJob.Steps, "commits/${GITHUB_SHA}/check-runs")
+	require.NotEmpty(t, exactHead, "release verification must require hosted CI on the exact release head")
+	assert.Contains(t, exactHead, "Lint + Build + Scan")
+	assert.Contains(t, exactHead, "Hugging Face initializer (arm64)")
+	versionContract := stepContaining(verifyJob.Steps, "manager-version-contract")
+	require.NotEmpty(t, versionContract, "release verification must execute the version-injected manager")
+	assert.Contains(t, versionContract, "internal/version.Version=${RELEASE_VERSION}")
+	imagePublish := stepContaining(workflow.Jobs["image-release"].Steps, "dagger call publish")
+	assert.Contains(t, imagePublish, "--version=\"$IMAGE_VERSION\"")
 	helmJob, found := workflow.Jobs["helm-release"]
 	require.True(t, found, "release workflow has no helm-release job")
 	helmPackage := stepContaining(helmJob.Steps, "helm package deploy/helm")

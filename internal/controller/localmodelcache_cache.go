@@ -67,7 +67,10 @@ func (r *LocalModelCacheReconciler) ensureCachePVC(ctx context.Context, lmc *ser
 	if err := r.Delete(ctx, orphanJob, client.PropagationPolicy(metav1.DeletePropagationForeground)); err != nil && !errors.IsNotFound(err) {
 		log.FromContext(ctx).Error(err, "Failed to delete orphan warm-up Job", "job", jobName, "namespace", namespace, "node", nodeName, "modelHash", modelHash)
 	}
-	desired := r.buildCachePVC(lmc, pvcName, namespace, nodeName, modelHash)
+	desired, err := r.buildCachePVC(lmc, pvcName, namespace, nodeName, modelHash)
+	if err != nil {
+		return false, fmt.Errorf("building PVC %s: %w", pvcName, err)
+	}
 	log.FromContext(ctx).Info("Creating new cache PVC", "node", nodeName, "pvc", pvcName)
 	if err := ctrl.SetControllerReference(lmc, desired, r.Scheme); err != nil {
 		return false, fmt.Errorf("setting owner ref on PVC: %w", err)
@@ -124,7 +127,11 @@ func (r *LocalModelCacheReconciler) markNodeCacheReady(lmc *servingv1alpha2.Loca
 		observability.LMCWarmingAttempts.WithLabelValues(lmc.Spec.SourceModelURI, nodeName, "success").Inc()
 	}
 	status.LastUsed = previousReadyUse(lmc, nodeName, now)
-	modelSize := lmc.Spec.ModelSizeQuantity()
+	modelSize, err := lmc.Spec.ModelSizeQuantity()
+	if err != nil {
+		status.Phase = "Failed"
+		return
+	}
 	status.SizeBytes = modelSize.Value()
 	observability.LMCCacheSize.WithLabelValues(lmc.Spec.SourceModelURI, nodeName).Set(float64(status.SizeBytes))
 }

@@ -126,7 +126,7 @@ spec:
     spec:
       containers:
         - name: storage-init
-          image: kserve/storage-initializer:v0.19.0
+          image: kserve/storage-initializer:v0.20.0
           env:
             - name: STORAGE_URI
               value: "hf://<ORG>/<REPO>"

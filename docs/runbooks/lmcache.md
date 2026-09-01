@@ -52,6 +52,32 @@ operator has no mutating webhook, so injection is explicit and inspectable.
    <namespace>` and verify the engine has a local endpoint on every target
    node.
 
+## Upstream contract and recovery evidence
+
+The [vLLM disaggregated-prefill guide](https://docs.vllm.ai/en/stable/features/disagg_prefill/)
+defines separate prefill and decode instances connected by KV transfer, and
+marks the feature experimental. Its role contract is directional: prefill is
+the producer and decode is the consumer. The
+[NIXL compatibility guide](https://docs.vllm.ai/en/latest/features/nixl_connector_compatibility/)
+also requires compatible vLLM/connector versions, model layout, attention
+backend, cache dtype, and transfer mode across the pair. The operator's
+producer/consumer mapping is covered by deployment-builder tests; those tests
+do not prove GPU transfer, accuracy, or recovery on a live cluster.
+
+The [LMCache quickstart](https://docs.lmcache.ai/getting_started/quickstart.html)
+now recommends `LMCacheMPConnector` for multiprocess deployments. The pinned
+LMCache Operator path in this repository remains subject to its published
+`<engine>-connection` ConfigMap contract; do not substitute a connector name or
+ConfigMap key from a newer LMCache release without refreshing the pin and its
+tests together.
+
+Model-weight recovery is separate. When a node leaves a CKodex
+`LocalModelCache` target set, reconciliation deletes that node's warm-up Job and
+PVC before removing its status entry. A deletion/read failure leaves the status
+entry intact and retries, preventing the control plane from reporting cleanup
+that did not occur. Invalid cache-size quantities fail before any PVC or Job is
+created.
+
 ## Troubleshooting and rollback
 
 - Injection is skipped when the typed block is absent, the connector is not

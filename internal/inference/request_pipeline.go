@@ -8,10 +8,12 @@ package inference
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/ckodex-labs/kserve-llm-operator/internal/accessplane"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 )
 
@@ -21,16 +23,30 @@ type RequestPipeline struct {
 	pool        *ConnectionPool
 	router      *FastPathRouter
 	preloader   *Preloader
-	coalescer   *Coalescer
 	cache       *SemanticCache
 	prefetcher  *AnticipatoryPrefetcher
 	pipeliner   *ChunkedPipeliner
 	loraManager *LoRAPinManager
 	obs         *observability.Pipeline
+	policy      *accessplane.Evaluator
 }
 
-// NewRequestPipeline creates a production-configured pipeline.
+// NewRequestPipeline creates a pipeline with request policy explicitly
+// disabled. Callers with an access policy use NewRequestPipelineWithPolicy.
 func NewRequestPipeline() *RequestPipeline {
+	return newRequestPipeline(nil)
+}
+
+// NewRequestPipelineWithPolicy creates a pipeline that evaluates every request
+// before cache lookup, routing, or endpoint execution.
+func NewRequestPipelineWithPolicy(policy *accessplane.Evaluator) (*RequestPipeline, error) {
+	if policy == nil {
+		return nil, errors.New("request pipeline policy is required")
+	}
+	return newRequestPipeline(policy), nil
+}
+
+func newRequestPipeline(policy *accessplane.Evaluator) *RequestPipeline {
 	pool := NewConnectionPool(DefaultPoolConfig())
 	preloader := NewPreloader()
 	router := NewFastPathRouter(pool)
@@ -39,18 +55,27 @@ func NewRequestPipeline() *RequestPipeline {
 		pool:      pool,
 		router:    router,
 		preloader: preloader,
-		coalescer: NewCoalescer(5*time.Millisecond, 32),
 		// In-memory backend — callers that want Redis use NewRequestPipelineWithCache.
 		cache:       mustInMemoryCache(),
 		prefetcher:  NewAnticipatoryPrefetcher(pool, router),
 		pipeliner:   NewChunkedPipeliner(pool),
 		loraManager: NewLoRAPinManager(16384), // 16GB pinned RAM for LoRAs
 		obs:         observability.NewPipeline(),
+		policy:      policy,
 	}
 }
 
 // InferenceRequest represents a single inference call.
 type InferenceRequest struct {
+	// TenantID is the access-policy tenant boundary.
+	TenantID string
+
+	// Route is the access-policy route requested by the caller.
+	Route string
+
+	// AccessObservation is the caller's immutable runtime-load snapshot.
+	AccessObservation accessplane.RuntimeObservation
+
 	// Model is the model name.
 	Model string
 
@@ -75,6 +100,9 @@ type InferenceRequest struct {
 
 // InferenceResponse contains the inference result.
 type InferenceResponse struct {
+	// PolicyDecision is present when the pipeline evaluated access policy.
+	PolicyDecision *accessplane.Decision
+
 	// Model is the model name.
 	Model string
 
@@ -89,6 +117,16 @@ type InferenceResponse struct {
 
 	// TotalLatency is the end-to-end request time.
 	TotalLatency time.Duration
+}
+
+// AccessPolicyError reports a non-admit policy decision. Backpressure is an
+// instruction to the caller; the pipeline does not create or mutate a queue.
+type AccessPolicyError struct {
+	Decision accessplane.Decision
+}
+
+func (e *AccessPolicyError) Error() string {
+	return fmt.Sprintf("request policy %s: %s", e.Decision.Disposition, e.Decision.Reason)
 }
 
 // PhaseTimings records latency per inference phase.
@@ -112,29 +150,49 @@ func (p *RequestPipeline) Execute(ctx context.Context, req *InferenceRequest) (*
 	budgetCtx, cancel := budget.WithContext(ctx)
 	defer cancel()
 
+	effectiveReq := *req
 	resp := &InferenceResponse{
-		Model: req.Model,
+		Model: effectiveReq.Model,
+	}
+	if p.policy != nil {
+		decision, err := p.policy.EvaluateContext(budgetCtx, accessplane.Intent{
+			TenantID: req.TenantID,
+			Route:    req.Route,
+		}, req.AccessObservation)
+		if err != nil {
+			observability.RecordError(span, err)
+			return nil, fmt.Errorf("evaluate request policy: %w", err)
+		}
+		if decision.Disposition != accessplane.DispositionAdmit {
+			err := &AccessPolicyError{Decision: decision}
+			observability.RecordError(span, err)
+			return nil, err
+		}
+		effectiveReq.Model = decision.Model
+		resp.Model = decision.Model
+		resp.PolicyDecision = &decision
 	}
 
 	// Phase 0: Semantic Cache check (Zero GPU cycles)
-	if _, hit := p.cache.GetExact(ctx, req.Prompt); hit {
+	if _, hit := p.cache.GetExact(ctx, effectiveReq.Prompt); hit {
 		resp.Endpoint = "semantic-cache"
 		resp.CacheHit = true
 		resp.TotalLatency = time.Since(start)
 		// Return immediately, bypassing routing and execution completely
-		// The cachedResponse string would be returned here in real operation.
+		// TODO(ckodex): return the cached response payload when this pipeline owns
+		// the response transport; currently this result exposes routing metadata.
 		return resp, nil
 	}
 
 	// Phase 1: Route (budget: 50ms)
 	routeCtx, routeCancel := budget.PhaseContext(budgetCtx, "route")
-	routeCtx, routeSpan := p.obs.StartSessionRoute(routeCtx, req.SessionID)
-	routeResult := p.resolveRoute(routeCtx, req, start)
+	routeCtx, routeSpan := p.obs.StartSessionRoute(routeCtx, effectiveReq.SessionID)
+	routeResult := p.resolveRoute(routeCtx, &effectiveReq, start)
 	routeCancel()
 	routeSpan.End()
 
 	if routeResult.Endpoint == "" {
-		return nil, fmt.Errorf("no healthy endpoint for model %s", req.Model)
+		return nil, fmt.Errorf("no healthy endpoint for model %s", effectiveReq.Model)
 	}
 
 	resp.Endpoint = routeResult.Endpoint
@@ -142,9 +200,9 @@ func (p *RequestPipeline) Execute(ctx context.Context, req *InferenceRequest) (*
 	resp.Phases.RoutingMs = float64(routeResult.RoutingLatency.Microseconds()) / 1000.0
 
 	// Phase 2: Check model readiness
-	if err := p.preloader.WaitReady(budgetCtx, req.Model); err != nil {
+	if err := p.preloader.WaitReady(budgetCtx, effectiveReq.Model); err != nil {
 		// Model not in preloader; assume ready (already loaded by operator)
-		slog.Debug("preloader readiness check returned error; assuming model ready", "model", req.Model, "error", err)
+		slog.Debug("preloader readiness check returned error; assuming model ready", "model", effectiveReq.Model, "error", err)
 	}
 
 	// Phase 3: Acquire connection and track active requests
@@ -159,7 +217,7 @@ func (p *RequestPipeline) Execute(ctx context.Context, req *InferenceRequest) (*
 		return nil, err
 	}
 
-	if err := p.runInference(ctx, conn, req, routeResult.Endpoint); err != nil {
+	if err := p.runInference(budgetCtx, conn, &effectiveReq, routeResult.Endpoint); err != nil {
 		observability.RecordError(span, err)
 		return nil, fmt.Errorf("V2 inference failed: %w", err)
 	}

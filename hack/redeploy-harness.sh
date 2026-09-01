@@ -65,7 +65,7 @@ spec:
     spec:
       containers:
       - name: vllm
-        image: vllm/vllm-openai:v0.25.1
+        image: vllm/vllm-openai:v0.28.0
         resources:
           limits:
             cpu: "8"

@@ -37,8 +37,11 @@ export function ChatInterface({ active }: { active: boolean }) {
         if (!active) return;
         let cancelled = false;
         const request = createAssistantRequest(assistantConfigurationTimeoutMs);
-        setStatus("checking");
-        setStatusDetail(null);
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setStatus("checking");
+            setStatusDetail(null);
+        });
 
         fetch("/api/chat", { method: "GET", signal: request.signal })
             .then(async (response) => response.ok ? response.json() as Promise<{ configured?: boolean; model?: string | null }> : null)

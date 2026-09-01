@@ -103,7 +103,7 @@ func run(args []string) (provenance.RuntimeVerificationRecord, error) {
 		return record, fmt.Errorf("get storage client: %w", err)
 	}
 
-	// Check if destination is already populated (Idempotency / Cache Hit)
+	// Check if destination is already populated (Idempotency / Cache Hit).
 	if entries, err := os.ReadDir(destPath); err == nil && len(entries) > 0 {
 		if skipChecksum {
 			fmt.Printf("Optimization: Destination %s already contains %d files. Skipping download.\n", destPath, len(entries))
@@ -111,23 +111,37 @@ func run(args []string) (provenance.RuntimeVerificationRecord, error) {
 		}
 
 		cachedRecord, cacheErr := loadCachedRuntimeVerificationRecord(destPath)
-		if cacheErr == nil && cachedRecord.Subject == uri && cachedRecord.Verified() {
-			fmt.Printf("Optimization: Destination %s already contains a verified cache for %s. Skipping download.\n", destPath, uri)
-			return *cachedRecord, nil
+		if cacheErr == nil && cachedRecord.Subject == uri {
+			if cachedRecord.Verified() {
+				fmt.Printf("Optimization: Destination %s already contains a verified cache for %s. Skipping download.\n", destPath, uri)
+				return *cachedRecord, nil
+			}
+			if cachedRecord.ContentIntegrityVerified {
+				contentDigest, digestErr := directoryDigest(destPath)
+				if digestErr == nil && contentDigest == cachedRecord.ContentDigest {
+					fmt.Printf("Optimization: Destination %s already contains an integrity-checked cache for %s. Skipping download.\n", destPath, uri)
+					return *cachedRecord, nil
+				}
+			}
 		}
-
-		return record, fmt.Errorf("destination %s already contains files, but no matching verified cache record was found; refusing to reuse unverified content", destPath)
 	}
 
-	// Pull the artifact
-	if err := client.Pull(ctx, uri, destPath); err != nil {
+	stagingPath, cleanup, err := prepareStagingDirectory(destPath, uri)
+	if err != nil {
+		return record, err
+	}
+	defer cleanup()
+
+	// Pull into a transaction-owned directory. The mounted destination is only
+	// populated after content integrity and provenance checks have completed.
+	if err := client.Pull(ctx, uri, stagingPath); err != nil {
 		return record, fmt.Errorf("pull failed: %w", err)
 	}
 
 	// Security Hardening: AI-BOM / Provenance Verification
 	if !skipChecksum {
 		fmt.Printf("Inspecting provenance artifacts (AI-BOM)...\n")
-		assessment, err := assessProvenance(uri, scheme, destPath, resolveVerifierConfig())
+		assessment, err := assessProvenance(uri, scheme, stagingPath, resolveVerifierConfig())
 		if err != nil {
 			return record, fmt.Errorf("SECURITY FATAL: %w", err)
 		}
@@ -139,15 +153,22 @@ func run(args []string) (provenance.RuntimeVerificationRecord, error) {
 			fmt.Printf("Verification material configured via %s\n", record.KeyRef)
 		}
 		if !record.Verified() {
-			fmt.Printf("Warning: provenance material was detected, but this binary did not complete a cryptographic verification step.\n")
+			if len(assessment.ArtifactPaths) == 0 {
+				fmt.Printf("No cryptographic provenance was present; content digest recorded; promotion verification remains unavailable.\n")
+			} else {
+				fmt.Printf("Warning: provenance material was present, but this binary did not complete a cryptographic verification step.\n")
+			}
 		} else {
 			fmt.Printf("Cryptographic signature, provenance attestation, and SBOM attestation verified for %s\n", uri)
 		}
-		if writeErr := writeCacheRuntimeVerificationRecord(destPath, record); writeErr != nil {
+		if writeErr := writeCacheRuntimeVerificationRecord(stagingPath, record); writeErr != nil {
 			return record, fmt.Errorf("persist verification state: %w", writeErr)
 		}
 	} else {
 		fmt.Printf("Warning: provenance artifact inspection bypassed via --skip-checksum.\n")
+	}
+	if err := commitStagingDirectory(stagingPath, destPath, uri); err != nil {
+		return record, fmt.Errorf("commit verified model payload: %w", err)
 	}
 
 	fmt.Printf("Successfully downloaded model to %s\n", destPath)
@@ -204,24 +225,30 @@ func assessProvenance(uri, scheme, destPath string, verifier verifierConfig) (pr
 		}
 		assessment.Record = record
 		assessment.CryptographicallyVerified = record.Verified()
-		return assessment, nil
-	}
+	} else {
+		provenancePaths := []string{
+			filepath.Join(destPath, "slsa.provenance.json"),
+			filepath.Join(destPath, "provenance.sig"),
+			filepath.Join(destPath, "model.sig"),
+		}
 
-	provenancePaths := []string{
-		filepath.Join(destPath, "slsa.provenance.json"),
-		filepath.Join(destPath, "provenance.sig"),
-		filepath.Join(destPath, "model.sig"),
-	}
+		for _, path := range provenancePaths {
+			if _, err := os.Stat(path); err == nil {
+				assessment.ArtifactPaths = append(assessment.ArtifactPaths, path)
+			}
+		}
 
-	for _, path := range provenancePaths {
-		if _, err := os.Stat(path); err == nil {
-			assessment.ArtifactPaths = append(assessment.ArtifactPaths, path)
+		if len(assessment.ArtifactPaths) == 0 {
+			fmt.Printf("No cryptographic provenance artifact found for %s; retaining content digest only.\n", uri)
 		}
 	}
 
-	if len(assessment.ArtifactPaths) == 0 {
-		return provenanceAssessment{}, fmt.Errorf("no provenance artifact (slsa.provenance.json or .sig) found in model payload; rejecting model to prevent tampering")
+	digest, err := directoryDigest(destPath)
+	if err != nil {
+		return provenanceAssessment{}, fmt.Errorf("compute content integrity digest: %w", err)
 	}
+	assessment.Record.ContentDigest = digest
+	assessment.Record.ContentIntegrityVerified = true
 
 	return assessment, nil
 }

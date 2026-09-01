@@ -123,7 +123,7 @@ type LMCacheSpec struct {
 type QuantizationSpec struct {
 	// Method selects the quantization algorithm.
 	// "awq" and "gptq" require pre-quantized model weights.
-	// "gguf" routes to the quant-cpp engine automatically.
+	// "gguf" is rejected because no conformant LLM runtime is admitted for it.
 	// "bitsandbytes" and "fp8" quantize at load time.
 	// +kubebuilder:validation:Enum=awq;gptq;gguf;bitsandbytes;fp8
 	Method string `json:"method"`

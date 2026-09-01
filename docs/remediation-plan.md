@@ -106,7 +106,7 @@ Estimated ~3–4 engineer-weeks. Blocks Phases 3, 4, and 7.
 | Engine | Today | Work | Declared unsupported |
 |---|---|---|---|
 | vLLM | Default; six flags reach the single-node path | Port the stranded flags; move speculative decoding onto the single `--speculative-config` JSON that replaced the `--spec-*` flags | — |
-| SGLang | Absent | Adapter, digest-pinned image, `--tp-size`, `--dp-size`, `--context-length`, `--mem-fraction-static`, and `--enable-metrics`, which is off by default and without which the EndpointPicker is blind | LoRA metrics |
+| SGLang | Adapter present at `v0.5.18`; live runtime acceptance open | Digest-pinned image, `--tensor-parallel-size`, `--data-parallel-size`, and `--enable-metrics`; unsupported KV/quantization/P-D fields fail closed | KV transfer, quantization, speculative decoding, LoRA metrics |
 | llama.cpp | Seam exists; image does not | Repoint from `ckodex/quant-cpp:v0.1.0` — not built in this repository, and its registry tag API returns 404 — to a digest-pinned upstream `llama.cpp` server image; map `-m`, `-c`, `-ngl`, `-np`, `--alias`, `--metrics` | TP, PP, KV transfer, LoRA hot-swap, KV-aware routing |
 | TensorRT-LLM | Absent | Optional, behind a feature gate; llm-d v0.9.0 ships a supported image | scoped at design time |
 
@@ -214,8 +214,8 @@ parallelizable by section.
 |---|---|---|---|
 | KServe | v0.19.0 | v0.20.0 | Managed DRA for LLMInferenceService, traffic splitting, model-based routing gates, secondary filesystem tiers for KV offload, vLLM as a supported runtime |
 | llm-d | v0.8.1 | v0.9.0 | SGLang as a shipped engine, TensorRT-LLM, multi-tier KV offload to external storage, heterogeneous memory allocation, predicted-latency scheduling |
-| vLLM | v0.25.1 | v0.27.1 | Model Runner V2, FlashAttention 4, PyTorch 2.13, KV offload with the hybrid memory allocator |
-| GIE EPP | v1.5.0 | re-pin | Move `EndpointPickerConfig` off `inference.networking.x-k8s.io/v1alpha1`; the pool it feeds is already GA `v1` |
+| vLLM | v0.25.1 | v0.28.0 | Model Runner V2, FlashAttention 4, PyTorch 2.13, KV offload with the hybrid memory allocator |
+| GIE EPP / llm-d Router | GIE v1.5.0 | Router v0.10.0 | Move `EndpointPickerConfig` to `llm-d.ai/v1alpha1`; retain GIE v1.5.0 for the GA `InferencePool` CRD |
 
 Two of these change architecture rather than a pin: llm-d multi-tier KV
 offloading overlaps with the LMCache work tracked as L-OP-006, and KServe managed

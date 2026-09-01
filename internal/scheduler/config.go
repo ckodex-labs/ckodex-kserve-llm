@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,6 +22,8 @@ import (
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
+
+const endpointPickerConfigAPIVersion = "llm-d.ai/v1alpha1"
 
 // ConfigReconciler reconciles EndpointPickerConfig into a ConfigMap
 // consumed by the EPP container.
@@ -64,12 +67,16 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, llmSvc *servingv1alpha
 		}
 		return err
 	}
+	original := existing.DeepCopy()
 	if err := controllerutil.SetControllerReference(llmSvc, &existing, r.Scheme); err != nil {
 		return fmt.Errorf("set existing configmap owner reference: %w", err)
 	}
 	existing.Labels = desired.Labels
 	existing.Data = desired.Data
-	return r.Update(ctx, &existing)
+	if apiequality.Semantic.DeepEqual(&existing, original) {
+		return nil
+	}
+	return r.Patch(ctx, &existing, client.MergeFrom(original))
 }
 
 func (r *ConfigReconciler) effectiveConfig(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) (map[string]string, error) {
@@ -79,7 +86,7 @@ func (r *ConfigReconciler) effectiveConfig(ctx context.Context, llmSvc *servingv
 	config := llmSvc.Spec.Router.Scheduler.Config
 	if config.Inline != nil {
 		data, err := json.Marshal(map[string]interface{}{
-			"apiVersion":         "inference.networking.x-k8s.io/v1alpha1",
+			"apiVersion":         endpointPickerConfigAPIVersion,
 			"kind":               "EndpointPickerConfig",
 			"plugins":            config.Inline.Plugins,
 			"schedulingProfiles": config.Inline.SchedulingProfiles,
@@ -112,7 +119,7 @@ func (r *ConfigReconciler) effectiveConfig(ctx context.Context, llmSvc *servingv
 func (r *ConfigReconciler) buildDefaultConfig(llmSvc *servingv1alpha2.LLMInferenceService) map[string]string {
 	return map[string]string{
 		"scheduler.yaml": fmt.Sprintf(`# Auto-generated scheduler config for %s
-apiVersion: inference.networking.x-k8s.io/v1alpha1
+apiVersion: %s
 kind: EndpointPickerConfig
 plugins:
 - type: queue-scorer
@@ -133,6 +140,6 @@ schedulingProfiles:
     weight: 2
   - pluginRef: prefix-cache-scorer
     weight: 3
-`, llmSvc.Name),
+`, llmSvc.Name, endpointPickerConfigAPIVersion),
 	}
 }

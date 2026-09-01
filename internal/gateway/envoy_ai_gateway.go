@@ -7,7 +7,6 @@ package gateway
 
 import (
 	"context"
-	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,8 +15,8 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
 
-// EnvoyAIGateway manages Envoy AI Gateway resources for token-based
-// rate limiting with per-user token budgets.
+// EnvoyAIGateway is the integration boundary for Envoy AI Gateway token
+// accounting and per-user rate limiting.
 
 // AIGatewayConfig holds configuration for Envoy AI Gateway integration.
 type AIGatewayConfig struct {
@@ -45,6 +44,8 @@ type EnvoyAIGatewayReconciler struct {
 	Config AIGatewayConfig
 }
 
+// TODO(ckodex): implement Envoy AI Gateway rate-limit resource reconciliation
+// when the upstream resource contract is stable.
 // ReconcileRateLimiting creates/updates rate limiting configuration.
 // Reconcile creates a ConfigMap with token rate limiting configuration.
 // Will be replaced with actual AIGatewayRoute + BackendTrafficPolicy CRDs
@@ -62,12 +63,9 @@ func (r *EnvoyAIGatewayReconciler) ReconcileRateLimiting(ctx context.Context, ll
 		"userHeader", r.Config.UserHeaderName,
 	)
 
-	// NOTE: When envoyproxy/ai-gateway publishes Go types, replace this
-	// ConfigMap with:
+	// When envoyproxy/ai-gateway publishes Go types, replace this boundary with:
 	//   AIGatewayRoute → per-model routing with token counting
 	//   BackendTrafficPolicy → x-user-id header rate limiting
-	// Tracking: https://github.com/envoyproxy/ai-gateway/issues
-	_ = fmt.Sprintf("%s-ratelimit", llmSvc.Name)
 
 	return nil
 }

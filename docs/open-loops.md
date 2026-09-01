@@ -53,14 +53,14 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 - **Status:** in-progress
 - **Priority:** P0
-- **Context:** The latest old-head Nightly run [31771937532](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/31771937532) failed immediately after applying `llama3-8b` with `no matching resources found`. The pod selector was evaluated before reconciliation created a pod. `local/05-test-inference.sh` now polls for the first matching pod and then waits on that object; the hosted rerun on the fixed head remains required.
+- **Context:** The latest main-head Nightly run [33081386331](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33081386331) failed during KIND bootstrap before E2E because kubeadm received `etcd.local.extraArgs` as an array instead of a map. The pending checkout changes the config to a map and pins the node profile; a hosted rerun on that exact head remains required.
 - **Reference:** `local/05-test-inference.sh`, `docs/beta/plan.md`, `docs/beta/readiness-ledger.md`
 
 ### L-OP-008 — Qualify the Nightly KIND inference probe
 
 - **Status:** in-progress
 - **Priority:** P0
-- **Context:** The sample HTTPRoute declares `llama3-8b.ckodex.com`, but the old Gateway probe addressed the allocated IP without a matching `Host` header and accepted any parseable `jq` output. The probe now binds the declared hostname, fails on HTTP errors, requires a non-empty `choices` array, retries transient startup failures, and cleans up port-forwarding; hosted runtime evidence remains required.
+- **Context:** The sample HTTPRoute declares `llama3-8b.ckodex.com`, but the old Gateway probe addressed the allocated IP without a matching `Host` header and accepted any parseable `jq` output. The probe now binds the declared hostname, fails on HTTP errors, requires a non-empty `choices` array, retries transient startup failures, and cleans up port-forwarding; the hosted runtime assertion remains unverified because run [33081386331](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33081386331) stopped during bootstrap.
 - **Reference:** `local/05-test-inference.sh`, `local/04-llm-inference-service.yaml`, `internal/gateway/httproute_builder.go`
 
 ### L-OP-009 — Make the repo-native image build reproducible
@@ -102,7 +102,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 - **Status:** in-progress
 - **Priority:** P0
-- **Context:** The default KIND node image drifted to `v1.36.1`, while the current Docker/KIND environment exposed only a 1,024-file-descriptor node limit; systemd failed before any product resource was installed. The test cluster is now pinned to `kindest/node:v1.35.0` with a 65,536-descriptor preflight; hosted parity and later Kubernetes upgrades require an intentional compatibility run.
+- **Context:** The disposable acceptance environment is now explicitly pinned to `kindest/node:v1.36.1` with a 65,536-descriptor preflight. The current Docker/KIND host previously exposed only a 1,024-file-descriptor node limit, so a fresh runtime qualification remains required before hosted parity is claimed.
 - **Reference:** `deploy/kind/kind-config.yaml`, `local/01-kind-setup.sh`, `docs/beta/plan.md`
 
 ### L-OP-006 — Validate LMCache live behavior without conflating it with model-weight caching
@@ -284,11 +284,11 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 - **Status:** in-progress
 - **Priority:** P0
-- **Context:** `internal/runtime` now defines the adapter contract and a total
-  vLLM capability matrix. The single-node builder renders governed
-  parallelism, cache, speculative-decoding, and quantization arguments and
-  rejects unsupported engines before reconciliation. Metrics, receipts,
-  images, health, and additional engines remain outside the seam.
+- **Context:** `internal/runtime` now defines the adapter contract and immutable
+  registry for served-tier vLLM and SGLang adapters. The single-node builder
+  renders each registered engine's declared arguments and rejects unsupported
+  fields before reconciliation. Live metrics, receipts, GPU health, and higher
+  conformance tiers remain acceptance work.
 - **Reference:** [ADR-010](adr/010-runtime-engine-contract.md),
   [engine-contract.md](engine-contract.md)
 
@@ -306,20 +306,21 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 - **Status:** in-progress
 - **Priority:** P1
-- **Context:** `ckodex/quant-cpp:v0.1.0` is the declared GGUF runtime. It is not
-  built in this repository — absent from `Dockerfile`, `.goreleaser.yaml`,
-  `build/`, and `Makefile` — it is tag-pinned rather than digest-pinned unlike
-  every other component, and its registry tag API returns 404. Repoint at a
-  digest-pinned upstream `llama.cpp` server image.
-- **Reference:** `internal/controller/api/constants.go`, `COMPONENTS.md`
+- **Context:** `ckodex/quant-cpp:v0.1.0` was an unadmitted GGUF placeholder. It is
+  not built in this repository — absent from `Dockerfile`, `.goreleaser.yaml`,
+  `build/`, and `Makefile` — its registry tag API returns 404, and its runtime
+  configuration has been removed from the release surface. Reopen this item
+  only when a digest-pinned upstream `llama.cpp` adapter is implemented.
+- **Reference:** `docs/remediation-plan.md`, `COMPONENTS.md`
 
-### L-RT-004 — Add SGLang and llama.cpp adapters
+### L-RT-004 — Complete additional LLM adapter acceptance
 
-- **Status:** open
+- **Status:** in-progress
 - **Priority:** P2
-- **Context:** The Gateway API Inference Extension already ships built-in
-  EndpointPicker metric specifications for SGLang, selected by a pod engine
-  label. llm-d v0.9.0 ships SGLang and TensorRT-LLM images. Blocked on L-RT-001.
+- **Context:** SGLang `v0.5.18` now has a digest-pinned served-tier adapter,
+  registry entry, and bidirectional schema/runtime tests. Live SGLang
+  readiness, metrics, GPU inference, and EndpointPicker behavior remain open;
+  llama.cpp and TensorRT-LLM remain unadmitted until their contracts resolve.
 - **Reference:** [engine-contract.md](engine-contract.md)
 
 ## Observability and evidence
@@ -328,11 +329,12 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 - **Status:** in-progress
 - **Priority:** P0
-- **Context:** Kubernetes Event creation failures are now logged with action and
-  resource identity, events use the audited namespace/involved object, and a
-  configured but unavailable direct OTLP export reports an explicit error.
-  Profile-specific graded failure semantics remain open.
-- **Reference:** [ADR-011](adr/011-canonical-observability-planes.md) item 4.10
+- **Context:** Kubernetes Event creation failures are logged with action and
+  resource identity, events use the audited namespace/involved object, and the
+  optional OTLP/HTTP audit-log exporter now batches records with explicit
+  endpoint validation, flush, shutdown, and export-error logging. Profile-
+  specific graded failure semantics remain open.
+- **Reference:** [ADR-011](adr/011-canonical-observability-planes.md) item 4.10, `docs/evidence/audit-otlp-2026-08-27.md`
 
 ### L-OBS-002 — No integrity primitives on the evidence path
 
@@ -443,14 +445,12 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
   `deploy/helm/` remains authoritative and full source consolidation is open.
 - **Reference:** `hack/helm-contract/main.go`
 
-### L-OP-014 — Scheduler config still on the pre-GA API version
+### L-OP-014 — Scheduler config API migration
 
-- **Status:** open
+- **Status:** done
 - **Priority:** P2
-- **Context:** `internal/scheduler/config.go` emits
-  `inference.networking.x-k8s.io/v1alpha1` for `EndpointPickerConfig` while the
-  `InferencePool` it feeds is already GA `inference.networking.k8s.io/v1`.
-- **Reference:** `internal/scheduler/config.go`
+- **Context:** The operator emits `llm-d.ai/v1alpha1/EndpointPickerConfig` and deploys the Router EPP digest; GIE `v1.5.0` remains installed for the GA `InferencePool` CRD, with hosted fresh-cluster acceptance still required.
+- **Reference:** `internal/scheduler/config.go`, `local/02-prereqs.sh`
 
 ### L-OP-015 — Restrict dynamic RBAC mutation authority
 
@@ -470,7 +470,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Context:** `ci.yml` invokes the race-enabled Dagger test gate. Coverage is
   calculated from covered statements rather than averaged function
   percentages, and every governed package family has an 80% floor. Local
-  exact-head evidence is green; hosted exact-head evidence remains open.
+  non-Dagger gates are green; Dagger and hosted exact-head evidence remain open.
 - **Reference:** `.github/workflows/ci.yml`, `dagger/policy.go`
 
 ### L-CI-006 — Lint excludes tests and the injection rule families
@@ -485,8 +485,9 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 - **Status:** done
 - **Priority:** P2
-- **Context:** `go.mod` uses the `go 1.26` language directive plus an explicit
-  `toolchain go1.26.6` pin.
+- **Context:** `go.mod` uses the `go 1.26.0` language directive plus an explicit
+  `toolchain go1.26.7` pin so Dagger v0.21.9's type-definition generator and the
+  hosted release workflow share a supported toolchain contract.
 - **Reference:** `go.mod`
 
 ### L-CI-008 — No surface-conformance gate
@@ -496,5 +497,4 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Context:** Direct fields, generated OpenAPI properties, and primary LLM
   nested local fields are structurally pinned; behavior mapping and API-server
   conversion evidence remain open beyond LLM.
-- **Evidence:** `test/conformance/crd_schema_contract_test.go`, `internal/validation/crd_surface_inventory_test.go`
-- **Reference:** `internal/validation/surface.go`, `surface_test.go`, [remediation-plan.md](remediation-plan.md) items 0.5–0.6
+- **Evidence/Reference:** `test/conformance/crd_schema_contract_test.go`, `internal/validation/crd_surface_inventory_test.go`, `internal/validation/surface.go`, `surface_test.go`, [remediation-plan.md](remediation-plan.md) items 0.5–0.6

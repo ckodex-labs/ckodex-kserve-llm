@@ -16,7 +16,7 @@ import (
 )
 
 func TestBuilder_BuildPrefillCreatesProducerDeployment(t *testing.T) {
-	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.25.1"}
+	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.28.0"}
 	workers := int32(2)
 	llmSvc := &servingv1alpha2.LLMInferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "chat", Namespace: "default"},
@@ -33,7 +33,7 @@ func TestBuilder_BuildPrefillCreatesProducerDeployment(t *testing.T) {
 	assert.Equal(t, workers, *dep.Spec.Replicas)
 	assert.Equal(t, "prefill", dep.Spec.Template.Labels["serving.ckodex.com/role"])
 	assert.Contains(t, strings.Join(dep.Spec.Template.Spec.Containers[0].Args, " "), "NixlConnector")
-	assert.Equal(t, "vllm:v0.25.1", dep.Annotations["serving.ckodex.com/runtime-image"])
+	assert.Equal(t, "vllm:v0.28.0", dep.Annotations["serving.ckodex.com/runtime-image"])
 	assert.Equal(t, "nixl", dep.Annotations["serving.ckodex.com/kv-connector"])
 	assert.Equal(t, "kv_producer", dep.Annotations["serving.ckodex.com/kv-role"])
 	assert.Equal(t, "true", dep.Annotations["serving.ckodex.com/pd-disaggregation"])
@@ -42,7 +42,7 @@ func TestBuilder_BuildPrefillCreatesProducerDeployment(t *testing.T) {
 func TestBuilder_Build_RuntimeImageOverridePrecedesCPUFallback(t *testing.T) {
 	builder := &Builder{
 		Client:       fake.NewClientBuilder().Build(),
-		RuntimeImage: "registry.example/vllm-cpu:v0.25.1",
+		RuntimeImage: "registry.example/vllm-cpu:v0.28.0",
 	}
 	llmSvc := &servingv1alpha2.LLMInferenceService{
 		Spec: servingv1alpha2.LLMInferenceServiceSpec{

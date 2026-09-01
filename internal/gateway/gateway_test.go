@@ -29,9 +29,10 @@ func TestBuildHTTPRoute_RoutePaths(t *testing.T) {
 		"/v2/models/",
 		"/v2",
 		"/v1/chat/completions",
+		"/v1/completions",
 		"/v1/embeddings",
 		"/v1/models",
-		// vLLM v0.25.1 Rust frontend endpoints
+		// vLLM v0.28.0 Rust frontend endpoints
 		"/version",
 		"/server_info",
 		"/v1/responses",

@@ -20,5 +20,12 @@ func setupInstrumentation(mgr ctrl.Manager, cfg operatorconfig.OperatorConfig, r
 	if reconciler.AuthMiddleware != nil {
 		reconciler.AuthMiddleware.WithInstrumentation(inst)
 	}
-	reconciler.Audit = observability.NewAuditLoggerWithOptions(mgr.GetClient(), mgr.GetScheme(), cfg.AuditSink.PIIRedaction)
+	audit, err := observability.NewAuditLoggerWithOptionsAndEndpoint(
+		mgr.GetClient(), mgr.GetScheme(), cfg.AuditSink.PIIRedaction, cfg.AuditSink.OTLPEndpoint,
+	)
+	if err != nil {
+		setupLog.Error(err, "failed to configure audit OTLP export")
+		os.Exit(1)
+	}
+	reconciler.Audit = audit
 }

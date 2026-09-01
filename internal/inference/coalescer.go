@@ -11,7 +11,8 @@ import (
 )
 
 // Coalescer groups identical requests within a short window for batch processing.
-// Reduces GPU utilization overhead when multiple users send the same prompt.
+// It is a standalone primitive until a request executor is supplied by the
+// inference pipeline; callers must flush it and publish real results.
 type Coalescer struct {
 	mu       sync.Mutex
 	pending  map[string]*coalescedRequest

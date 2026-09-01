@@ -62,8 +62,12 @@ func (r *LLMLoraAdapterReconciler) performWarmup(ctx context.Context, podIP, ada
 }
 
 func (r *LLMLoraAdapterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return r.setupWithManager(mgr, "llmloraadapter")
+}
+
+func (r *LLMLoraAdapterReconciler) setupWithManager(mgr ctrl.Manager, controllerName string) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		Named("llmloraadapter").
+		Named(controllerName).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 2}).
 		For(&servingv1alpha2.LLMLoraAdapter{}).
 		Watches(&servingv1alpha2.LocalModelCache{}, handler.EnqueueRequestsFromMapFunc(mapCacheToLora)).

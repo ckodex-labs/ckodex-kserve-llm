@@ -1,0 +1,32 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ckodex-envoy-gateway-inferencepool
+  labels:
+    app.kubernetes.io/part-of: ckodex-kserve-llm
+    app.kubernetes.io/managed-by: ckodex-kserve-llm-local
+rules:
+- apiGroups:
+  - inference.networking.k8s.io
+  resources:
+  - inferencepools
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ckodex-envoy-gateway-inferencepool
+  labels:
+    app.kubernetes.io/part-of: ckodex-kserve-llm
+    app.kubernetes.io/managed-by: ckodex-kserve-llm-local
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ckodex-envoy-gateway-inferencepool
+subjects:
+- kind: ServiceAccount
+  name: envoy-gateway
+  namespace: envoy-gateway-system

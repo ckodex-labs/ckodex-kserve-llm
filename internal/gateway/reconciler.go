@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -112,8 +113,13 @@ func (r *Reconciler) reconcileGateway(ctx context.Context, llmSvc *servingv1alph
 		return err
 	}
 
+	original := existing.DeepCopy()
 	existing.Spec = desired.Spec
-	return r.Update(ctx, &existing)
+	existing.Labels = desired.Labels
+	if apiequality.Semantic.DeepEqual(&existing, original) {
+		return nil
+	}
+	return r.Patch(ctx, &existing, client.MergeFrom(original))
 }
 
 // reconcileHTTPRoute creates or updates the HTTPRoute. When spec.canary is set,
@@ -159,10 +165,14 @@ func (r *Reconciler) reconcileHTTPRoute(ctx context.Context, llmSvc *servingv1al
 		return err
 	}
 
+	original := existing.DeepCopy()
 	existing.Spec = httpRoute.Spec
 	existing.Labels = httpRoute.Labels
 	existing.Annotations = httpRoute.Annotations
-	return r.Update(ctx, &existing)
+	if apiequality.Semantic.DeepEqual(&existing, original) {
+		return nil
+	}
+	return r.Patch(ctx, &existing, client.MergeFrom(original))
 }
 
 // reconcileGRPCRoute creates GRPCRoute with V2 gRPC method matching.
@@ -182,8 +192,12 @@ func (r *Reconciler) reconcileGRPCRoute(ctx context.Context, llmSvc *servingv1al
 		return err
 	}
 
+	original := existing.DeepCopy()
 	existing.Spec = grpcRoute.Spec
-	return r.Update(ctx, &existing)
+	if apiequality.Semantic.DeepEqual(&existing, original) {
+		return nil
+	}
+	return r.Patch(ctx, &existing, client.MergeFrom(original))
 }
 
 // GatewayRef returns the parent reference for routes to use.

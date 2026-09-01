@@ -35,7 +35,7 @@ func TestBuildCanaryHTTPRoute_TwoBackendsPerRule(t *testing.T) {
 	llmSvc := canarySvc("canary-model", "default", "stable-model", 20)
 	route := BuildCanaryHTTPRoute(llmSvc, nil)
 
-	require.Len(t, route.Spec.Rules, 6, "same 6 paths as standard route")
+	require.Len(t, route.Spec.Rules, 7, "same 7 paths as standard route")
 	for i, rule := range route.Spec.Rules {
 		assert.Len(t, rule.BackendRefs, 2, "rule[%d] must have canary+stable backends", i)
 	}
@@ -208,7 +208,29 @@ func TestReconciler_Reconcile_UpdatesExistingHTTPRoute(t *testing.T) {
 	var updated gwapiv1.HTTPRoute
 	require.NoError(t, fakeClient.Get(context.Background(),
 		k8stypes.NamespacedName{Name: "svc-httproute", Namespace: "default"}, &updated))
-	assert.Len(t, updated.Spec.Rules, 9, "updated route must carry 9 path rules (6 original + /version, /server_info, /v1/responses)")
+	assert.Len(t, updated.Spec.Rules, 10, "updated route must carry 10 path rules (7 original + /version, /server_info, /v1/responses)")
+}
+
+func TestReconciler_Reconcile_IsIdempotent(t *testing.T) {
+	scheme := buildScheme(t)
+	llmSvc := baseLLMSvcWithUID("svc", "default")
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(llmSvc).Build()
+	r := &Reconciler{Client: fakeClient, Scheme: scheme}
+
+	require.NoError(t, r.Reconcile(context.Background(), llmSvc))
+	var first gwapiv1.HTTPRoute
+	require.NoError(t, fakeClient.Get(context.Background(), k8stypes.NamespacedName{
+		Name: "svc-httproute", Namespace: "default",
+	}, &first))
+
+	require.NoError(t, r.Reconcile(context.Background(), llmSvc))
+	var second gwapiv1.HTTPRoute
+	require.NoError(t, fakeClient.Get(context.Background(), k8stypes.NamespacedName{
+		Name: "svc-httproute", Namespace: "default",
+	}, &second))
+
+	assert.Equal(t, first.ResourceVersion, second.ResourceVersion,
+		"unchanged desired state must not issue another HTTPRoute write")
 }
 
 // ---- Reconciler — existing mode (no managed gateway) ----------------------

@@ -27,7 +27,7 @@ The operator automatically generates Istio `ServiceEntry` and `VirtualService` r
 Policies are enforced at admission time using **OPA Gatekeeper**.
 
 - **GPU Quotas**: Prevent resource exhaustion and GPU exfiltration.
-- **Image Allowlist**: Ensure only trusted, signed registries (`ckodex`, `vllm`, `kserve`) are used for inference runtimes.
+- **Image Allowlist**: Ensure only trusted, signed registries (`ckodex`, `vllm`, `lmsysorg`, `kserve`) are used for inference runtimes.
 
 ## 2. The L|T|R Governance Model
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,7 +51,8 @@ func TestLocalModelCacheCoverageReadyJobPreservesLastUse(t *testing.T) {
 	r := &LocalModelCacheReconciler{Scheme: scheme, Recorder: record.NewFakeRecorder(5)}
 	now := v1.Now()
 	r.updateNodeCacheFromJob(context.Background(), lmc, &status, job, "node-a", "job", now)
-	modelSize := lmc.Spec.ModelSizeQuantity()
+	modelSize, err := lmc.Spec.ModelSizeQuantity()
+	require.NoError(t, err)
 	if status.Phase != "Ready" || status.SizeBytes != modelSize.Value() {
 		t.Fatalf("ready status = %#v", status)
 	}

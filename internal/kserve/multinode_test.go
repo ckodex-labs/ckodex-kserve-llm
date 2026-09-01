@@ -173,7 +173,7 @@ func TestBuildRejectsUnsupportedMultiNodeInputs(t *testing.T) {
 		{"autoscaling", func(s *servingv1alpha2.LLMInferenceService) { s.Spec.Scaling = &servingv1alpha2.ScalingSpec{} }},
 		{"data parallel", func(s *servingv1alpha2.LLMInferenceService) { s.Spec.Parallelism.Data = int32Ptr(2) }},
 		{"runtime image override", func(s *servingv1alpha2.LLMInferenceService) {
-			s.Spec.Worker.Template.Spec.Containers[0].Image = "vllm/vllm-openai:v0.25.1"
+			s.Spec.Worker.Template.Spec.Containers[0].Image = "vllm/vllm-openai:v0.28.0"
 		}},
 	}
 	for _, tt := range tests {

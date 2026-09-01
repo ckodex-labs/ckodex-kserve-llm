@@ -7,7 +7,6 @@ package gateway
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -87,6 +86,7 @@ type CircuitBreaker struct {
 	failures        int32
 	successes       int32
 	lastFailureTime time.Time
+	halfOpenProbe   bool
 }
 
 // CircuitState represents the circuit breaker state.
@@ -105,18 +105,25 @@ func NewCircuitBreaker(config CircuitBreakerConfig) *CircuitBreaker {
 
 // Allow checks if a request is allowed through the circuit breaker.
 func (cb *CircuitBreaker) Allow() bool {
-	cb.mu.RLock()
-	defer cb.mu.RUnlock()
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 
 	switch cb.state {
 	case StateClosed:
 		return true
 	case StateOpen:
 		if time.Since(cb.lastFailureTime) > cb.config.Timeout {
-			return true // transition to half-open
+			cb.state = StateHalfOpen
+			cb.successes = 0
+			cb.halfOpenProbe = true
+			return true
 		}
 		return false
 	case StateHalfOpen:
+		if cb.halfOpenProbe {
+			return false
+		}
+		cb.halfOpenProbe = true
 		return true
 	default:
 		return false
@@ -132,6 +139,9 @@ func (cb *CircuitBreaker) RecordSuccess() {
 		cb.state = StateClosed
 		cb.failures = 0
 		cb.successes = 0
+		cb.halfOpenProbe = false
+	} else if cb.state == StateHalfOpen {
+		cb.halfOpenProbe = false
 	}
 }
 
@@ -142,6 +152,7 @@ func (cb *CircuitBreaker) RecordFailure(ctx context.Context) {
 
 	cb.failures++
 	cb.lastFailureTime = time.Now()
+	cb.halfOpenProbe = false
 	if cb.failures >= cb.config.FailureThreshold {
 		cb.state = StateOpen
 		log.FromContext(ctx).Info("circuit breaker opened",
@@ -226,8 +237,4 @@ func DefaultHealthDrainConfig() HealthDrainConfig {
 		DrainRatePercent: 10,
 		Interval:         30 * time.Second,
 	}
-}
-
-func init() {
-	_ = fmt.Sprintf // keep import
 }

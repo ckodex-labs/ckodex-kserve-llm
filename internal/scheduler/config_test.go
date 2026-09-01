@@ -83,7 +83,7 @@ func TestBuildDefaultConfig_ValidYAMLProfile(t *testing.T) {
 	yaml := data["scheduler.yaml"]
 
 	assert.Contains(t, yaml, "schedulingProfiles:")
-	assert.Contains(t, yaml, "apiVersion: inference.networking.x-k8s.io/v1alpha1")
+	assert.Contains(t, yaml, "apiVersion: llm-d.ai/v1alpha1")
 	assert.Contains(t, yaml, "- name: default")
 	assert.Contains(t, yaml, "plugins:")
 }

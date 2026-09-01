@@ -2,8 +2,10 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,6 +23,8 @@ import (
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
+
+var llmLoraControllerRegistrationID atomic.Uint64
 
 func TestLLMLoraAdapterCoverageWarmupDeduplicatesRequests(t *testing.T) {
 	called := make(chan struct{}, 1)
@@ -101,5 +105,6 @@ func TestLLMLoraAdapterCoverageControllerRegistration(t *testing.T) {
 	s := buildLoraScheme(t)
 	mgr, err := ctrl.NewManager(&rest.Config{Host: "https://127.0.0.1"}, ctrl.Options{Scheme: s, Metrics: metricsserver.Options{BindAddress: "0"}})
 	require.NoError(t, err)
-	require.NoError(t, (&LLMLoraAdapterReconciler{}).SetupWithManager(mgr))
+	name := fmt.Sprintf("llmloraadapter-test-%d", llmLoraControllerRegistrationID.Add(1))
+	require.NoError(t, (&LLMLoraAdapterReconciler{}).setupWithManager(mgr, name))
 }

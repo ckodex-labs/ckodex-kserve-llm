@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -51,12 +52,18 @@ func main() {
 	reconciler := buildReconciler(mgr, cfg)
 	setupInstrumentation(mgr, cfg, reconciler)
 	setupControllers(mgr, cfg, reconciler)
-	setupWebhooksAndHealth(mgr, cfg)
+	setupWebhooksAndHealth(mgr, cfg, reconciler)
 	addDeprecationChecker(mgr)
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+	startErr := mgr.Start(ctrl.SetupSignalHandler())
+	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := reconciler.Audit.Shutdown(shutdownContext); err != nil {
+		setupLog.Error(err, "failed to flush audit OTLP exporter during shutdown")
+	}
+	cancel()
+	if startErr != nil {
+		setupLog.Error(startErr, "problem running manager")
 		os.Exit(1)
 	}
 }

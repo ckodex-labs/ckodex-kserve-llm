@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// Adapter renders the vLLM 0.25 command-line contract.
+// Adapter renders the vLLM 0.28 command-line contract.
 type Adapter struct{}
 
 func (Adapter) Name() string { return "vllm" }
@@ -23,6 +23,22 @@ func (Adapter) Name() string { return "vllm" }
 // Tier remains served-only until metrics and receipt contracts move behind this seam.
 func (Adapter) Tier() inferenceruntime.ConformanceTier {
 	return inferenceruntime.ConformanceTierServed
+}
+
+func (Adapter) Image() inferenceruntime.ImageContract {
+	return inferenceruntime.ImageContract{
+		Repository: "vllm/vllm-openai",
+		Tag:        "v0.28.0",
+		Digest:     "sha256:61fc8a896b0a4fbbbdc063bc4b0dbc25ce98e02b5050c24aeb7830ac02039b14",
+	}
+}
+
+func (Adapter) HealthContract() inferenceruntime.HealthContract {
+	return inferenceruntime.HealthContract{Path: "/health"}
+}
+
+func (Adapter) MetricsContract() inferenceruntime.MetricsContract {
+	return inferenceruntime.MetricsContract{Path: "/metrics"}
 }
 
 func (Adapter) Capabilities() inferenceruntime.CapabilityMatrix {
@@ -52,12 +68,22 @@ func (Adapter) Validate(service *servingv1alpha2.LLMInferenceService) field.Erro
 	if service.Spec.Quantization != nil && service.Spec.Quantization.CheckpointPath != "" {
 		return field.ErrorList{field.Forbidden(field.NewPath("spec", "quantization", "checkpointPath"), "checkpoint paths are not consumed by vLLM")}
 	}
+	if service.Spec.Quantization != nil && service.Spec.Quantization.Method == "gguf" {
+		return field.ErrorList{field.NotSupported(
+			field.NewPath("spec", "quantization", "method"),
+			service.Spec.Quantization.Method,
+			[]string{"awq", "gptq", "bitsandbytes", "fp8"},
+		)}
+	}
 	return nil
 }
 
 func (Adapter) Render(request inferenceruntime.RenderRequest) inferenceruntime.RenderedRuntime {
 	args := append([]string(nil), request.ExistingArgs...)
 	args = prependPair(args, "--model", request.ModelPath)
+	if request.Service != nil && request.Service.Spec.Model.Name != "" {
+		args = appendPair(args, "--served-model-name", request.Service.Spec.Model.Name)
+	}
 	args = appendPair(args, "--host", defaultString(request.Host, "0.0.0.0"))
 	args = appendPair(args, "--port", strconv.FormatInt(int64(defaultPort(request.Port)), 10))
 	if request.Service == nil {

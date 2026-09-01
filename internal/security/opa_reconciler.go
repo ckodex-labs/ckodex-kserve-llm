@@ -58,6 +58,7 @@ func DefaultOPAConfig() OPAConfig {
 		AllowedRegistries: []string{
 			"ghcr.io/ckodex/",
 			"vllm/",
+			"lmsysorg/",
 			"kserve/",
 			"gcr.io/distroless/",
 		},

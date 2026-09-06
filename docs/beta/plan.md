@@ -1,7 +1,7 @@
 # Beta product assessment and execution plan
 
 **Scope:** `ckodex-kserve-llm-operator` and its observe-only operator console
-**Assessment date:** 2026-08-14
+**Assessment date:** 2026-09-01
 **Target:** controlled beta for platform teams, not general availability
 
 ## 1. Beta outcome
@@ -18,7 +18,7 @@ until their acceptance evidence exists.
 
 ## 2. Assessment method
 
-The assessment used four views:
+The assessment used five views:
 
 1. **Product contract:** README, overview, API policy, runbooks, samples, beta
    matrix, and release metadata were compared for contradictory promises.
@@ -34,7 +34,8 @@ The assessment used four views:
    CSS delivery, heading order, target sizes, overflow, command-palette focus and
    escape return, theme switching, and browser warning/error logs were checked.
    Cluster, authenticated-ingress, assistive-technology, GPU, hosted-release, and
-   human-approval evidence remains explicitly separate.
+   human-approval evidence remains explicitly separate. RC7 hosted release
+   evidence is recorded separately below.
 5. **Hosted signal:** main-head Nightly run
    ([33081386331](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33081386331))
    failed before the API server started because KIND v0.32/Kubernetes 1.35 used
@@ -46,7 +47,7 @@ The assessment used four views:
 
 | ID | Finding | User impact | Disposition | Beta gate |
 | --- | --- | --- | --- | --- |
-| BETA-P0-001 | The console was not reliably part of the operator checkout/package boundary. | A published chart could render a console that a release artifact did not contain. | Fixed locally: console source is ordinary tracked source, standalone build is wired, and release checks require it. | Hosted fresh-checkout and tagged-release proof pending |
+| BETA-P0-001 | The console was not reliably part of the operator checkout/package boundary. | A published chart could render a console that a release artifact did not contain. | Fixed locally and hosted-verified in RC7: console source is ordinary tracked source, standalone build is wired, and release checks require it. | Closed for the RC7 release unit; runtime and access gates remain separate |
 | BETA-P0-002 | The two chart trees can drift. | Operators may validate one chart and publish another. | Partially contained: release path is `deploy/helm`; root chart remains an explicit open loop. | Retire/consolidate duplicate chart or document a single authoritative publish path |
 | BETA-P0-003 | Stable v1 and served v1alpha2 had no CRD conversion stanza. | v1 create/read/update could fail or behave differently from the documented migration path. | Fixed locally: beta Kustomize profile and checksummed bundle bind `/convert` to the fixed webhook identity. | Live cluster conversion acceptance pending |
 | BETA-P0-004 | Existing conversion code dropped alpha2-only fields and status. | An old resource could round-trip through v1 with silent behavior loss. | Fixed locally: v1 experimental fields and lossless typed mappings plus round-trip tests. | Live conversion and storage-version proof pending |
@@ -64,7 +65,7 @@ The assessment used four views:
 | BETA-P1-001 | Readiness can be observed, but causal qualification is not proven across live dependencies. | “Ready”, “partial”, “stalled”, and “unavailable” can still require operator inference. | Partially fixed in console contracts; add live dependency-failure journeys and evidence correlation. | Qualified-readiness gate |
 | BETA-P1-002 | Browser proof must cover the packaged image, not only SSR/static contracts. | A direct standalone launch omitted the runtime static-asset copy and rendered unstyled HTML; the packaged image was then verified at desktop and mobile widths. Assistive-technology, reduced-motion, and forced-colors behavior are not fully proven. | Fixed locally: packaged browser pass confirms CSS delivery, valid heading order, 44px targets, no mobile overflow, command-palette focus/escape return, theme switching, and no browser warnings/errors. Open: hosted browser gate plus manual/assistive-technology evidence. | Browser-accessibility gate |
 | BETA-P1-003 | Production dependency audit is clear, but the full development tree still reports advisories. | Release risk can be misread if production and development findings are conflated. | Production audit fixed locally with npm overrides; keep dev findings visible and bound to build tooling. | Hosted npm audit and image scan |
-| BETA-P1-004 | Provenance, SBOM, signature, and vulnerability scan are wired but hosted artifact acceptance is not complete. | Local green status does not prove the public release is signed, discoverable, and exact-head aligned. | RC7 hosted release verification, signed publication, provenance generation, and anonymous artifact acceptance passed in [run 33457020052](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052). | Downstream signature/provenance verification and runtime acceptance |
+| BETA-P1-004 | Provenance, SBOM, signature, and vulnerability scan require hosted and downstream evidence. | Local green status does not prove the public release is signed, discoverable, and exact-head aligned. | RC7 hosted release verification, signed publication, provenance generation, and anonymous artifact acceptance passed in [run 33457020052](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052). | Downstream signature/provenance verification and runtime acceptance |
 | BETA-P1-005 | LMCache, GPU, multi-node, and external storage integrations have code paths but not beta-grade live evidence. | Feature presence may be mistaken for supported runtime behavior. | Keep `S` or explicitly exclude each capability; do not promote from unit tests. | Runtime capability gates |
 | BETA-P1-006 | Cryptographic evidence language is stronger than the currently demonstrated verification path. | UI or docs could imply attestation validity from metadata alone. | Keep evidence claims qualified until cosign verification and UI binding are demonstrated. | Evidence-verification gate |
 | BETA-P2-001 | Agent/SkillRegistry runtime execution is outside the tested console/operator beta. | Users may infer governed tool execution from resource schemas. | Explicitly exclude from beta and keep mutation authority absent. | Product boundary |

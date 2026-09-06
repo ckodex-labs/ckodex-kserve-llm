@@ -1,4 +1,8 @@
 {{- if .Values.rbac.create -}}
+{{- $managedNamespaces := .Values.managedNamespaces }}
+{{- if not $managedNamespaces }}
+{{- $managedNamespaces = list .Release.Namespace }}
+{{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

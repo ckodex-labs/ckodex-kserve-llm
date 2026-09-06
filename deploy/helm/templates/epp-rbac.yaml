@@ -1,5 +1,9 @@
 {{- if .Values.rbac.create }}
-{{- range .Values.managedNamespaces }}
+{{- $managedNamespaces := .Values.managedNamespaces }}
+{{- if not $managedNamespaces }}
+{{- $managedNamespaces = list .Release.Namespace }}
+{{- end }}
+{{- range $managedNamespaces }}
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -186,7 +186,12 @@ func validateInstallContract(chart, releaseTag string, objects []*unstructured.U
 	if serviceAccount == "" || findNamed(objects, "ServiceAccount", serviceAccount) == nil {
 		return fmt.Errorf("%s: Deployment service account %q is not rendered", chart, serviceAccount)
 	}
-	if err := validateBindings(objects, serviceAccount); err != nil {
+	rbacObjects, err := staticRBACObjects()
+	if err != nil {
+		return fmt.Errorf("%s: %w", chart, err)
+	}
+	allObjects := append(append([]*unstructured.Unstructured{}, objects...), rbacObjects...)
+	if err := validateBindings(allObjects, objects, serviceAccount); err != nil {
 		return fmt.Errorf("%s: %w", chart, err)
 	}
 	if err := validateRuntimeDefaults(deployment); err != nil {
@@ -198,22 +203,114 @@ func validateInstallContract(chart, releaseTag string, objects []*unstructured.U
 	return validateWebhookDisabled(deployment, objects)
 }
 
-func validateBindings(objects []*unstructured.Unstructured, serviceAccount string) error {
+func validateBindings(availableObjects []*unstructured.Unstructured, boundObjects []*unstructured.Unstructured, serviceAccount string) error {
 	for _, kind := range []string{"ClusterRoleBinding", "RoleBinding"} {
-		binding, err := exactlyOne(objects, kind)
-		if err != nil {
-			return err
+		if kind == "ClusterRoleBinding" {
+			binding, err := exactlyOneBoundBinding(availableObjects, kind, serviceAccount)
+			if err != nil {
+				return err
+			}
+			roleKind, _, _ := unstructured.NestedString(binding.Object, "roleRef", "kind")
+			roleName, _, _ := unstructured.NestedString(binding.Object, "roleRef", "name")
+			if findNamed(availableObjects, roleKind, roleName) == nil {
+				return fmt.Errorf("%s references missing %s %q", kind, roleKind, roleName)
+			}
+			continue
 		}
-		roleKind, _, _ := unstructured.NestedString(binding.Object, "roleRef", "kind")
-		roleName, _, _ := unstructured.NestedString(binding.Object, "roleRef", "name")
-		if findNamed(objects, roleKind, roleName) == nil {
-			return fmt.Errorf("%s references missing %s %q", kind, roleKind, roleName)
+		roleBindings := boundBindings(availableObjects, kind, serviceAccount)
+		if len(roleBindings) == 0 {
+			return fmt.Errorf("rendered %d %s objects bound to service account %q, want at least one", len(roleBindings), kind, serviceAccount)
 		}
-		if !bindingHasServiceAccount(binding, serviceAccount) {
-			return fmt.Errorf("%s does not bind ServiceAccount %q", kind, serviceAccount)
+		foundLeaderElectionBinding := false
+		for _, binding := range roleBindings {
+			roleKind, _, _ := unstructured.NestedString(binding.Object, "roleRef", "kind")
+			roleName, _, _ := unstructured.NestedString(binding.Object, "roleRef", "name")
+			if findNamed(availableObjects, roleKind, roleName) == nil {
+				return fmt.Errorf("%s references missing %s %q", kind, roleKind, roleName)
+			}
+			if strings.HasSuffix(binding.GetName(), "-leader-election") {
+				foundLeaderElectionBinding = true
+			}
+		}
+		if !allRoleBindingsInBoundObjects(boundObjects, roleBindings) {
+			return fmt.Errorf("%s: missing chart-rendered RoleBindings for service account %q", kind, serviceAccount)
+		}
+		if !foundLeaderElectionBinding {
+			return fmt.Errorf("no %s for service account %q binds a leader-election role", kind, serviceAccount)
 		}
 	}
 	return nil
+}
+
+func exactlyOneBoundBinding(
+	objects []*unstructured.Unstructured,
+	kind, serviceAccount string,
+) (*unstructured.Unstructured, error) {
+	var matches []*unstructured.Unstructured
+	for _, object := range objects {
+		if object.GetKind() != kind {
+			continue
+		}
+		if bindingHasServiceAccount(object, serviceAccount) {
+			matches = append(matches, object)
+		}
+	}
+	if len(matches) != 1 {
+		return nil, fmt.Errorf("rendered %d %s objects bound to service account %q, want exactly one", len(matches), kind, serviceAccount)
+	}
+	return matches[0], nil
+}
+
+func allRoleBindingsInBoundObjects(boundObjects, roleBindings []*unstructured.Unstructured) bool {
+	for _, roleBinding := range roleBindings {
+		matched := false
+		for _, object := range boundObjects {
+			if object.GetKind() == roleBinding.GetKind() && object.GetName() == roleBinding.GetName() {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+func staticRBACObjects() ([]*unstructured.Unstructured, error) {
+	var objects []*unstructured.Unstructured
+	for _, path := range []string{
+		"config/rbac/role.yaml",
+		"config/rbac/tenant-role.yaml",
+		"config/manager/manager.yaml",
+	} {
+		manifest, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", path, err)
+		}
+		decoded, err := decodeObjects(manifest)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		objects = append(objects, decoded...)
+	}
+	return objects, nil
+}
+
+func boundBindings(
+	objects []*unstructured.Unstructured,
+	kind, serviceAccount string,
+) []*unstructured.Unstructured {
+	var bindings []*unstructured.Unstructured
+	for _, object := range objects {
+		if object.GetKind() != kind {
+			continue
+		}
+		if bindingHasServiceAccount(object, serviceAccount) {
+			bindings = append(bindings, object)
+		}
+	}
+	return bindings
 }
 
 func validateRuntimeDefaults(deployment *unstructured.Unstructured) error {

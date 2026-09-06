@@ -170,11 +170,11 @@ hosted and live-environment gates. See `docs/beta/readiness-ledger.md` and
 ## Open Loops
 
 See `docs/open-loops.md` for tracked deferrals. The CI implementation and supply
-chain wiring are in place, while exact-head hosted verification, Nightly KIND
-acceptance, public artifact alignment, live runtime acceptance, and provenance
-verification remain tracked beta gates.
+chain wiring are in place, while Nightly KIND acceptance, live runtime
+acceptance, downstream provenance verification, and human-access qualification
+remain tracked beta gates.
 
-Done: L-CI-001..004, L-SC-001..002, L-OP-001..005.
+Done: L-CI-001..005, L-SC-001..002, L-OP-001..005, L-REL-004.
 
 ---
 

@@ -31,12 +31,14 @@ an arbitrary Helm release name is not equivalent evidence.
 The full assessment findings, phased execution plan, and local-versus-external
 evidence boundary are in [plan.md](plan.md).
 
-## Supported product promises
+## Targeted beta promises
 
-The beta promises a reproducible operator install, stable core LLM inference
-resource handling, qualified readiness observation, workload investigation,
-read-only telemetry and identity observations, and an advisory assistant with no
-cluster tools or mutation authority.
+The beta contract targets a reproducible operator install, stable core LLM
+inference resource handling, qualified readiness observation, workload
+investigation, read-only telemetry and identity observations, and an advisory
+assistant with no cluster tools or mutation authority. These are target
+acceptance promises, not proof that every gate is closed in the current release
+candidate; the readiness ledger below is authoritative for current evidence.
 
 GPU, multi-node, LMCache, automated traffic promotion, cryptographic artifact
 verification, public multi-tenancy, and Agent/SkillRegistry runtime execution

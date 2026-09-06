@@ -253,9 +253,10 @@ networkPolicies:
 # managedNamespaces lists namespaces where the operator SA is granted
 # namespace-scoped workload permissions and where the shared ckodex-epp
 # ServiceAccount, Role, and RoleBinding are pre-provisioned.
-# The operator will reconcile LLMInferenceService, Deployments, Services, etc.
-# only in namespaces listed here. Add a namespace here AND label it with
-# ckodex.com/tenant-id=<id> to activate per-tenant quota enforcement.
+# If unset, the operator namespace is used as an implicit managed namespace
+# to avoid a silent no-op install. For every workload namespace, add it here
+# and label it with ckodex.com/tenant-id=<id> to activate per-tenant quota
+# enforcement.
 # Example:
 #   managedNamespaces:
 #     - team-a

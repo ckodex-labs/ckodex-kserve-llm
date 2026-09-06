@@ -26,8 +26,8 @@ classifications:
 capabilities:
   - id: beta-artifact-reproducibility
     capability: operator and console are present in a fresh checkout
-    classification: S
-    status: local_ready_hosted_pending
+    classification: C
+    status: hosted_verified
     owner: release
     evidence: [.github/workflows/ci.yml, .github/workflows/release.yml, test/conformance/api_contract_test.go]
     exit_criterion: fresh checkout contains console source without submodule recovery
@@ -42,8 +42,8 @@ capabilities:
 
   - id: ci-dagger-gates
     capability: the declared Dagger CI module passes lint, build, race tests, and coverage gates on the release head
-    classification: S
-    status: hosted_exact_head_pending
+    classification: C
+    status: hosted_verified
     owner: release
     evidence: [dagger/module.go, dagger/policy.go, .github/workflows/ci.yml, .github/workflows/release.yml, docs/ci/current-state.md]
     exit_criterion: exact-head hosted CI passes the Dagger functions required by the release workflow; local host saturation must not be used as a green substitute
@@ -83,7 +83,7 @@ capabilities:
   - id: release-image-chart-alignment
     capability: packaged chart defaults resolve release-owned images from the chart application version
     classification: C
-    status: local_contract_verified_hosted_pending
+    status: hosted_verified
     owner: release
     evidence: [deploy/helm/Chart.yaml, deploy/helm/values.yaml, deploy/helm/templates/_helpers.tpl, deploy/helm/templates/deployment.yaml, deploy/helm/templates/console-deployment.yaml, .github/workflows/release.yml, hack/helm-contract/main.go, hack/release-readiness.sh]
     exit_criterion: next published chart renders operator, console, and initializer images for its own release tag and passes anonymous artifact verification

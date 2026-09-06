@@ -117,9 +117,9 @@ func TestReconcileSchedulerBlocked_RouteFallsBackToService(t *testing.T) {
 
 	gwReconciler := &gateway.Reconciler{Client: cl, Scheme: scheme}
 	r := &LLMInferenceServiceReconciler{
-		Client:   cl,
-		Scheme:   scheme,
-		Gateway:  gwReconciler,
+		Client:  cl,
+		Scheme:  scheme,
+		Gateway: gwReconciler,
 	}
 
 	blockedCondition := metav1.Condition{

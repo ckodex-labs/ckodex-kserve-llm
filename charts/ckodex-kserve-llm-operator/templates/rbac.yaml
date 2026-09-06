@@ -39,6 +39,9 @@ rules:
 - apiGroups: [gateway.networking.k8s.io]
   resources: [gateways, grpcroutes, httproutes]
   verbs: [create, delete, get, list, patch, update, watch]
+- apiGroups: [inference.networking.k8s.io]
+  resources: [inferencepools]
+  verbs: [create, delete, get, list, patch, update, watch]
 - apiGroups: [serving.ckodex.com]
   resources:
     - agents

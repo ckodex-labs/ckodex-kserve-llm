@@ -26,6 +26,21 @@ type llmInferenceReconcileState struct {
 	multiNode   bool
 }
 
+// AnnotationPauseReconciliation marks an LLMInferenceService as managed
+// out-of-band: the operator skips every child-resource reconciliation for it
+// (Deployment, Gateway, HTTPRoute, scheduler) so a live workload tuned via the
+// CR template is never reverted or rolled by a reconcile. Removing the
+// annotation resumes ordinary reconciliation.
+const AnnotationPauseReconciliation = "ckodex.com/pause-reconciliation"
+
+// reconciliationPaused reports whether the pause annotation is set to "true".
+func reconciliationPaused(llmSvc *servingv1alpha2.LLMInferenceService) bool {
+	if llmSvc == nil {
+		return false
+	}
+	return llmSvc.Annotations[AnnotationPauseReconciliation] == "true"
+}
+
 func newLLMInferenceReconcileState(llmSvc *servingv1alpha2.LLMInferenceService) *llmInferenceReconcileState {
 	return &llmInferenceReconcileState{llmSvc: llmSvc, beforePatch: llmSvc.DeepCopy()}
 }
@@ -44,6 +59,17 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 	llmSvc, found, err := r.fetchLLMInferenceService(ctx, req, logger)
 	if err != nil || !found {
 		return ctrl.Result{}, err
+	}
+	// Out-of-band management escape hatch: a paused service is left entirely
+	// alone. This must run before any child-resource reconcile — rendering the
+	// Deployment for a paused CR would roll a live workload with re-rendered
+	// args (observed live 2026-09-01: a paused Qwen service was rolled by the
+	// well-known preset merge and crashed).
+	if reconciliationPaused(llmSvc) {
+		logger.Info("reconciliation paused by annotation, skipping",
+			"name", llmSvc.Name, "namespace", llmSvc.Namespace,
+			"annotation", AnnotationPauseReconciliation)
+		return ctrl.Result{}, nil
 	}
 	if err := domainvalidation.ValidateInferenceEngine(llmSvc.Spec.Engine); err != nil {
 		return ctrl.Result{}, err

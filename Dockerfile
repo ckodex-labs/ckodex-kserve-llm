@@ -66,7 +66,9 @@ RUN set -eu; \
       --platform="${pip_platform}" \
       --target=/opt/huggingface-python \
       --requirement /tmp/requirements.txt; \
-    PYTHONPATH=/opt/huggingface-python python -m pip check; \
+    if [ "${TARGETARCH}" = "$(dpkg --print-architecture)" ]; then \
+      PYTHONPATH=/opt/huggingface-python python -m pip check; \
+    fi; \
     test -x /opt/huggingface-python/bin/hf
 
 # Hugging Face initializer stage. Dependencies are resolved at image-build time,

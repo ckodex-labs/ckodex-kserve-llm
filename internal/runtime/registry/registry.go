@@ -11,17 +11,20 @@ import (
 
 	inferenceruntime "github.com/ckodex-labs/kserve-llm-operator/internal/runtime"
 	sglangruntime "github.com/ckodex-labs/kserve-llm-operator/internal/runtime/sglang"
+	tensorfoldruntime "github.com/ckodex-labs/kserve-llm-operator/internal/runtime/tensorfold"
 	vllmruntime "github.com/ckodex-labs/kserve-llm-operator/internal/runtime/vllm"
 )
 
 const (
-	DefaultEngine = "vllm"
-	SGLangEngine  = "sglang"
+	DefaultEngine    = "vllm"
+	SGLangEngine     = "sglang"
+	TensorFoldEngine = "tensorfold"
 )
 
 var adapters = map[string]inferenceruntime.Adapter{
-	DefaultEngine: vllmruntime.Adapter{},
-	SGLangEngine:  sglangruntime.Adapter{},
+	DefaultEngine:    vllmruntime.Adapter{},
+	SGLangEngine:     sglangruntime.Adapter{},
+	TensorFoldEngine: tensorfoldruntime.Adapter{},
 }
 
 // Resolve returns the adapter admitted for name. An empty name resolves to the

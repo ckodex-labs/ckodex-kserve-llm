@@ -76,10 +76,24 @@ spec:
                     format: int32
                     minimum: 1
                     type: integer
+                  model:
+                    description: |-
+                      Model optionally identifies a specific hardware model or architecture profile.
+                      When omitted, vendor defaults are applied.
+                    enum:
+                    - rtx-pro-6000
+                    - dgx-spark
+                    - sm100
+                    - sm103
+                    type: string
                   type:
-                    description: Type is the accelerator vendor.
+                    description: Type is the accelerator vendor or platform family.
                     enum:
                     - nvidia
+                    - rocm
+                    - apple-mlx
+                    - cpu
+                    - npu
                     type: string
                 required:
                 - type

@@ -36,7 +36,7 @@ type ExperimentalSpec struct {
 	Quantization *QuantizationSpec `json:"quantization,omitempty"`
 
 	// Engine selects the inference engine.
-	// +kubebuilder:validation:Enum=sglang;vllm
+	// +kubebuilder:validation:Enum=sglang;tensorfold;vllm
 	// +optional
 	Engine string `json:"engine,omitempty"`
 
@@ -111,8 +111,22 @@ type SpeculativeDecodingSpec struct {
 	DraftModel string `json:"draftModel,omitempty"`
 }
 
+// Supported quantization methods.
+const (
+	QuantizationMethodAWQ          = "awq"
+	QuantizationMethodGPTQ         = "gptq"
+	QuantizationMethodGGUF         = "gguf"
+	QuantizationMethodBitsAndBytes = "bitsandbytes"
+	QuantizationMethodFP8          = "fp8"
+	QuantizationMethodEXL3         = "exl3"
+	QuantizationMethodNVFP4        = "nvfp4"
+	QuantizationMethodMXFP8        = "mxfp8"
+)
+
 // QuantizationSpec configures weight quantization.
 type QuantizationSpec struct {
+	// Method selects the quantization algorithm.
+	// +kubebuilder:validation:Enum=awq;gptq;gguf;bitsandbytes;fp8;exl3;nvfp4;mxfp8
 	Method string `json:"method"`
 	// CheckpointPath is retained in the schema for compatibility. The active
 	// runtime does not consume it and admission rejects non-empty values.

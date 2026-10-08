@@ -1,0 +1,333 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: modelservingprofiles.serving.ckodex.com
+spec:
+  group: serving.ckodex.com
+  names:
+    kind: ModelServingProfile
+    listKind: ModelServingProfileList
+    plural: modelservingprofiles
+    shortNames:
+    - msp
+    singular: modelservingprofile
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.workloadClass
+      name: WorkloadClass
+      type: string
+    - jsonPath: .status.substrateVector.ready
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ModelServingProfile defines workload characteristics, SLA, applicability, and evidence constraints
+          for model serving and decision evaluator workloads.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ModelServingProfileSpec defines the desired state of ModelServingProfile
+            properties:
+              applicability:
+                description: Applicability specifies workload and engine matching
+                  rules.
+                properties:
+                  hardwareRequirements:
+                    description: HardwareRequirements describes minimum hardware needed.
+                    properties:
+                      accelerator:
+                        description: Accelerator defines the required accelerator
+                          type (e.g., "nvidia-h100", "nvidia-a100", "cpu").
+                        type: string
+                      minGPUCount:
+                        description: MinGPUCount specifies the minimum number of GPUs
+                          required.
+                        format: int32
+                        type: integer
+                      minMemory:
+                        description: MinMemory specifies the minimum memory string
+                          (e.g., "16Gi").
+                        type: string
+                    type: object
+                  modelFamilies:
+                    description: ModelFamilies specifies the model architecture families
+                      supported.
+                    items:
+                      type: string
+                    type: array
+                  supportedRuntimes:
+                    description: SupportedRuntimes lists the execution runtimes compatible
+                      with this profile.
+                    items:
+                      type: string
+                    type: array
+                  targetEngines:
+                    description: TargetEngines defines the specific serving engine
+                      implementations.
+                    items:
+                      type: string
+                    type: array
+                  workloadSelector:
+                    additionalProperties:
+                      type: string
+                    description: WorkloadSelector selects target workloads by label.
+                    type: object
+                type: object
+              decisionCapabilities:
+                description: |-
+                  DecisionCapabilities specifies the decision primitives supported (predicate, choice, score).
+                  Applicable when WorkloadClass is decision or evaluation.
+                items:
+                  description: DecisionCapability defines the decision primitive evaluated
+                    by a decision workload.
+                  enum:
+                  - predicate
+                  - choice
+                  - score
+                  type: string
+                type: array
+              evidence:
+                description: Evidence specifies governance and verification prerequisites.
+                properties:
+                  minTrustLevel:
+                    description: 'MinTrustLevel specifies minimum trust level: denied,
+                      unknown, asserted, verified, trusted.'
+                    type: string
+                  requireSBOM:
+                    description: RequireSBOM specifies whether an SBOM digest must
+                      be attached.
+                    type: boolean
+                  requireSignature:
+                    description: RequireSignature specifies whether a cryptographic
+                      signature is mandatory.
+                    type: boolean
+                  requiredAttestations:
+                    description: RequiredAttestations lists predicate types or URIs
+                      required before admission.
+                    items:
+                      type: string
+                    type: array
+                type: object
+              runtime:
+                description: Runtime specifies how the profile links to execution
+                  runtimes.
+                properties:
+                  endpoint:
+                    description: Endpoint specifies a pre-existing runtime endpoint
+                      URL or service name.
+                    type: string
+                  engine:
+                    description: Engine identifies the execution substrate runtime
+                      (e.g., "vllm", "triton", "eval-runner", "custom").
+                    type: string
+                  image:
+                    description: Image specifies the container image implementing
+                      the evaluator or serving runtime.
+                    type: string
+                  port:
+                    description: Port defines the network port exposed by the runtime
+                      substrate.
+                    format: int32
+                    type: integer
+                  protocol:
+                    description: Protocol specifies the communication protocol (e.g.,
+                      "http", "grpc", "v2-dataplane").
+                    type: string
+                  serviceAccount:
+                    description: ServiceAccount specifies the runtime identity.
+                    type: string
+                required:
+                - engine
+                type: object
+              sla:
+                description: SLA specifies service level agreements for this profile.
+                properties:
+                  maxLatencyMillis:
+                    description: MaxLatencyMillis specifies the 99th percentile latency
+                      target in milliseconds.
+                    format: int32
+                    type: integer
+                  targetAvailability:
+                    description: TargetAvailability is the required uptime percentage
+                      string (e.g. "99.9%").
+                    type: string
+                  targetThroughputRPS:
+                    description: TargetThroughputRPS is the required throughput in
+                      requests per second.
+                    format: int32
+                    type: integer
+                  timeoutSeconds:
+                    description: TimeoutSeconds specifies request timeout limit.
+                    format: int32
+                    type: integer
+                type: object
+              workloadClass:
+                description: WorkloadClass specifies the category of workload (generative,
+                  embedding, reranking, evaluation, decision).
+                enum:
+                - generative
+                - embedding
+                - reranking
+                - evaluation
+                - decision
+                type: string
+            required:
+            - workloadClass
+            type: object
+          status:
+            description: ModelServingProfileStatus defines the observed state of ModelServingProfile
+            properties:
+              activeEvaluators:
+                description: ActiveEvaluators is the count of active evaluators using
+                  this profile.
+                format: int32
+                type: integer
+              conditions:
+                description: Conditions represent the latest available observations
+                  of current state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              statePlanes:
+                description: StatePlanes provides orthogonal lifecycle/trust/risk
+                  planes.
+                properties:
+                  binding:
+                    description: 'Deprecated: Binding is not reconciled by any controller.
+                      Tracked for removal in v0.3.0.'
+                    type: string
+                  composition:
+                    description: 'Deprecated: Composition is not reconciled by any
+                      controller. Tracked for removal in v0.3.0.'
+                    type: string
+                  lifecycle:
+                    type: string
+                  risk:
+                    type: string
+                  trust:
+                    type: string
+                type: object
+              substrateVector:
+                description: SubstrateVector captures the 6-plane substrate readiness
+                  vector.
+                properties:
+                  admitted:
+                    description: Admitted indicates the workload meets admission policy
+                      and governance prerequisites.
+                    type: string
+                  available:
+                    description: Available indicates capacity, SLA, and concurrency
+                      targets are met.
+                    type: string
+                  calibrated:
+                    description: Calibrated indicates operational calibration, baselines,
+                      and scoring limits are verified.
+                    type: string
+                  compatible:
+                    description: Compatible indicates workload class, decision capabilities,
+                      and runtime engines match.
+                    type: string
+                  ready:
+                    description: Ready indicates the execution endpoint/substrate
+                      is initialized and ready.
+                    type: string
+                  resident:
+                    description: Resident indicates weights, adapters, or model artifacts
+                      are loaded in memory/cache.
+                    type: string
+                required:
+                - admitted
+                - available
+                - calibrated
+                - compatible
+                - ready
+                - resident
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,72 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: llm-d-agentic-profile
+  namespace: ckodex-inference
+  labels:
+    serving.ckodex.com/profile: agentic
+spec:
+  # Replace image/model values with your exact target-hardware-capable stack.
+  model:
+    uri: hf://Qwen/Qwen2.5-72B-Instruct
+    name: qwen2.5-72b-instruct
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: vllm-decode
+          image: ghcr.io/your-org/llm-vllm-runtime:latest
+          resources:
+            requests:
+              cpu: "8"
+              memory: 64Gi
+              nvidia.com/gpu: "2"
+            limits:
+              cpu: "8"
+              memory: 64Gi
+              nvidia.com/gpu: "2"
+  prefill:
+    replicas: 1
+    template:
+      spec:
+        containers:
+          - name: vllm-prefill
+            image: ghcr.io/your-org/llm-vllm-runtime:latest
+            resources:
+              requests:
+                cpu: "12"
+                memory: 64Gi
+                nvidia.com/gpu: "1"
+              limits:
+                cpu: "12"
+                memory: 64Gi
+                nvidia.com/gpu: "1"
+  parallelism:
+    tensor: 2
+    pipeline: 1
+  kvCache:
+    dtype: fp8
+    swapSpaceGB: 32
+    transfer:
+      connector: lmcache
+      role: kv_both
+      lmcache:
+        mode: inProcess
+        chunkSize: 256
+        localCPU: true
+        localCPUSizeGiB: 20
+  speculativeDecoding:
+    method: mtp
+    numTokens: 4
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute:
+        hostnames:
+          - glm5-agentic.example.com
+    scheduler:
+      pool:
+        selector:
+          serving.ckodex.com/role: llminferenceservice-workload

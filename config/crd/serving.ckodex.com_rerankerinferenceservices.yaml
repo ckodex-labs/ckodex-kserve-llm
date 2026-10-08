@@ -210,12 +210,16 @@ spec:
                       "awq" and "gptq" require pre-quantized model weights.
                       "gguf" is rejected because no conformant LLM runtime is admitted for it.
                       "bitsandbytes" and "fp8" quantize at load time.
+                      "exl3", "nvfp4", and "mxfp8" are supported modern quantization formats.
                     enum:
                     - awq
                     - gptq
                     - gguf
                     - bitsandbytes
                     - fp8
+                    - exl3
+                    - nvfp4
+                    - mxfp8
                     type: string
                 required:
                 - method

@@ -6,13 +6,20 @@ Licensed under the Apache License, Version 2.0.
 package observability_test
 
 import (
+	"context"
 	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
 )
 
@@ -81,10 +88,46 @@ func TestBuildVectorConfigMap_OTLPSink_ContainsOpentelemetry(t *testing.T) {
 	assert.Contains(t, data, "codec: json")
 }
 
+func TestBuildVectorConfigMap_OTLPSink_NormalizesSchemalessEndpoint(t *testing.T) {
+	cfg := observability.VectorConfig{
+		SinkType:     "otlp",
+		SinkEndpoint: "localhost:4317",
+	}
+	cm := observability.BuildVectorConfigMap("svc", "ns", "model", cfg)
+	data := cm.Data[observability.VectorConfigKey]
+	assert.Contains(t, data, "uri: \"http://localhost:4317\"")
+}
+
 func TestBuildVectorConfigMap_ModelNameInjected(t *testing.T) {
 	cfg := observability.DefaultVectorConfig()
 	cm := observability.BuildVectorConfigMap("svc", "ns", "llama3-70b", cfg)
 	assert.Contains(t, cm.Data[observability.VectorConfigKey], "llama3-70b")
+}
+
+func TestReconcileVectorConfigMap_OTLPEndpoint_NormalizesSchemalessValue(t *testing.T) {
+	s := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(s))
+	require.NoError(t, servingv1alpha2.AddToScheme(s))
+
+	cl := fake.NewClientBuilder().WithScheme(s).Build()
+	llmSvc := &servingv1alpha2.LLMInferenceService{
+		TypeMeta: metav1.TypeMeta{Kind: "LLMInferenceService", APIVersion: "serving.ckodex.com/v1alpha2"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "llama3-8b",
+			Namespace: "default",
+		},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Model: servingv1alpha2.ModelSpec{Name: "llama3"},
+		},
+	}
+
+	err := observability.ReconcileVectorConfigMap(context.Background(), cl, s, llmSvc, "localhost:4317")
+	require.NoError(t, err)
+
+	var cm corev1.ConfigMap
+	require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Name: "llama3-8b-vector-config", Namespace: "default"}, &cm))
+	require.NotNil(t, cm.Data[observability.VectorConfigKey])
+	assert.Contains(t, cm.Data[observability.VectorConfigKey], "uri: \"http://localhost:4317\"")
 }
 
 // ---- InjectVectorSidecar -------------------------------------------------------

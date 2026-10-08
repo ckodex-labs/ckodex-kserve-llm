@@ -113,11 +113,14 @@ type PredicateEntry struct {
 	// PredicateURI is the normative predicate identifier from §6.
 	PredicateURI string `json:"predicateURI"`
 
-	// Digest is the sha256 digest of the predicate payload.
+	// Digest is the lowercase sha256 digest of the JSON predicate payload bytes,
+	// formatted as sha256:<64 lowercase hexadecimal characters>.
 	// +optional
 	Digest string `json:"digest,omitempty"`
 
-	// RekorLogID is the Rekor transparency log entry ID, if applicable.
+	// RekorLogID is the Rekor transparency log entry ID, if applicable. The
+	// verifier fails closed when this is set until it can bind the ID to cosign's
+	// verified bundle result.
 	// +optional
 	RekorLogID string `json:"rekorLogID,omitempty"`
 
@@ -142,13 +145,16 @@ type AIPackAttestation struct {
 	// +optional
 	Predicates []PredicateEntry `json:"predicates,omitempty"`
 
-	// CosignKeyRef is the cosign key reference used to verify signatures.
-	// Format: "k8s://<namespace>/<secret>" or "gcr://<path>" or "env://<VAR>"
+	// CosignKeyRef selects an operator-configured trusted key. The operator only
+	// accepts the exact value configured in CKODEX_COSIGN_TRUSTED_KEY_REF and
+	// loads key material from CKODEX_COSIGN_TRUSTED_KEY_PATH; this field cannot
+	// introduce a trust root.
 	// +optional
 	CosignKeyRef string `json:"cosignKeyRef,omitempty"`
 
-	// RekorURL is the Rekor transparency log URL.
-	// Defaults to https://rekor.sigstore.dev when not specified.
+	// RekorURL is retained as requested evidence metadata. Verification uses the
+	// operator-configured CKODEX_COSIGN_REKOR_URL so an AIPack cannot redirect
+	// verifier traffic.
 	// +optional
 	RekorURL string `json:"rekorURL,omitempty"`
 

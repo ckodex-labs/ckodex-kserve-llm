@@ -120,7 +120,7 @@ GW_IP=$(kubectl get gateway llama3-8b-gateway -n default \
 if [ -n "$GW_IP" ]; then
   echo "Serving via Gateway at http://$GW_IP"
   if ! probe_inference_endpoint "http://${GW_IP}/v1/completions" \
-    "llama3-8b.ckodex.com" 0 3 5; then
+    "llama3-8b.ckodex.com" 10 3 15; then
     echo "Gateway address is not reachable from this host; using a port-forward to the Gateway proxy"
     GATEWAY_SERVICE=$(kubectl get svc -n envoy-gateway-system \
       -l 'gateway.envoyproxy.io/owning-gateway-name=llama3-8b-gateway,gateway.envoyproxy.io/owning-gateway-namespace=default' \

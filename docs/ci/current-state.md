@@ -1,6 +1,6 @@
 # CI/CD Current State — ckodex-kserve-llm-operator
 
-Last updated: 2026-09-01
+Last updated: 2026-09-28
 
 ---
 
@@ -13,10 +13,19 @@ The CI/CD pipeline has one implementation:
 | Dagger module (current GHA) | `dagger call <func>` | Generated Dagger Module SDK (`dag` global) | Active |
 
 The CI implementation is active, but beta acceptance is not fully closed.
-**C — hosted evidence:** CI run [33455614072](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33455614072)
-passed on merge commit `eccb4d71d0229fad6abb7740738af16926e466ac`.
-**C — hosted failure:** Nightly run [33081386331](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33081386331)
-failed on the same commit during kubeadm bootstrap. **S — acceptance pending:**
+**C — hosted evidence:** the latest CI run checked here,
+[34003566938](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/34003566938),
+passed on current main commit `5406a8b646ac628c1d97b177a91fb06ccf55c985`
+on 2026-09-06. It does not cover uncommitted checkout changes.
+**C — hosted failure:** the latest Nightly KIND run checked here,
+[36406335463](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/36406335463),
+failed on that commit on 2026-09-28 while Envoy Gateway Helm attempted to
+install Gateway API CRDs already owned by `kubectl`. E2E did not start.
+The local `--skip-crds` and chart safety-policy settings, now paired with
+Envoy Gateway v1.8.4, need an exact-head hosted rerun before the bootstrap
+fix or runtime acceptance can be claimed. The default KIND node is now
+Kubernetes v1.35.8, within Envoy Gateway's published v1.8 support range.
+**S — acceptance pending:**
 **C — release evidence:** tagged release [v0.18.0-rc.7](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7)
 passed verification, publication, provenance, chart packaging, and anonymous
 artifact acceptance in [run 33457020052](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052).
@@ -143,7 +152,7 @@ not convert a skipped envtest suite into a successful CI result.
 KIND cluster. It uses `run/e2e.sh`, executes the E2E lifecycle suite, deletes the
 operator pod, and proves the Deployment supplies a new ready pod. Failed runs retain
 cluster resources, events, and controller logs for 14 days; the cluster is always torn down.
-KIND v0.33.0 uses the digest-pinned Kubernetes v1.36.4 image from
+KIND v0.33.0 uses the digest-pinned Kubernetes v1.35.8 image from
 `deploy/kind/acceptance-node-image.txt`; local setup and Make consume the same file.
 
 | Package | Threshold | Rationale |

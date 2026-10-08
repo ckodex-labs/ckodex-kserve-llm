@@ -64,8 +64,10 @@ spec:
                 properties:
                   cosignKeyRef:
                     description: |-
-                      CosignKeyRef is the cosign key reference used to verify signatures.
-                      Format: "k8s://<namespace>/<secret>" or "gcr://<path>" or "env://<VAR>"
+                      CosignKeyRef selects an operator-configured trusted key. The operator only
+                      accepts the exact value configured in CKODEX_COSIGN_TRUSTED_KEY_REF and
+                      loads key material from CKODEX_COSIGN_TRUSTED_KEY_PATH; this field cannot
+                      introduce a trust root.
                     type: string
                   failedPredicates:
                     description: |-
@@ -85,16 +87,19 @@ spec:
                         attestation bundle.
                       properties:
                         digest:
-                          description: Digest is the sha256 digest of the predicate
-                            payload.
+                          description: |-
+                            Digest is the lowercase sha256 digest of the JSON predicate payload bytes,
+                            formatted as sha256:<64 lowercase hexadecimal characters>.
                           type: string
                         predicateURI:
                           description: PredicateURI is the normative predicate identifier
                             from §6.
                           type: string
                         rekorLogID:
-                          description: RekorLogID is the Rekor transparency log entry
-                            ID, if applicable.
+                          description: |-
+                            RekorLogID is the Rekor transparency log entry ID, if applicable. The
+                            verifier fails closed when this is set until it can bind the ID to cosign's
+                            verified bundle result.
                           type: string
                         required:
                           description: Required declares whether this predicate is
@@ -116,8 +121,9 @@ spec:
                     type: array
                   rekorURL:
                     description: |-
-                      RekorURL is the Rekor transparency log URL.
-                      Defaults to https://rekor.sigstore.dev when not specified.
+                      RekorURL is retained as requested evidence metadata. Verification uses the
+                      operator-configured CKODEX_COSIGN_REKOR_URL so an AIPack cannot redirect
+                      verifier traffic.
                     type: string
                   verified:
                     description: |-

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -183,6 +184,7 @@ func elasticsearchSinkConfig(endpoint string) string {
 }
 
 func otlpSinkConfig(endpoint string) string {
+	endpoint = normalizeOTLPEndpoint(endpoint)
 	return fmt.Sprintf(`sinks:
   otlp:
     type: opentelemetry
@@ -197,6 +199,17 @@ func otlpSinkConfig(endpoint string) string {
     resource:
       service.name: ckodex-llm-operator
       service.namespace: ckodex`, endpoint)
+}
+
+func normalizeOTLPEndpoint(endpoint string) string {
+	trimmed := strings.TrimSpace(endpoint)
+	if trimmed == "" {
+		return trimmed
+	}
+	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+		return trimmed
+	}
+	return "http://" + trimmed
 }
 
 func stdoutSinkConfig() string {

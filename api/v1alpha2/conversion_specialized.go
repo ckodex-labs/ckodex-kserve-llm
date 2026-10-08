@@ -111,6 +111,8 @@ func convertSpeculativeDecodingFromV1(src *servingv1.SpeculativeDecodingSpec) *S
 	return &SpeculativeDecodingSpec{Method: src.Method, NumTokens: src.NumTokens, DraftModel: src.DraftModel}
 }
 
+// convertQuantizationToV1 converts QuantizationSpec from v1alpha2 to v1 hub format.
+// Preserves all admitted quantization methods (awq, gptq, gguf, bitsandbytes, fp8, exl3, nvfp4, mxfp8).
 func convertQuantizationToV1(src *QuantizationSpec) *servingv1.QuantizationSpec {
 	if src == nil {
 		return nil
@@ -118,6 +120,8 @@ func convertQuantizationToV1(src *QuantizationSpec) *servingv1.QuantizationSpec 
 	return &servingv1.QuantizationSpec{Method: src.Method, CheckpointPath: src.CheckpointPath}
 }
 
+// convertQuantizationFromV1 converts QuantizationSpec from v1 hub format to v1alpha2.
+// Preserves all admitted quantization methods (awq, gptq, gguf, bitsandbytes, fp8, exl3, nvfp4, mxfp8).
 func convertQuantizationFromV1(src *servingv1.QuantizationSpec) *QuantizationSpec {
 	if src == nil {
 		return nil

@@ -284,3 +284,77 @@ func containsFieldPath(errs field.ErrorList, want string) bool {
 	}
 	return false
 }
+
+func TestValidateLLMInferenceServiceSurfaceAdmitsQuantizationMethods(t *testing.T) {
+	methods := []string{
+		servingv1alpha2.QuantizationMethodAWQ,
+		servingv1alpha2.QuantizationMethodGPTQ,
+		servingv1alpha2.QuantizationMethodBitsAndBytes,
+		servingv1alpha2.QuantizationMethodFP8,
+		servingv1alpha2.QuantizationMethodEXL3,
+		servingv1alpha2.QuantizationMethodNVFP4,
+		servingv1alpha2.QuantizationMethodMXFP8,
+	}
+
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			svc := &servingv1alpha2.LLMInferenceService{
+				Spec: servingv1alpha2.LLMInferenceServiceSpec{
+					Quantization: &servingv1alpha2.QuantizationSpec{
+						Method: method,
+					},
+				},
+			}
+			errs := ValidateLLMInferenceServiceSurface(svc)
+			if len(errs) != 0 {
+				t.Fatalf("ValidateLLMInferenceServiceSurface rejected method %q: %v", method, errs)
+			}
+		})
+	}
+}
+
+func TestQuantizationConversionRoundTrip(t *testing.T) {
+	methods := []string{
+		servingv1alpha2.QuantizationMethodAWQ,
+		servingv1alpha2.QuantizationMethodGPTQ,
+		servingv1alpha2.QuantizationMethodGGUF,
+		servingv1alpha2.QuantizationMethodBitsAndBytes,
+		servingv1alpha2.QuantizationMethodFP8,
+		servingv1alpha2.QuantizationMethodEXL3,
+		servingv1alpha2.QuantizationMethodNVFP4,
+		servingv1alpha2.QuantizationMethodMXFP8,
+	}
+
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			src := &servingv1alpha2.LLMInferenceService{
+				Spec: servingv1alpha2.LLMInferenceServiceSpec{
+					Quantization: &servingv1alpha2.QuantizationSpec{
+						Method: method,
+					},
+				},
+			}
+			hub := &servingv1.LLMInferenceService{}
+			if err := src.ConvertTo(hub); err != nil {
+				t.Fatalf("ConvertTo failed for %q: %v", method, err)
+			}
+			if hub.Spec.Experimental == nil || hub.Spec.Experimental.Quantization == nil {
+				t.Fatalf("hub.Spec.Experimental.Quantization is nil for %q", method)
+			}
+			if hub.Spec.Experimental.Quantization.Method != method {
+				t.Fatalf("hub method = %q, want %q", hub.Spec.Experimental.Quantization.Method, method)
+			}
+
+			roundTrip := &servingv1alpha2.LLMInferenceService{}
+			if err := roundTrip.ConvertFrom(hub); err != nil {
+				t.Fatalf("ConvertFrom failed for %q: %v", method, err)
+			}
+			if roundTrip.Spec.Quantization == nil {
+				t.Fatalf("roundTrip.Spec.Quantization is nil for %q", method)
+			}
+			if roundTrip.Spec.Quantization.Method != method {
+				t.Fatalf("roundTrip method = %q, want %q", roundTrip.Spec.Quantization.Method, method)
+			}
+		})
+	}
+}

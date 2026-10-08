@@ -70,6 +70,17 @@ audit:
     accessModes:
       - ReadWriteOnce
 
+# AIPack signature verification trust comes from operator configuration, never
+# from a key or Rekor URL supplied by the AIPack itself. For public-key mode,
+# create a Secret in the operator namespace with key `cosign.pub` and set
+# trustedPublicKeySecretName. For keyless mode, set both certificate fields.
+aipackVerification:
+  cosign:
+    trustedPublicKeySecretName: ""
+    certificateIdentity: ""
+    certificateOIDCIssuer: ""
+    rekorURL: ""
+
 console:
   # The console is an observe-only surface and is opt-in for the beta chart.
   enabled: false
@@ -170,6 +181,102 @@ gemma4:
     resources:
       requests: { cpu: "16", memory: "128Gi", nvidia.com/gpu: "2" }
       limits:   { cpu: "32", memory: "256Gi", nvidia.com/gpu: "2" }
+
+# Admitted Inference Engines
+# Configures runtime images, versions, and tiers for supported engines.
+engines:
+  vllm:
+    enabled: true
+    version: "v0.31.0"
+    defaultImage: "vllm/vllm-openai:v0.28.0"
+    upgradedImage: "vllm/vllm-openai:v0.31.0"
+    tier: 3
+    supportedHardware:
+      - nvidia
+      - cpu
+  tensorfold:
+    enabled: true
+    version: "v0.31.0"
+    image: "ghcr.io/ckodex-labs/tensorfold-runtime:v0.31.0"
+    tier: 3
+    supportedHardware:
+      - nvidia
+    features:
+      exl3Quantization: true
+      tensorParallel: true
+      decisionInference: true
+  sglang:
+    enabled: true
+    version: "v0.5.18"
+    image: "lmsysorg/sglang:v0.5.18@sha256:9e148f48035baec138c29a1a1"
+    tier: 2
+    supportedHardware:
+      - nvidia
+
+# Hardware Options and Accelerator Profiles
+# Maps hardware footprints to admitted engines and model targets.
+hardwareProfiles:
+  rtx6000:
+    name: "RTX-PRO-6000"
+    accelerator: "nvidia"
+    deviceCount: 4
+    memoryPerGpu: "48Gi"
+    recommendedEngine: "tensorfold"
+    targetModels:
+      - "GLM-5.3-EXL3"
+    nodeSelector:
+      nvidia.com/gpu.product: "RTX-PRO-6000"
+  hopper:
+    name: "H100-SXM"
+    accelerator: "nvidia"
+    deviceCount: 8
+    memoryPerGpu: "80Gi"
+    recommendedEngine: "vllm"
+    nodeSelector:
+      nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
+
+# GLM-5.3 Model Profiles
+# Resource and parallelism profiles for GLM-5.3 variants.
+glm53:
+  exl3Rtx6000:
+    enabled: true
+    engine: tensorfold
+    runtimeImage: "ghcr.io/ckodex-labs/tensorfold-runtime:v0.31.0"
+    tensorParallel: 4
+    pipelineParallel: 1
+    quantization: exl3
+    hardware:
+      accelerator: nvidia
+      model: "RTX-PRO-6000"
+      count: 4
+    resources:
+      requests: { cpu: "32", memory: "128Gi", nvidia.com/gpu: "4" }
+      limits:   { cpu: "32", memory: "128Gi", nvidia.com/gpu: "4" }
+
+# Model Serving Profiles
+# Standardized specifications for decision-class and specialized workloads.
+modelServingProfiles:
+  decisionEvaluator:
+    enabled: true
+    workloadClass: decision
+    decisionCapabilities:
+      - predicate
+      - choice
+      - score
+    engine: tensorfold
+    targetHardware: "4x-rtx-pro-6000"
+    quantization: exl3
+    sla:
+      maxLatencyMillis: 500
+      timeoutSeconds: 60
+      targetAvailability: "99.9%"
+      targetThroughputRPS: 50
+    inferencePolicy:
+      temperature: 0.0
+      topP: 1.0
+      deterministic: true
+      enforceStructuredOutput: true
+      maxTokens: 8192
 
 # EPP Scheduler defaults
 scheduler:

@@ -25,7 +25,7 @@ Components responsible for model distribution and observability.
 | **KServe** | `v0.20.0` | `ghcr.io/kserve/charts/kserve-resources:v0.20.0` | Local integration baseline. |
 | **KServe Storage Init** | `v0.20.0` | `kserve/storage-initializer:v0.20.0` | Standard S3/OCI model download. |
 | **Gateway API (local profile)** | `v1.5.1` | Kubernetes Gateway API standard bundle | HTTPRoute and GatewayClass contract used by the local profile. |
-| **Envoy Gateway** | `v1.8.1` | `oci://docker.io/envoyproxy/gateway-helm:v1.8.1` | Gateway API controller and data-plane proxy. |
+| **Envoy Gateway** | `v1.8.4` | `oci://docker.io/envoyproxy/gateway-helm:v1.8.4` | Gateway API controller and data-plane proxy; local install patch, hosted acceptance pending. |
 | **Envoy AI Gateway** | `v1.1.0` | `oci://docker.io/envoyproxy/ai-gateway-helm:v1.1.0` | InferencePool extension manager and AI routing integration. |
 | **llm-d core** | `v0.9.0` | Release bundle | Orchestration compatibility baseline. |
 | **llm-d Router EPP** | `v0.10.0` | `ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:2e516f…aaaa70` | Executable GA `InferencePool` KV-aware endpoint selection. |
@@ -74,12 +74,14 @@ Zero-trust infrastructure injected into every governed workload.
   Cosign `v3.1.3`, Dagger `v0.21.9`, and Go `v1.27.0` were checked on
   2026-08-27. The CI, release, and image-build pins use these versions.
 
-The local scheduler acceptance profile intentionally qualifies Gateway API
-`v1.5.1`, Envoy Gateway `v1.8.1`, Envoy AI Gateway `v1.1.0`, and llm-d Router
+The local scheduler acceptance profile pins Gateway API
+`v1.5.1`, Envoy Gateway `v1.8.4`, Envoy AI Gateway `v1.1.0`, and llm-d Router
 EPP `v0.10.0` together; the InferencePool backend extension is not a property
 of Envoy Gateway alone. The Go library is checked at Gateway API `v1.6.1`,
-while the installed CRD bundle remains `v1.5.1` for this tested integration
-profile.
+while the installed CRD bundle remains `v1.5.1` for this configured integration
+profile. The KIND acceptance node uses Kubernetes `v1.35.8`, within the
+upstream Envoy Gateway v1.8 range of v1.32 through v1.35. The patched stack
+still requires a new live compatibility run.
 
 ## Live upstream alignment (2026-08-27)
 

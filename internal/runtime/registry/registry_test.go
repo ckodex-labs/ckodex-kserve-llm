@@ -20,13 +20,18 @@ func TestResolveUsesDefaultAndRejectsUnregisteredEngines(t *testing.T) {
 	require.Equal(t, SGLangEngine, sglangAdapter.Name())
 	require.True(t, sglangAdapter.Image().Valid())
 
+	tensorfoldAdapter, ok := Resolve(TensorFoldEngine)
+	require.True(t, ok)
+	require.Equal(t, TensorFoldEngine, tensorfoldAdapter.Name())
+	require.True(t, tensorfoldAdapter.Image().Valid())
+
 	_, ok = Resolve("quant-cpp")
 	require.False(t, ok)
 }
 
 func TestNamesReturnsDefensiveCopy(t *testing.T) {
 	names := Names()
-	require.Equal(t, []string{SGLangEngine, DefaultEngine}, names)
+	require.Equal(t, []string{SGLangEngine, TensorFoldEngine, DefaultEngine}, names)
 	names[0] = "mutated"
-	require.Equal(t, []string{SGLangEngine, DefaultEngine}, Names())
+	require.Equal(t, []string{SGLangEngine, TensorFoldEngine, DefaultEngine}, Names())
 }

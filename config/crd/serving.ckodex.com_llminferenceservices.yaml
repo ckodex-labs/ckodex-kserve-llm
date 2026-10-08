@@ -128,6 +128,7 @@ spec:
                     description: Engine selects the inference engine.
                     enum:
                     - sglang
+                    - tensorfold
                     - vllm
                     type: string
                   kvCache:
@@ -9061,6 +9062,16 @@ spec:
                           runtime does not consume it and admission rejects non-empty values.
                         type: string
                       method:
+                        description: Method selects the quantization algorithm.
+                        enum:
+                        - awq
+                        - gptq
+                        - gguf
+                        - bitsandbytes
+                        - fp8
+                        - exl3
+                        - nvfp4
+                        - mxfp8
                         type: string
                     required:
                     - method
@@ -26872,6 +26883,7 @@ spec:
                   rejected by admission.
                 enum:
                 - sglang
+                - tensorfold
                 - vllm
                 type: string
               kvCache:
@@ -35931,9 +35943,9 @@ spec:
               quantization:
                 description: |-
                   Quantization configures weight quantization for reduced memory footprint.
-                  AWQ and GPTQ require pre-quantized model weights. GGUF has no admitted
-                  runtime and fails closed during engine selection. bitsandbytes and fp8
-                  quantize at load time.
+                  AWQ and GPTQ require pre-quantized model weights. GGUF remains unadmitted
+                  because the API does not yet resolve a concrete file for llama.cpp.
+                  bitsandbytes and fp8 quantize at load time.
                 properties:
                   checkpointPath:
                     description: |-
@@ -35946,12 +35958,16 @@ spec:
                       "awq" and "gptq" require pre-quantized model weights.
                       "gguf" is rejected because no conformant LLM runtime is admitted for it.
                       "bitsandbytes" and "fp8" quantize at load time.
+                      "exl3", "nvfp4", and "mxfp8" are supported modern quantization formats.
                     enum:
                     - awq
                     - gptq
                     - gguf
                     - bitsandbytes
                     - fp8
+                    - exl3
+                    - nvfp4
+                    - mxfp8
                     type: string
                 required:
                 - method

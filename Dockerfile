@@ -97,5 +97,6 @@ ENTRYPOINT ["/storage-initializer"]
 FROM gcr.io/distroless/static:nonroot AS manager
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=cosign /ko-app/cosign /cosign
 USER 65532:65532
 ENTRYPOINT ["/manager"]

@@ -1,0 +1,43 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: ModelServingProfile
+metadata:
+  name: decision-evaluator
+  namespace: default
+  labels:
+    serving.ckodex.com/profile: decision-evaluator
+    serving.ckodex.com/engine: tensorfold
+    serving.ckodex.com/workload-class: decision
+spec:
+  workloadClass: decision
+  decisionCapabilities:
+    - predicate
+    - choice
+    - score
+  runtime:
+    engine: tensorfold
+    image: ghcr.io/ckodex-labs/tensorfold-runtime:v0.31.0
+    port: 8000
+    protocol: http
+  sla:
+    maxLatencyMillis: 500
+    timeoutSeconds: 60
+    targetAvailability: "99.9%"
+    targetThroughputRPS: 50
+  applicability:
+    supportedRuntimes:
+      - tensorfold
+    targetEngines:
+      - tensorfold
+    modelFamilies:
+      - glm53
+      - glm
+    workloadSelector:
+      serving.ckodex.com/profile: decision-evaluator
+    hardwareRequirements:
+      accelerator: "nvidia-rtx-pro-6000"
+      minGPUCount: 4
+      minMemory: "128Gi"
+  evidence:
+    minTrustLevel: "verified"
+    requireSBOM: true
+    requireSignature: true

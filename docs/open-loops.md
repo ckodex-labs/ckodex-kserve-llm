@@ -49,11 +49,25 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ## Operator
 
+### L-OP-016 — Keep Gateway API CRD ownership singular in Nightly KIND
+
+- **Status:** in-progress
+- **Priority:** P0
+- **Context:** Nightly run [36406335463](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/36406335463) failed before E2E when Envoy Gateway Helm tried to server-side apply Gateway API CRDs already installed by `kubectl`. The local prereq script now skips chart CRDs and its separately templated safety policy. Helm template and shell syntax checks pass; a hosted run on the changed head is still needed to verify bootstrap and execute E2E.
+- **Reference:** `local/02-prereqs.sh`, `docs/ci/current-state.md`
+
+### L-OP-017 — Qualify the aligned KIND and gateway stack
+
+- **Status:** open
+- **Priority:** P0
+- **Context:** The default KIND node is now the v0.33.0 release's digest-pinned Kubernetes v1.35.8 image, within Envoy Gateway's published v1.8 range. The local installer uses the v1.8.4 security patch, but this exact combination has no fresh-cluster proof. Run Nightly bootstrap, routing, inference, and recovery on the changed head before claiming runtime acceptance; treat Kubernetes v1.36 with Envoy Gateway v1.9/Gateway API v1.6 as a separate migration.
+- **Reference:** `deploy/kind/acceptance-node-image.txt`, `local/02-prereqs.sh`, `docs/dependency-alignment.md`
+
 ### L-OP-007 — Remove the Nightly KIND pod-readiness race
 
 - **Status:** in-progress
 - **Priority:** P0
-- **Context:** The latest main-head Nightly run [33081386331](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33081386331) failed during KIND bootstrap before E2E because kubeadm received `etcd.local.extraArgs` as an array instead of a map. The pending checkout changes the config to a map and pins the node profile; a hosted rerun on that exact head remains required.
+- **Context:** Earlier Nightly run [33081386331](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33081386331) failed during KIND bootstrap before E2E because kubeadm received `etcd.local.extraArgs` as an array instead of a map. The pending checkout changes the config to a map and pins the node profile; a hosted rerun on that exact head remains required.
 - **Reference:** `local/05-test-inference.sh`, `docs/beta/plan.md`, `docs/beta/readiness-ledger.md`
 
 ### L-OP-008 — Qualify the Nightly KIND inference probe
@@ -102,7 +116,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 - **Status:** in-progress
 - **Priority:** P0
-- **Context:** The disposable acceptance environment is now explicitly pinned to `kindest/node:v1.36.1` with a 65,536-descriptor preflight. The current Docker/KIND host previously exposed only a 1,024-file-descriptor node limit, so a fresh runtime qualification remains required before hosted parity is claimed.
+- **Context:** The disposable acceptance environment is now explicitly pinned to a digest-locked `kindest/node:v1.35.8` from KIND v0.33.0 with a 65,536-descriptor preflight. A container launched through this host's Colima Docker daemon measured a 1,024-file-descriptor soft limit on 2026-09-28, so the preflight remains blocked here. Fresh runtime qualification is required before hosted parity is claimed. Gateway stack acceptance is tracked separately in L-OP-017.
 - **Reference:** `deploy/kind/kind-config.yaml`, `local/01-kind-setup.sh`, `docs/beta/plan.md`
 
 ### L-OP-006 — Validate LMCache live behavior without conflating it with model-weight caching

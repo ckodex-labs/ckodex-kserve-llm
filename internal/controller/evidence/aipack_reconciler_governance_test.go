@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -24,6 +25,7 @@ func aipackWithAttestation(name string, kind servingv1alpha2.ArtifactKind, predi
 }
 
 func TestReconcileAIPacks_StatusBranches(t *testing.T) {
+	setNoAIPackVerifierConfig(t)
 	completeAgent := aipackWithAttestation("agent", servingv1alpha2.KindAgent,
 		servingv1alpha2.PredSLSAProvenance, servingv1alpha2.PredCycloneDXBOM,
 		servingv1alpha2.PredAgentComposition, servingv1alpha2.PredAgentBehavioralEval,
@@ -40,7 +42,7 @@ func TestReconcileAIPacks_StatusBranches(t *testing.T) {
 		want  string
 	}{
 		{name: "none", want: "NoAIPacksAssociated"},
-		{name: "kind without required predicates", packs: []servingv1alpha2.AIPack{unknownKind}, want: "AllAIPacksAttested"},
+		{name: "unsupported kind fails closed", packs: []servingv1alpha2.AIPack{unknownKind}, want: "AIPackAttestationIncomplete"},
 		{name: "missing required", packs: []servingv1alpha2.AIPack{incompleteAgent}, want: "AIPackAttestationIncomplete"},
 		{name: "present but cryptographically unverified", packs: []servingv1alpha2.AIPack{completeAgent}, want: "AIPackAttestationIncomplete"},
 	}
@@ -57,7 +59,8 @@ func TestReconcileAIPacks_StatusBranches(t *testing.T) {
 	}
 }
 
-func TestReconcileAIPacks_AgentCompositionCreatesAdapters(t *testing.T) {
+func TestReconcileAIPacks_UnverifiedAgentCompositionDoesNotCreateAdapters(t *testing.T) {
+	setNoAIPackVerifierConfig(t)
 	pack := aipackWithAttestation("composed", servingv1alpha2.KindAgent,
 		servingv1alpha2.PredSLSAProvenance, servingv1alpha2.PredCycloneDXBOM,
 		servingv1alpha2.PredAgentComposition, servingv1alpha2.PredAgentBehavioralEval,
@@ -72,12 +75,21 @@ func TestReconcileAIPacks_AgentCompositionCreatesAdapters(t *testing.T) {
 		t.Fatalf("ReconcileAIPacks: %v", err)
 	}
 	var adapter servingv1alpha2.LLMLoraAdapter
-	if err := c.Get(context.Background(), clientKey("composed-lora-0"), &adapter); err != nil {
-		t.Fatalf("created adapter: %v", err)
+	err := c.Get(context.Background(), clientKey("composed-lora-0"), &adapter)
+	if err == nil {
+		t.Fatal("created adapter before the AIPack attestation was verified")
 	}
-	if adapter.Spec.TargetService != "target" {
-		t.Fatalf("TargetService = %q, want target", adapter.Spec.TargetService)
+	if !apierrors.IsNotFound(err) {
+		t.Fatalf("get adapter: %v", err)
 	}
+}
+
+func setNoAIPackVerifierConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("CKODEX_COSIGN_TRUSTED_KEY_REF", "")
+	t.Setenv("CKODEX_COSIGN_TRUSTED_KEY_PATH", "")
+	t.Setenv("CKODEX_COSIGN_CERT_IDENTITY", "")
+	t.Setenv("CKODEX_COSIGN_CERT_OIDC_ISSUER", "")
 }
 
 func clientKey(name string) types.NamespacedName {

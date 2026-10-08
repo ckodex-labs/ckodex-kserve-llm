@@ -1,6 +1,12 @@
 {{- if and .Values.webhook.enabled (not .Values.certManager.enabled) }}
 {{- fail "certManager.enabled must be true when webhook.enabled is true; this chart provisions webhook TLS through cert-manager" }}
 {{- end }}
+{{- if ne (empty .Values.aipackVerification.cosign.certificateIdentity) (empty .Values.aipackVerification.cosign.certificateOIDCIssuer) }}
+{{- fail "aipackVerification.cosign.certificateIdentity and certificateOIDCIssuer must be set together" }}
+{{- end }}
+{{- if and .Values.aipackVerification.cosign.trustedPublicKeySecretName .Values.aipackVerification.cosign.certificateIdentity }}
+{{- fail "configure either a trusted public key Secret or keyless certificate identity, not both" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -129,6 +135,18 @@ spec:
               value: {{ .Values.features.enableExperimentalStatusHardening | quote }}
             - name: CKODEX_RUNTIME_IMAGE
               value: {{ .Values.vllm.defaultImage | quote }}
+            {{- if .Values.engines }}
+            - name: CKODEX_ADMITTED_ENGINES
+              value: {{ keys .Values.engines | sortAlpha | join "," | quote }}
+            {{- end }}
+            {{- if and .Values.engines .Values.engines.tensorfold .Values.engines.tensorfold.enabled }}
+            - name: CKODEX_TENSORFOLD_RUNTIME_IMAGE
+              value: {{ .Values.engines.tensorfold.image | quote }}
+            {{- end }}
+            {{- if and .Values.engines .Values.engines.vllm .Values.engines.vllm.upgradedImage }}
+            - name: CKODEX_VLLM_UPGRADED_IMAGE
+              value: {{ .Values.engines.vllm.upgradedImage | quote }}
+            {{- end }}
             - name: CKODEX_ENVOY_GATEWAY_NAMESPACE
               value: {{ .Values.gateway.dataPlaneNamespace | quote }}
             - name: CKODEX_AUDIT_LOG_PATH
@@ -136,6 +154,22 @@ spec:
             {{- if .Values.audit.otlpEndpoint }}
             - name: CKODEX_AUDIT_OTLP_ENDPOINT
               value: {{ .Values.audit.otlpEndpoint | quote }}
+            {{- end }}
+            {{- if .Values.aipackVerification.cosign.trustedPublicKeySecretName }}
+            - name: CKODEX_COSIGN_TRUSTED_KEY_REF
+              value: {{ printf "k8s://%s/%s" .Release.Namespace .Values.aipackVerification.cosign.trustedPublicKeySecretName | quote }}
+            - name: CKODEX_COSIGN_TRUSTED_KEY_PATH
+              value: /var/run/secrets/ckodex-cosign/cosign.pub
+            {{- end }}
+            {{- if .Values.aipackVerification.cosign.certificateIdentity }}
+            - name: CKODEX_COSIGN_CERT_IDENTITY
+              value: {{ .Values.aipackVerification.cosign.certificateIdentity | quote }}
+            - name: CKODEX_COSIGN_CERT_OIDC_ISSUER
+              value: {{ .Values.aipackVerification.cosign.certificateOIDCIssuer | quote }}
+            {{- end }}
+            {{- if .Values.aipackVerification.cosign.rekorURL }}
+            - name: CKODEX_COSIGN_REKOR_URL
+              value: {{ .Values.aipackVerification.cosign.rekorURL | quote }}
             {{- end }}
           resources: {{ toYaml .Values.controller.resources | nindent 12 }}
           securityContext: {{ toYaml .Values.controller.securityContext | nindent 12 }}
@@ -145,6 +179,11 @@ spec:
           {{- if .Values.webhook.enabled }}
             - mountPath: {{ .Values.webhook.certDir }}
               name: cert
+              readOnly: true
+          {{- end }}
+          {{- if .Values.aipackVerification.cosign.trustedPublicKeySecretName }}
+            - mountPath: /var/run/secrets/ckodex-cosign
+              name: aipack-cosign-key
               readOnly: true
           {{- end }}
       volumes:
@@ -160,6 +199,15 @@ spec:
           secret:
             defaultMode: 420
             secretName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-cert
+      {{- end }}
+      {{- if .Values.aipackVerification.cosign.trustedPublicKeySecretName }}
+        - name: aipack-cosign-key
+          secret:
+            defaultMode: 288
+            items:
+              - key: cosign.pub
+                path: cosign.pub
+            secretName: {{ .Values.aipackVerification.cosign.trustedPublicKeySecretName }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{ toYaml . | nindent 8 }}

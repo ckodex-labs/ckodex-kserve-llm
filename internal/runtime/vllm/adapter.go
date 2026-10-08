@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// Adapter renders the vLLM 0.28 command-line contract.
+// Adapter renders the vLLM 0.31 command-line contract.
 type Adapter struct{}
 
 func (Adapter) Name() string { return "vllm" }
@@ -28,8 +28,8 @@ func (Adapter) Tier() inferenceruntime.ConformanceTier {
 func (Adapter) Image() inferenceruntime.ImageContract {
 	return inferenceruntime.ImageContract{
 		Repository: "vllm/vllm-openai",
-		Tag:        "v0.28.0",
-		Digest:     "sha256:61fc8a896b0a4fbbbdc063bc4b0dbc25ce98e02b5050c24aeb7830ac02039b14",
+		Tag:        "v0.31.0",
+		Digest:     "sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3",
 	}
 }
 
@@ -41,6 +41,9 @@ func (Adapter) MetricsContract() inferenceruntime.MetricsContract {
 	return inferenceruntime.MetricsContract{Path: "/metrics"}
 }
 
+// Capabilities declares the vLLM v0.31.0 capability matrix.
+// vLLM v0.31.0 enhances KVCacheDtype with NVFP4, ExpertParallel with MoE Mega-Gate,
+// and features fast restart weight preloading and FlashMLA attention.
 func (Adapter) Capabilities() inferenceruntime.CapabilityMatrix {
 	return inferenceruntime.CapabilityMatrix{
 		TensorParallel:      inferenceruntime.CapabilitySupported,
@@ -62,24 +65,46 @@ func (Adapter) Validate(service *servingv1alpha2.LLMInferenceService) field.Erro
 	if service == nil {
 		return field.ErrorList{field.Required(field.NewPath("spec"), "service is required")}
 	}
+	errs := field.ErrorList{}
 	if service.Spec.Engine != "" && service.Spec.Engine != "vllm" {
-		return field.ErrorList{field.NotSupported(field.NewPath("spec", "engine"), service.Spec.Engine, []string{"vllm"})}
+		errs = append(errs, field.NotSupported(field.NewPath("spec", "engine"), service.Spec.Engine, []string{"vllm"}))
 	}
 	if service.Spec.Quantization != nil && service.Spec.Quantization.CheckpointPath != "" {
-		return field.ErrorList{field.Forbidden(field.NewPath("spec", "quantization", "checkpointPath"), "checkpoint paths are not consumed by vLLM")}
+		errs = append(errs, field.Forbidden(field.NewPath("spec", "quantization", "checkpointPath"), "checkpoint paths are not consumed by vLLM"))
 	}
 	if service.Spec.Quantization != nil && service.Spec.Quantization.Method == "gguf" {
-		return field.ErrorList{field.NotSupported(
+		errs = append(errs, field.NotSupported(
 			field.NewPath("spec", "quantization", "method"),
 			service.Spec.Quantization.Method,
 			[]string{"awq", "gptq", "bitsandbytes", "fp8"},
-		)}
+		))
 	}
-	return nil
+	if service.Spec.KVCache != nil && service.Spec.KVCache.Dtype != "" {
+		switch service.Spec.KVCache.Dtype {
+		case "auto", "fp8", "fp16", "bf16", "nvfp4":
+		default:
+			errs = append(errs, field.NotSupported(
+				field.NewPath("spec", "kvCache", "dtype"),
+				service.Spec.KVCache.Dtype,
+				[]string{"auto", "fp8", "fp16", "bf16", "nvfp4"},
+			))
+		}
+	}
+	for i, container := range service.Spec.Template.Spec.Containers {
+		for j, arg := range container.Args {
+			if arg == "--tokenizer-mode=slow" || (arg == "--tokenizer-mode" && j+1 < len(container.Args) && container.Args[j+1] == "slow") {
+				errs = append(errs, field.Forbidden(
+					field.NewPath("spec", "template", "spec", "containers").Index(i).Child("args"),
+					"tokenizer_mode 'slow' was removed in vLLM v0.31.0; use 'auto' or 'mistral'",
+				))
+			}
+		}
+	}
+	return errs
 }
 
 func (Adapter) Render(request inferenceruntime.RenderRequest) inferenceruntime.RenderedRuntime {
-	args := append([]string(nil), request.ExistingArgs...)
+	args := stripRemovedArgs(request.ExistingArgs)
 	args = prependPair(args, "--model", request.ModelPath)
 	if request.Service != nil && request.Service.Spec.Model.Name != "" {
 		args = appendPair(args, "--served-model-name", request.Service.Spec.Model.Name)
@@ -93,6 +118,7 @@ func (Adapter) Render(request inferenceruntime.RenderRequest) inferenceruntime.R
 	args = renderCache(args, request.Service.Spec.KVCache)
 	args = renderSpeculative(args, request.Service.Spec.SpeculativeDecoding)
 	args = renderQuantization(args, request.Service.Spec.Quantization)
+	args = renderModernFeatures(args, request.Service)
 	return inferenceruntime.RenderedRuntime{Args: args}
 }
 
@@ -193,4 +219,56 @@ func defaultPort(port int32) int32 {
 		return 8000
 	}
 	return port
+}
+
+func stripRemovedArgs(args []string) []string {
+	filtered := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		argument := args[index]
+		if argument == "--tokenizer-mode=slow" {
+			continue
+		}
+		if argument == "--tokenizer-mode" && index+1 < len(args) && args[index+1] == "slow" {
+			index++
+			continue
+		}
+		filtered = append(filtered, argument)
+	}
+	return filtered
+}
+
+func getAnnotation(service *servingv1alpha2.LLMInferenceService, key string) string {
+	if service == nil {
+		return ""
+	}
+	if service.Annotations != nil && service.Annotations[key] != "" {
+		return service.Annotations[key]
+	}
+	if service.Spec.Template.Annotations != nil && service.Spec.Template.Annotations[key] != "" {
+		return service.Spec.Template.Annotations[key]
+	}
+	return ""
+}
+
+func renderModernFeatures(args []string, service *servingv1alpha2.LLMInferenceService) []string {
+	if service == nil {
+		return args
+	}
+	if getAnnotation(service, "serving.ckodex.com/fast-restart") == "true" ||
+		getAnnotation(service, "serving.ckodex.com/preload-weight-cache") == "true" {
+		args = appendPair(args, "--load-format", "ipc_cache")
+		args = appendSwitch(args, "--enable-fast-restart")
+	}
+	if getAnnotation(service, "serving.ckodex.com/flashmla") == "true" ||
+		getAnnotation(service, "serving.ckodex.com/enable-flashmla") == "true" {
+		args = appendSwitch(args, "--enable-flashmla")
+	}
+	if getAnnotation(service, "serving.ckodex.com/mega-gate") == "true" ||
+		getAnnotation(service, "serving.ckodex.com/moe-mega-gate") == "true" {
+		args = appendSwitch(args, "--enable-mega-gate")
+	}
+	if getAnnotation(service, "serving.ckodex.com/trust-request-mm-kwargs") == "true" {
+		args = appendSwitch(args, "--trust-request-mm-kwargs")
+	}
+	return args
 }

@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	EngineVLLM   = runtimeregistry.DefaultEngine
-	EngineSGLang = runtimeregistry.SGLangEngine
+	EngineVLLM       = runtimeregistry.DefaultEngine
+	EngineSGLang     = runtimeregistry.SGLangEngine
+	EngineTensorFold = runtimeregistry.TensorFoldEngine
 )
 
 // ValidateInferenceEngine rejects engines without an implemented runtime path.

@@ -69,7 +69,7 @@ FROM python:3.12.14-slim-trixie@sha256:7a8b475003c4fe15a2cd4e55e5cfc2f3560bdc933
 # repository updates for the runtime libraries Trivy gates before copying the
 # application payload, then remove package metadata from the final image.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssl util-linux \
+    && apt-get install -y --no-install-recommends openssl util-linux perl-base \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=huggingface-builder /workspace/huggingface-initializer /huggingface-initializer
 COPY --from=huggingface-python-deps /opt/huggingface-python /usr/local/lib/python3.12/site-packages

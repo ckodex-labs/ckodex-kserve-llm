@@ -1,9 +1,13 @@
 # Build stage. Compile on the native builder platform and cross-compile for the
 # requested target so multi-architecture builds do not run the Go compiler
 # through CPU emulation.
+ARG BUILDPLATFORM=linux/amd64
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
 FROM --platform=$BUILDPLATFORM golang:1.27.0-bookworm@sha256:ded31c68586d2e49e760acc2e65a884b23d032e9bbbed0ae0c55abd3fcaf4452 AS builder-base
 
-ARG TARGETOS=linux
+ARG TARGETOS
 ARG TARGETARCH
 
 WORKDIR /workspace
@@ -21,6 +25,8 @@ COPY internal/ internal/
 RUN mkdir -p /workspace/.cache/go-build /workspace/.tmp
 
 FROM builder-base AS builder
+ARG TARGETOS
+ARG TARGETARCH
 
 # Build serially. The hosted arm64 builder has intermittently crashed in the
 # native Go compiler while cross-compiling this image; limiting package
@@ -31,6 +37,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -p=1 -trimpath -ldflags="-s -w" -o storage-initializer ./cmd/storage-initializer
 
 FROM builder-base AS huggingface-builder
+ARG TARGETOS
+ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -p=1 -trimpath -ldflags="-s -w" -o huggingface-initializer ./cmd/huggingface-initializer
 

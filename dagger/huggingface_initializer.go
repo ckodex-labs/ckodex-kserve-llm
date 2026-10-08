@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"dagger/ckodex-operator/internal/dagger"
 
@@ -165,5 +166,10 @@ func buildHuggingFaceInitializerVariant(source *dagger.Directory, arch string) *
 	return filteredSource(source).DockerBuild(dagger.DirectoryDockerBuildOpts{
 		Platform: dagger.Platform("linux/" + arch),
 		Target:   "huggingface-initializer",
+		BuildArgs: []dagger.BuildArg{
+			{Name: "BUILDPLATFORM", Value: "linux/" + runtime.GOARCH},
+			{Name: "TARGETARCH", Value: arch},
+			{Name: "TARGETOS", Value: "linux"},
+		},
 	})
 }

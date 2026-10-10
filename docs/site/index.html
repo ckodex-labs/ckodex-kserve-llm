@@ -23,7 +23,7 @@
           <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm">
             View repository
           </a>
-          <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7">
+          <a class="button button--primary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.19.0-rc.1">
             Latest release
           </a>
           <a class="button button--secondary" href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.5">
@@ -64,7 +64,7 @@
       <section class="release" aria-label="Current release">
         <div>
           <p class="eyebrow">Latest published release</p>
-          <h2>v0.18.0-rc.7</h2>
+          <h2>v0.19.0-rc.1</h2>
           <p>
             The latest published candidate passed release verification, signed
             image and binary publication, provenance generation, chart
@@ -73,28 +73,28 @@
           <p>
             Stable baseline:
             <a href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-beta.5">v0.18.0-beta.5</a>.
-            RC7 is a prerelease, so GitHub does not mark it as Latest; this page
+            RC.1 is a prerelease, so GitHub does not mark it as Latest; this page
             presents the most recent published candidate first. Its hosted
             release workflow passed at
-            <a href="https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052">run 33457020052</a>.
+            <a href="https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/37840516223">run 37840516223</a>.
           </p>
         </div>
         <dl class="release__facts">
           <div>
             <dt>Published</dt>
-            <dd>2026-09-01</dd>
+            <dd>2026-10-08</dd>
           </div>
           <div>
             <dt>Source</dt>
-            <dd><code>eccb4d7</code></dd>
+            <dd><code>e034d19</code></dd>
           </div>
           <div>
             <dt>Hosted release run</dt>
-            <dd><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052">passed</a></dd>
+            <dd><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/37840516223">passed</a></dd>
           </div>
           <div>
             <dt>Release page</dt>
-            <dd><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7">open</a></dd>
+            <dd><a href="https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.19.0-rc.1">open</a></dd>
           </div>
         </dl>
       </section>
@@ -114,7 +114,7 @@
 
       <section class="code-block">
         <h2>Quick proof commands</h2>
-        <pre><code>TAG=v0.18.0-rc.7
+        <pre><code>TAG=v0.19.0-rc.1
 helm pull oci://ghcr.io/ckodex-labs/charts/ckodex-kserve-llm-operator --version "${TAG#v}"
 gh release download "$TAG" --repo ckodex-labs/ckodex-kserve-llm --dir release-assets
 (cd release-assets && sha256sum -c checksums.txt)</code></pre>

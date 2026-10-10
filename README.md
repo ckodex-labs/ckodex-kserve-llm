@@ -169,9 +169,9 @@ hosted path for published artifacts and provenance.
 
 ## Project Status
 
-- Latest published release candidate: [`v0.18.0-rc.7`](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7)
-- Release workflow: [passed](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052)
-- Source chart defaults: `v0.18.0-beta.8`; tag-driven packaging injects the release version and image tags
+- Latest published release candidate: [`v0.19.0-rc.1`](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.19.0-rc.1)
+- Release workflow: [passed](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/37840516223)
+- Source chart defaults: `0.19.0-rc.1`; tag-driven packaging injects the release version and image tags
 - Core LLM API schema: stable `serving.ckodex.com/v1`; live v1 admission and
   conversion acceptance remain tracked separately
 - Specialized APIs: `serving.ckodex.com/v1alpha2` where no v1 CRD exists
@@ -182,7 +182,7 @@ hosted path for published artifacts and provenance.
 - Experimental agent controllers: disabled by default
 - Security and admission integrations: opt-in and dependency-sensitive
 - Tiny `glm5_next` fixture: local CPU configuration and generation evidence;
-  full GLM-5.3 and NVFP4 serving remain unverified
+  GLM-5.3 4x RTX PRO 6000 Ada and TensorFold profiles available
 
 Do not infer API stability from the number of available CRDs. Check feature
 gates, controller registration, and the relevant runbook before adopting an

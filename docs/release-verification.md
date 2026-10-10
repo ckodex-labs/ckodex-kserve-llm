@@ -53,19 +53,19 @@ The latest stable beta release is `v0.18.0-beta.5`.
 - Hosted release run: <https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/28995564785>
 - Published assets include manager archives, storage-initializer archives, `checksums.txt`, `checksums.txt.sigstore.json`, binary provenance, image provenance, container image signature, SBOM output, and the Helm chart package.
 
-The latest published release candidate is `v0.18.0-rc.7`. It is a GitHub
+The latest published release candidate is `v0.19.0-rc.1`. It is a GitHub
 prerelease, so GitHub intentionally does not mark it as **Latest**; that label
-belongs to the stable beta above. RC7 is published and its hosted release
+belongs to the stable beta above. RC.1 is published and its hosted release
 workflow completed successfully, including anonymous artifact acceptance.
 
-- GitHub release: <https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.18.0-rc.7>
-- Source commit: `eccb4d71d0229fad6abb7740738af16926e466ac`
-- Hosted release run: <https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33457020052>
+- GitHub release: <https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.19.0-rc.1>
+- Source commit: `e034d19fc2ac69d734ddacbb29749ea5b9c880ef`
+- Hosted release run: <https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/37840516223>
 - Published assets include checksums and Sigstore metadata, the CRD bundle,
-  manager and storage-initializer archives, console and operator images, and
+  manager and storage-initializer archives, console, huggingface-initializer and operator images, and
   SLSA provenance.
 
-The RC7 release path rendered the packaged chart with the candidate version and
+The v0.19.0-rc.1 release path rendered the packaged chart with the candidate version and
 verified that release-owned images resolve to the candidate tag before anonymous
 artifact acceptance.
 

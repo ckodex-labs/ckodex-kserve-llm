@@ -8,9 +8,10 @@ These images power the primary data plane for LLM and Embedding workloads.
 
 | Component | Version | Image Reference | Use Case |
 | :--- | :--- | :--- | :--- |
-| **vLLM** | `v0.28.0` | `vllm/vllm-openai:v0.28.0` | CUDA inference runtime; operator default. |
+| **vLLM** | `v0.28.0` / `v0.31.0` | `vllm/vllm-openai:v0.31.0` | CUDA inference runtime; operator baseline / upgraded tier with FlashMLA and NVFP4. |
 | **vLLM CPU** | `v0.28.0` | `vllm/vllm-openai-cpu:v0.28.0` | Local and CPU-only inference; explicit opt-in. |
 | **vLLM (Gemma 4)** | `v0.28.0` | `vllm/vllm-openai:v0.28.0` | NVFP4-capable runtime; model is selected by the workload. |
+| **TensorFold** | `v0.1.0` | `tensorfold/engine:latest` | TensorFold recurrent-state runtime for EXL3 / GLM-5.3 4x RTX PRO 6000 Ada. |
 | **SGLang** | `v0.5.18` | `lmsysorg/sglang:v0.5.18@sha256:9e148f…c29a1a1` | Served-tier CUDA runtime; explicit opt-in with reduced capability surface. |
 
 AMD clusters must configure an independently validated ROCm image; the

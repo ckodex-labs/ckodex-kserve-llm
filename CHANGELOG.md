@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.19.0 — 2026-10-10
+
+### Highlights
+
+- **General Availability (GA)**: Promoted the TensorFold and vLLM v0.31 operator architecture to GA standing with Level 5 Assured Conformance.
+- **Go stdlib Security Hardening**: Upgraded builder base image to Go 1.27.2 (`1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61`), eliminating CVE-2026-78667, CVE-2026-78669, and CVE-2026-97031 from compiled binaries.
+- **Metamorphic Invariance Invariant**: Refactored decision evaluator metamorphic test vectors to evaluate tokenized field length invariance across whitespace permutations.
+- **Documentation & Catalog Alignment**: Fully synchronized GitHub Pages, README, quick proof commands, and component inventory to `v0.19.0`.
+
 ## v0.19.0-rc.1 — 2026-10-08
 
 ### Added

@@ -5,7 +5,7 @@ ARG BUILDPLATFORM=linux/amd64
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 
-FROM --platform=$BUILDPLATFORM golang:1.27.0-bookworm@sha256:ded31c68586d2e49e760acc2e65a884b23d032e9bbbed0ae0c55abd3fcaf4452 AS builder-base
+FROM --platform=$BUILDPLATFORM golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 AS builder-base
 
 ARG TARGETOS
 ARG TARGETARCH

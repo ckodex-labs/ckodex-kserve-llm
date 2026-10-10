@@ -1,7 +1,7 @@
 package main
 
 const (
-	goBuilderImage      = "golang:1.27.0-bookworm@sha256:ded31c68586d2e49e760acc2e65a884b23d032e9bbbed0ae0c55abd3fcaf4452"
+	goBuilderImage      = "golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61"
 	golangciLintVersion = "v2.13.1"
 	trivyVersion        = "0.72.0"
 	cosignVersion       = "v3.1.3"

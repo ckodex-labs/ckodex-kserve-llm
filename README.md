@@ -169,9 +169,9 @@ hosted path for published artifacts and provenance.
 
 ## Project Status
 
-- Latest published release candidate: [`v0.19.0-rc.1`](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.19.0-rc.1)
-- Release workflow: [passed](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/37840516223)
-- Source chart defaults: `0.19.0-rc.1`; tag-driven packaging injects the release version and image tags
+- Latest published release: [`v0.19.0`](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.19.0)
+- Release workflow: [passed](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/workflows/release.yml)
+- Source chart defaults: `0.19.0`; tag-driven packaging injects the release version and image tags
 - Core LLM API schema: stable `serving.ckodex.com/v1`; live v1 admission and
   conversion acceptance remain tracked separately
 - Specialized APIs: `serving.ckodex.com/v1alpha2` where no v1 CRD exists

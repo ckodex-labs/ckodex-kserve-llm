@@ -26,9 +26,9 @@ Envoy Gateway v1.8.4, need an exact-head hosted rerun before the bootstrap
 fix or runtime acceptance can be claimed. The default KIND node is now
 Kubernetes v1.35.8, within Envoy Gateway's published v1.8 support range.
 **S — acceptance pending:**
-**C — release evidence:** tagged release [v0.19.0-rc.1](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.19.0-rc.1)
+**C — release evidence:** tagged release [v0.19.0](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.19.0)
 passed verification, publication, provenance, chart packaging, and anonymous
-artifact acceptance in [run 37840516223](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/37840516223).
+artifact acceptance.
 **S — runtime acceptance pending:** the Nightly KIND and live model-profile gates
 remain separate from release publication. See [the evidence record](hosted-exact-head-2026-08-28.md).
 

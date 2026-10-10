@@ -1,0 +1,76 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: glm53-tensorfold-rtx6000
+  namespace: ckodex-inference
+  labels:
+    serving.ckodex.com/profile: decision-evaluator
+    serving.ckodex.com/engine: tensorfold
+    serving.ckodex.com/hardware: 4x-rtx-pro-6000
+spec:
+  model:
+    name: THUDM/glm-5.3-exl3
+    uri: hf://THUDM/glm-5.3-exl3
+  engine: tensorfold
+  replicas: 1
+  parallelism:
+    tensor: 4
+    pipeline: 1
+  quantization:
+    method: exl3
+  template:
+    metadata:
+      labels:
+        serving.ckodex.com/role: llminferenceservice-workload
+        serving.ckodex.com/engine: tensorfold
+    spec:
+      nodeSelector:
+        nvidia.com/gpu.product: RTX-PRO-6000
+      containers:
+        - name: tensorfold
+          image: ghcr.io/ckodex-labs/tensorfold-runtime:v0.31.0
+          args:
+            - --model
+            - THUDM/glm-5.3-exl3
+            - --tensor-parallel-size
+            - "4"
+            - --quantization
+            - exl3
+            - --max-model-len
+            - "32768"
+            - --max-num-seqs
+            - "16"
+            - --gpu-memory-utilization
+            - "0.92"
+            - --enforce-eager=false
+          env:
+            - name: TENSORFOLD_ATTENTION_BACKEND
+              value: "FLASH_ATTN"
+            - name: TENSORFOLD_DECISION_MODE
+              value: "true"
+            - name: CUDA_VISIBLE_DEVICES
+              value: "0,1,2,3"
+          resources:
+            requests:
+              cpu: "32"
+              memory: 128Gi
+              nvidia.com/gpu: "4"
+            limits:
+              cpu: "32"
+              memory: 128Gi
+              nvidia.com/gpu: "4"
+          ports:
+            - name: http
+              containerPort: 8000
+  router:
+    gateway:
+      managed:
+        gatewayClassName: envoy
+    route:
+      httpRoute:
+        hostnames:
+          - glm53-eval.ckodex.internal
+    scheduler:
+      pool:
+        selector:
+          serving.ckodex.com/role: llminferenceservice-workload

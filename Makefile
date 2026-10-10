@@ -30,6 +30,14 @@ manifests: controller-gen ## Generate CRD manifests, RBAC, webhook configs
 fmt: ## Run go fmt
 	go fmt ./...
 
+.PHONY: fmt-check
+fmt-check: ## Verify go files are gofmt-formatted
+	@if [ -n "$$(gofmt -l $(shell git ls-files '*.go'))" ]; then \
+	  echo "Go files are not gofmt formatted. Run: make fmt"; \
+	  gofmt -l $(shell git ls-files '*.go'); \
+	  exit 1; \
+	fi
+
 .PHONY: vet
 vet: ## Run go vet
 	go vet ./...

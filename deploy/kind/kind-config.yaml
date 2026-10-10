@@ -20,5 +20,4 @@ nodes:
     etcd:
       local:
         extraArgs:
-        - name: max-request-bytes
-          value: "52428800"
+          max-request-bytes: "52428800"

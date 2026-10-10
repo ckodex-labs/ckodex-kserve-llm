@@ -24,6 +24,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Verify Go formatting
+        run: make fmt-check
+
       - name: Require console sources
         shell: bash
         run: |

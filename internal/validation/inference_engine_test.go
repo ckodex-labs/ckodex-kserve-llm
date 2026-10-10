@@ -19,6 +19,7 @@ func TestValidateInferenceEngine(t *testing.T) {
 		{name: "default", engine: ""},
 		{name: "vllm", engine: EngineVLLM},
 		{name: "sglang", engine: EngineSGLang},
+		{name: "tensorfold", engine: EngineTensorFold},
 		{name: "unverified quant cpp", engine: "quant-cpp", wantErr: true},
 		{name: "unsupported", engine: "other", wantErr: true},
 	}
@@ -34,7 +35,7 @@ func TestValidateInferenceEngine(t *testing.T) {
 
 func TestAdmittedInferenceEnginesReturnsDefensiveCopy(t *testing.T) {
 	engines := AdmittedInferenceEngines()
-	want := []string{EngineSGLang, EngineVLLM}
+	want := []string{EngineSGLang, EngineTensorFold, EngineVLLM}
 	if !reflect.DeepEqual(engines, want) {
 		t.Fatalf("AdmittedInferenceEngines() = %v, want %v", engines, want)
 	}

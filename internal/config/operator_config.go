@@ -327,7 +327,7 @@ func DefaultOperatorConfig() OperatorConfig {
 			SchedulerImage:                   "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:2e516fa1310da7be59b82beb1445362139597d6d553ef04d546716abe3aaaa70",
 			StorageInitializerImage:          "kserve/storage-initializer:v0.20.0",
 			CustomStorageInitializerImage:    "ckodex/storage-initializer:v0.1.0",
-			HuggingFaceInitializerImage:      "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.18.0-beta.8",
+			HuggingFaceInitializerImage:      "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.19.0",
 			DefaultReplicas:                  1,
 			VLLMCPURequest:                   "2",
 			VLLMMemoryRequest:                "4Gi",

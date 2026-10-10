@@ -35,7 +35,7 @@ kubectl apply --server-side -f https://github.com/llm-d/llm-d-router/releases/do
 # Apply them explicitly so upgrades remain correct even when Helm has already
 # installed the release and therefore does not replay its CRD directory.
 kubectl apply --server-side \
-  -f https://github.com/envoyproxy/gateway/releases/download/v1.8.1/envoy-gateway-crds.yaml
+  -f https://github.com/envoyproxy/gateway/releases/download/v1.8.4/envoy-gateway-crds.yaml
 
 # ── 2c. Envoy AI Gateway controller (InferencePool extension manager) ──
 # Envoy Gateway does not natively resolve InferencePool backendRefs. The
@@ -55,13 +55,15 @@ kubectl wait --for=condition=Available deployment/ai-gateway-controller \
   -n envoy-ai-gateway-system --timeout=180s
 
 # ── 3. Envoy Gateway controller (provides "envoy" GatewayClass) ──
-# Keep chart CRDs enabled so Envoy-specific APIs (Backend, HTTPRouteFilter,
-# EnvoyProxy, and policy types) are installed. Existing standard Gateway API
-# CRDs from step 2 are retained by Helm's CRD install semantics.
+# Gateway API and Envoy Gateway CRDs are installed in step 2. Skip the chart's
+# CRD files and its separately templated Gateway API safe-upgrade policy so
+# Helm does not contend with the kubectl-managed upstream bundle.
 HELM_REGISTRY_CONFIG=/dev/null helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm \
-  --version v1.8.1 \
+  --version v1.8.4 \
   --namespace envoy-gateway-system \
   --create-namespace \
+  --skip-crds \
+  --set crds.gatewayAPI.safeUpgradePolicy.enabled=false \
   -f "${SCRIPT_DIR}/03-envoy-gateway-values.yaml"
 kubectl wait --for=condition=Available deployment/envoy-gateway \
   -n envoy-gateway-system --timeout=120s

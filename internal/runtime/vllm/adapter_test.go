@@ -7,6 +7,7 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	inferenceruntime "github.com/ckodex-labs/kserve-llm-operator/internal/runtime"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 )
 
@@ -93,6 +94,114 @@ func TestAdapterRejectsGGUFWithoutVerifiedRuntimePlugin(t *testing.T) {
 	service := &servingv1alpha2.LLMInferenceService{}
 	service.Spec.Quantization = &servingv1alpha2.QuantizationSpec{Method: "gguf"}
 	require.Equal(t, "spec.quantization.method", (Adapter{}).Validate(service)[0].Field)
+}
+
+func TestAdapterImageContractV0310(t *testing.T) {
+	adapter := Adapter{}
+	image := adapter.Image()
+	require.Equal(t, "vllm/vllm-openai", image.Repository)
+	require.Equal(t, "v0.31.0", image.Tag)
+	require.Equal(t, "sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3", image.Digest)
+	require.True(t, image.Valid())
+	require.Equal(t, "vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3", image.Reference())
+}
+
+func TestAdapterRendersNVFP4KVCache(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{}
+	service.Spec.KVCache = &servingv1alpha2.KVCacheSpec{Dtype: "nvfp4"}
+
+	rendered := (Adapter{}).Render(inferenceruntime.RenderRequest{Service: service, ModelPath: "/models/model"})
+	assertArgumentPair(t, rendered.Args, "--kv-cache-dtype", "nvfp4")
+}
+
+func TestAdapterRendersModernFeaturesViaAnnotations(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{}
+	service.Annotations = map[string]string{
+		"serving.ckodex.com/fast-restart":            "true",
+		"serving.ckodex.com/flashmla":                "true",
+		"serving.ckodex.com/mega-gate":               "true",
+		"serving.ckodex.com/trust-request-mm-kwargs": "true",
+	}
+
+	rendered := (Adapter{}).Render(inferenceruntime.RenderRequest{Service: service, ModelPath: "/models/model"})
+	assertArgumentPair(t, rendered.Args, "--load-format", "ipc_cache")
+	require.Contains(t, rendered.Args, "--enable-fast-restart")
+	require.Contains(t, rendered.Args, "--enable-flashmla")
+	require.Contains(t, rendered.Args, "--enable-mega-gate")
+	require.Contains(t, rendered.Args, "--trust-request-mm-kwargs")
+}
+
+func TestAdapterPreservesExplicitModernFlags(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{}
+	service.Annotations = map[string]string{
+		"serving.ckodex.com/fast-restart":            "true",
+		"serving.ckodex.com/flashmla":                "true",
+		"serving.ckodex.com/mega-gate":               "true",
+		"serving.ckodex.com/trust-request-mm-kwargs": "true",
+	}
+	rendered := (Adapter{}).Render(inferenceruntime.RenderRequest{
+		Service:   service,
+		ModelPath: "/models/model",
+		ExistingArgs: []string{
+			"--load-format=custom",
+			"--enable-flashmla",
+			"--enable-mega-gate",
+			"--trust-request-mm-kwargs",
+		},
+	})
+	require.Contains(t, rendered.Args, "--load-format=custom")
+	require.NotContains(t, rendered.Args, "ipc_cache")
+	require.Contains(t, rendered.Args, "--enable-flashmla")
+	require.Contains(t, rendered.Args, "--enable-mega-gate")
+	require.Contains(t, rendered.Args, "--trust-request-mm-kwargs")
+}
+
+func TestAdapterStripsRemovedTokenizerModeSlow(t *testing.T) {
+	rendered := (Adapter{}).Render(inferenceruntime.RenderRequest{
+		ModelPath: "/models/model",
+		ExistingArgs: []string{
+			"--tokenizer-mode", "slow",
+			"--max-model-len", "2048",
+			"--tokenizer-mode=slow",
+		},
+	})
+	require.NotContains(t, rendered.Args, "slow")
+	require.NotContains(t, rendered.Args, "--tokenizer-mode")
+	require.NotContains(t, rendered.Args, "--tokenizer-mode=slow")
+	assertArgumentPair(t, rendered.Args, "--max-model-len", "2048")
+}
+
+func TestAdapterRejectsRemovedTokenizerModeSlowInValidation(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{}
+	service.Spec.Template.Spec.Containers = []corev1.Container{
+		{Args: []string{"--tokenizer-mode", "slow"}},
+	}
+	errs := (Adapter{}).Validate(service)
+	require.Len(t, errs, 1)
+	require.Equal(t, "spec.template.spec.containers[0].args", errs[0].Field)
+
+	serviceEquals := &servingv1alpha2.LLMInferenceService{}
+	serviceEquals.Spec.Template.Spec.Containers = []corev1.Container{
+		{Args: []string{"--tokenizer-mode=slow"}},
+	}
+	errsEquals := (Adapter{}).Validate(serviceEquals)
+	require.Len(t, errsEquals, 1)
+	require.Equal(t, "spec.template.spec.containers[0].args", errsEquals[0].Field)
+}
+
+func TestAdapterValidatesKVCacheDtype(t *testing.T) {
+	adapter := Adapter{}
+	for _, valid := range []string{"auto", "fp8", "fp16", "bf16", "nvfp4"} {
+		service := &servingv1alpha2.LLMInferenceService{}
+		service.Spec.KVCache = &servingv1alpha2.KVCacheSpec{Dtype: valid}
+		require.Empty(t, adapter.Validate(service), "expected %s to be valid", valid)
+	}
+
+	serviceInvalid := &servingv1alpha2.LLMInferenceService{}
+	serviceInvalid.Spec.KVCache = &servingv1alpha2.KVCacheSpec{Dtype: "int4"}
+	errs := adapter.Validate(serviceInvalid)
+	require.Len(t, errs, 1)
+	require.Equal(t, "spec.kvCache.dtype", errs[0].Field)
 }
 
 func assertArgumentPair(t *testing.T, args []string, flag, value string) {

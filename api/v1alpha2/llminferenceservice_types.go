@@ -131,7 +131,7 @@ type LLMInferenceServiceSpec struct {
 	// Defaults to 'vllm'. Engines without a registered, conformant runtime are
 	// rejected by admission.
 	// +kubebuilder:default="vllm"
-	// +kubebuilder:validation:Enum=sglang;vllm
+	// +kubebuilder:validation:Enum=sglang;tensorfold;vllm
 	// +optional
 	Engine string `json:"engine,omitempty"`
 

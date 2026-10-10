@@ -8,6 +8,17 @@ KIND_VERSION_FILE="${ROOT_DIR}/deploy/kind/acceptance-kind-version.txt"
 KIND_NODE_IMAGE_FILE="${ROOT_DIR}/deploy/kind/acceptance-node-image.txt"
 KIND_VERSION="$(tr -d '\r\n' < "${KIND_VERSION_FILE}")"
 KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-$(tr -d '\r\n' < "${KIND_NODE_IMAGE_FILE}")}"
+KIND_HOST_HTTP_PORT="${KIND_HOST_HTTP_PORT:-8080}"
+KIND_HOST_HTTPS_PORT="${KIND_HOST_HTTPS_PORT:-8443}"
+KIND_CONFIG_FILE="${ROOT_DIR}/deploy/kind/kind-config.yaml"
+
+if [[ "$KIND_HOST_HTTP_PORT" != "8080" || "$KIND_HOST_HTTPS_PORT" != "8443" ]]; then
+  KIND_CONFIG_FILE="$(mktemp)"
+  trap 'rm -f "${KIND_CONFIG_FILE}"' EXIT
+  sed -e "s/hostPort: 8080/hostPort: ${KIND_HOST_HTTP_PORT}/g" \
+      -e "s/hostPort: 8443/hostPort: ${KIND_HOST_HTTPS_PORT}/g" \
+      "${ROOT_DIR}/deploy/kind/kind-config.yaml" > "${KIND_CONFIG_FILE}"
+fi
 
 if [[ "$(kind version 2>/dev/null)" != "kind ${KIND_VERSION}"* ]]; then
   echo "KIND ${KIND_VERSION} is required by the acceptance profile; found: $(kind version 2>/dev/null || echo missing)" >&2
@@ -31,6 +42,6 @@ fi
 
 kind create cluster --name "$KIND_CLUSTER_NAME" \
   --image "$KIND_NODE_IMAGE" \
-  --config "${ROOT_DIR}/deploy/kind/kind-config.yaml"
+  --config "$KIND_CONFIG_FILE"
 kubectl config use-context "kind-${KIND_CLUSTER_NAME}"
-echo "KIND cluster ready with port-forward to 8080/8443"
+echo "KIND cluster ready with port-forward to ${KIND_HOST_HTTP_PORT}/${KIND_HOST_HTTPS_PORT}"

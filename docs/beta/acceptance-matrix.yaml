@@ -152,6 +152,24 @@ capabilities:
     evidence: [docs/open-loops.md, docs/runbooks/lmcache.md]
     exit_criterion: cache-hit, ABI, latency, and failover evidence or explicit beta exclusion
 
+  - id: llm-d-agentic-runtime
+    capability: llm-d-style agentic serving profile (disaggregated prefill, KV routing, speculative decoding, burst load control)
+    classification: S
+    status: live_acceptance_required
+    owner: runtime
+    evidence:
+      - docs/engine-contract.md
+      - docs/runbooks/llm-d-agentic-readiness.md
+      - config/samples/llminferenceservice_agentic_profile_v1alpha2.yaml
+      - docs/runbooks/huggingface-xet-storage.md
+      - docs/runbooks/lmcache.md
+      - internal/controller/deployment/builder.go
+      - internal/controller/deployment/kv_transfer.go
+      - internal/runtime/vllm/adapter.go
+      - internal/webhook/llminferenceservice_validation.go
+      - internal/scheduler/epp_manager.go
+    exit_criterion: on target hardware, sustained long-context/agentic load shows bounded prefill latency, measurable KV hit-rate, non-zero scheduler placement effects, and controlled failure/failover behavior across repeated restarts
+
   - id: traffic-promotion
     capability: automated model traffic promotion
     classification: A

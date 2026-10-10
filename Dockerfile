@@ -1,9 +1,13 @@
 # Build stage. Compile on the native builder platform and cross-compile for the
 # requested target so multi-architecture builds do not run the Go compiler
 # through CPU emulation.
-FROM --platform=$BUILDPLATFORM golang:1.27.0-bookworm@sha256:ded31c68586d2e49e760acc2e65a884b23d032e9bbbed0ae0c55abd3fcaf4452 AS builder-base
-
+ARG BUILDPLATFORM=linux/amd64
 ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c AS builder-base
+
+ARG TARGETOS
 ARG TARGETARCH
 
 WORKDIR /workspace
@@ -21,6 +25,8 @@ COPY internal/ internal/
 RUN mkdir -p /workspace/.cache/go-build /workspace/.tmp
 
 FROM builder-base AS builder
+ARG TARGETOS
+ARG TARGETARCH
 
 # Build serially. The hosted arm64 builder has intermittently crashed in the
 # native Go compiler while cross-compiling this image; limiting package
@@ -31,6 +37,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -p=1 -trimpath -ldflags="-s -w" -o storage-initializer ./cmd/storage-initializer
 
 FROM builder-base AS huggingface-builder
+ARG TARGETOS
+ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -p=1 -trimpath -ldflags="-s -w" -o huggingface-initializer ./cmd/huggingface-initializer
 
@@ -58,7 +66,9 @@ RUN set -eu; \
       --platform="${pip_platform}" \
       --target=/opt/huggingface-python \
       --requirement /tmp/requirements.txt; \
-    PYTHONPATH=/opt/huggingface-python python -m pip check; \
+    if [ "${TARGETARCH}" = "$(dpkg --print-architecture)" ]; then \
+      PYTHONPATH=/opt/huggingface-python python -m pip check; \
+    fi; \
     test -x /opt/huggingface-python/bin/hf
 
 # Hugging Face initializer stage. Dependencies are resolved at image-build time,
@@ -69,7 +79,7 @@ FROM python:3.12.14-slim-trixie@sha256:7a8b475003c4fe15a2cd4e55e5cfc2f3560bdc933
 # repository updates for the runtime libraries Trivy gates before copying the
 # application payload, then remove package metadata from the final image.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssl util-linux \
+    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=huggingface-builder /workspace/huggingface-initializer /huggingface-initializer
 COPY --from=huggingface-python-deps /opt/huggingface-python /usr/local/lib/python3.12/site-packages
@@ -97,5 +107,6 @@ ENTRYPOINT ["/storage-initializer"]
 FROM gcr.io/distroless/static:nonroot AS manager
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=cosign /ko-app/cosign /cosign
 USER 65532:65532
 ENTRYPOINT ["/manager"]

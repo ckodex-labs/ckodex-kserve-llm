@@ -76,11 +76,12 @@ authentication boundary, or promotion gate has passed acceptance; see
 
 ### Core Runtime
 
-- `LLMInferenceService` manages model-serving desired state.
+- `LLMInferenceService` manages model-serving desired state across admitted engines (`vllm` baseline v0.28.0 and upgraded v0.31.0, `tensorfold` v0.31.0, and `sglang` v0.5.18).
+- `ModelServingProfile` standardizes hardware, engine parameters, and decision-class policies (e.g. deterministic evaluation, EXL3 quantization, 4x RTX PRO 6000 Ada/Blackwell profiles).
 - HTTP routing uses Gateway API resources.
 - Scaling and scheduler resources are reconciled when enabled.
 - Specialized CRDs cover embeddings, ASR, multimodal inference, reranking,
-  LoRA adapters, evaluation profiles, sessions, and artifact packs.
+  LoRA adapters, evaluation profiles, serving profiles, sessions, and artifact packs.
 - `ModelOnboarding` sequences readiness and metrics-backed gates.
 
 ### Optional or Environment-Dependent
@@ -88,7 +89,7 @@ authentication boundary, or promotion gate has passed acceptance; see
 - SPIFFE/SPIRE, policy, auth, sessions, webhooks, and several observability
   paths require feature gates and external cluster dependencies.
 - GPU execution requires compatible nodes, drivers, runtime classes, and model
-  images.
+  images (e.g. 4x RTX PRO 6000 for GLM-5.3-EXL3 workloads).
 - Live Lula assessment requires Kubernetes credentials. Offline policy fixtures
   only prove policy behavior against test resources.
 
@@ -104,6 +105,7 @@ authentication boundary, or promotion gate has passed acceptance; see
 | Need | Resource |
 |---|---|
 | Serve a chat/completion model | `LLMInferenceService` |
+| Standardize hardware, engine, and decision profiles | `ModelServingProfile` |
 | Serve embeddings, ASR, multimodal, or reranking | Specialized inference CRD |
 | Pre-stage model weights | `LocalModelCache` |
 | Load a LoRA adapter | `LLMLoraAdapter` |
@@ -114,8 +116,8 @@ authentication boundary, or promotion gate has passed acceptance; see
 
 Stable `serving.ckodex.com/v1` APIs exist for `LLMInferenceService`,
 `LLMLoraAdapter`, `Agent`, `SkillRegistry`, `ModelOnboarding`, sessions, and
-coactor resources. Specialized inference, cache, evaluation, and AIPack
-resources remain `serving.ckodex.com/v1alpha2`.
+coactor resources. Specialized inference, cache, evaluation, model serving profiles,
+and AIPack resources remain `serving.ckodex.com/v1alpha2`.
 
 ## Success Signals
 
@@ -157,6 +159,7 @@ For a platform developer:
 |---|---|
 | Understand the system | This document |
 | Run the local proof | [Getting Started](getting-started.md) |
+| Upgrade to TensorFold & vLLM v0.31.0 | [TensorFold & vLLM Upgrade Runbook](runbooks/tensorfold-vllm-upgrade.md) |
 | Onboard a model | [Model Onboarding](onboarding-guide.md) |
 | Plan hardware | [Model Capacity](model-capacity.md) |
 | Configure tenants | [Tenant Onboarding](tenant-onboarding.md) |

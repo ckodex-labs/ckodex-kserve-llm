@@ -42,6 +42,10 @@ func ReconcileVectorConfigMap(ctx context.Context, c client.Client, scheme *runt
 		return nil
 	}
 
+	if sinkType == "otlp" {
+		endpoint = normalizeOTLPEndpoint(endpoint)
+	}
+
 	cfg := VectorConfig{
 		Enabled:      true,
 		SinkType:     sinkType,

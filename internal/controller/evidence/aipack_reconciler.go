@@ -63,7 +63,7 @@ func (g *GovernanceReconciler) ReconcileAIPacks(ctx context.Context, llmSvc *ser
 		}
 
 		// Auto-create LLMLoraAdapter CRs from composition.adapters (Agent kind only).
-		if pack.Spec.Kind == servingv1alpha2.KindAgent {
+		if result.Verified && pack.Spec.Kind == servingv1alpha2.KindAgent {
 			if err := g.ReconcileAdapters(ctx, pack, llmSvc); err != nil {
 				logger.Error(err, "failed to reconcile adapters from AIPack composition (non-blocking)", "pack", pack.Name)
 			}

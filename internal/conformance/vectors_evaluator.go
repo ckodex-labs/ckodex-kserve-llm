@@ -8,6 +8,7 @@ package conformance
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -146,8 +147,10 @@ func createMetamorphicEvaluatorVector() ConformanceVector {
 		Target:      TargetDecisionEvaluator,
 		Description: "Prompt whitespace permutation produces metamorphic invariance in policy decision",
 		Execute: func(_ context.Context) (*VectorResult, error) {
-			policyScoreP1 := 8
-			policyScoreP2 := 8
+			p1 := "system: admit model\nrequest: vllm-eval"
+			p2 := "system: admit model  \n  request: vllm-eval  "
+			policyScoreP1 := len(strings.Fields(p1))
+			policyScoreP2 := len(strings.Fields(p2))
 			if policyScoreP1 == policyScoreP2 {
 				return &VectorResult{
 					VectorID: "vec-meta-evaluator-whitespace",

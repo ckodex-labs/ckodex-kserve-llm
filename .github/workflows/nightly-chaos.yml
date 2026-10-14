@@ -66,18 +66,16 @@ jobs:
           E2E_KUBECONFIG="$kubeconfig" go test -tags=e2e ./test/e2e/... -count=1 -timeout 10m -v
 
       - name: Collect cluster evidence on failure
+        id: evidence
         if: failure()
+        timeout-minutes: 5
         shell: bash
         run: |
-          mkdir -p kind-evidence
-          kubectl get all --all-namespaces -o wide > kind-evidence/resources.txt || true
-          kubectl get events --all-namespaces --sort-by=.lastTimestamp > kind-evidence/events.txt || true
-          kubectl logs -n ckodex-system \
-            -l app.kubernetes.io/component=controller-manager \
-            --all-containers=true --prefix > kind-evidence/controller.log || true
+          python3 hack/collect-kind-evidence.py \
+            --context "kind-${KIND_CLUSTER_NAME}" --output kind-evidence
 
       - name: Upload failure evidence
-        if: failure()
+        if: failure() && steps.evidence.outcome == 'success'
         uses: actions/upload-artifact@v7.0.1
         with:
           name: nightly-kind-chaos-evidence

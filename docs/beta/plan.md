@@ -44,6 +44,13 @@ The assessment used five views:
    Kubernetes v1.35.8 image and a map-shaped etcd patch. Hosted acceptance
    remains pending.
 
+   Updated hosted observation, checked 2026-10-14: main-head
+   [run 38385225450](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/38385225450)
+   passes bootstrap, Gateway CRD setup, image builds/loads and operator rollout.
+   It stops at vLLM CPU readiness with five restarts; inference and E2E/chaos
+   recovery remain unverified. The old artifact lacks the exception and exit
+   status. See [the current diagnostic evidence](../evidence/nightly-kind-2026-10-13.md).
+
 ## 3. Findings and disposition
 
 | ID | Finding | User impact | Disposition | Beta gate |

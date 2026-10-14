@@ -32,6 +32,9 @@ func (m *CkodexOperator) Test(ctx context.Context,
 	// +ignore=[".git", ".dagger", ".cache", ".cocoindex_code", ".tmp", "bin", "console/.next", "console/node_modules", "dist", "scratch/bin", "target", "**/node_modules", "*.log", "*.out"]
 	source *dagger.Directory,
 ) (string, error) {
+	if _, err := diagnosticTestBase(source).Sync(ctx); err != nil {
+		return "", fmt.Errorf("failure evidence diagnostics: %w", err)
+	}
 	return testBase(source, raceCoverageTestArgs()).WithExec([]string{"sh", "-c", coverageGateScript()}).Stdout(ctx)
 }
 

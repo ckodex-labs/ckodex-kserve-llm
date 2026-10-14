@@ -1,6 +1,6 @@
 # CI/CD Current State — ckodex-kserve-llm-operator
 
-Last updated: 2026-09-28
+Last updated: 2026-10-14
 
 ---
 
@@ -14,18 +14,19 @@ The CI/CD pipeline has one implementation:
 
 The CI implementation is active, but beta acceptance is not fully closed.
 **C — hosted evidence:** the latest CI run checked here,
-[34003566938](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/34003566938),
-passed on current main commit `5406a8b646ac628c1d97b177a91fb06ccf55c985`
-on 2026-09-06. It does not cover uncommitted checkout changes.
+[38093178306](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/38093178306),
+passed on current main commit `845bd53063769815c578ae7412319c2fda66c619`
+on 2026-10-10. It does not cover uncommitted checkout changes.
 **C — hosted failure:** the latest Nightly KIND run checked here,
-[36406335463](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/36406335463),
-failed on that commit on 2026-09-28 while Envoy Gateway Helm attempted to
-install Gateway API CRDs already owned by `kubectl`. E2E did not start.
-The local `--skip-crds` and chart safety-policy settings, now paired with
-Envoy Gateway v1.8.4, need an exact-head hosted rerun before the bootstrap
-fix or runtime acceptance can be claimed. The default KIND node is now
-Kubernetes v1.35.8, within Envoy Gateway's published v1.8 support range.
-**S — acceptance pending:**
+[38385225450](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/38385225450),
+failed on that commit on 2026-10-13 after cluster creation, Gateway CRD setup,
+image builds/loads, and operator rollout succeeded. The GPT-2 CPU smoke
+workload (resource name `llama3-8b`) reached `CrashLoopBackOff` with five
+vLLM restarts and never became ready. E2E lifecycle and chaos tests did not run.
+The old evidence bundle lacks inference logs and container exit status, so the
+exception and root cause remain unknown. The local diagnostic change collects
+those details before teardown; hosted validation of that change remains pending.
+See [the failure record](../evidence/nightly-kind-2026-10-13.md).
 **C — release evidence:** tagged release [v0.19.0](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.19.0)
 passed verification, publication, provenance, chart packaging, and anonymous
 artifact acceptance.
@@ -152,6 +153,18 @@ not convert a skipped envtest suite into a successful CI result.
 KIND cluster. It uses `run/e2e.sh`, executes the E2E lifecycle suite, deletes the
 operator pod, and proves the Deployment supplies a new ready pod. Failed runs retain
 cluster resources, events, and controller logs for 14 days; the cluster is always torn down.
+The local collector update additionally retains current/previous vLLM logs,
+redacted pod describe and allowlisted termination status, and full controller
+logs (`--tail=-1`) from each discovered pod/container. Every command uses the
+explicit disposable KIND context and bounded timeouts. `collection.json`
+reports unavailable commands, missing previous logs, and exhausted budgets.
+Raw stdout/stderr, pod specs, Secrets, ConfigMaps, and kubeconfigs are not saved.
+Describe spec sections are removed; known literal pod env values and common
+credential patterns are masked in free text. Arbitrary unlabelled or encoded
+secrets in logs cannot be guaranteed detectable; review evidence before sharing.
+If pod discovery fails, only the safe collection manifest is retained.
+The offline fixtures run through the existing Dagger `Test` gate; the local
+command is `python3 -m unittest discover -s test/diagnostics -v`.
 KIND v0.33.0 uses the digest-pinned Kubernetes v1.35.8 image from
 `deploy/kind/acceptance-node-image.txt`; local setup and Make consume the same file.
 

@@ -91,25 +91,25 @@ capabilities:
   - id: runtime-probe-qualification
     capability: the repo-native runtime probe distinguishes route, transport, and inference failures
     classification: S
-    status: local_harness_fixed_hosted_pending
+    status: hosted_readiness_failed_inference_pending
     owner: runtime
-    evidence: [local/05-test-inference.sh, run/e2e.sh, Makefile, .dockerignore, .github/workflows/nightly-chaos.yml, docs/beta/readiness-ledger.md, docs/evidence/local-kind-2026-08-26.md]
+    evidence: [local/05-test-inference.sh, run/e2e.sh, Makefile, .dockerignore, .github/workflows/nightly-chaos.yml, docs/beta/readiness-ledger.md, docs/evidence/local-kind-2026-08-26.md, docs/evidence/nightly-kind-2026-10-13.md]
     exit_criterion: hosted KIND acceptance reaches and validates a successful Gateway or port-forward JSON completion response
 
   - id: local-image-build
     capability: repo-native KIND setup builds images with a bounded context and loads them into the disposable cluster
     classification: S
-    status: local_fix_rerun_pending
+    status: hosted_build_and_load_verified
     owner: release
-    evidence: [Dockerfile, .dockerignore, Makefile, run/e2e.sh]
+    evidence: [Dockerfile, .dockerignore, Makefile, run/e2e.sh, docs/evidence/nightly-kind-2026-10-13.md]
     exit_criterion: local KIND setup completes operator and storage-initializer image builds and image loads without legacy-builder or context-size failure
 
   - id: kind-environment-reproducibility
     capability: the disposable acceptance cluster uses a qualified Kubernetes node image
     classification: S
-    status: local_fixed_rerun_pending
+    status: hosted_bootstrap_verified_runtime_pending
     owner: release
-    evidence: [deploy/kind/acceptance-kind-version.txt, deploy/kind/acceptance-node-image.txt, deploy/kind/kind-config.yaml, local/01-kind-setup.sh, .github/workflows/nightly-chaos.yml, docs/ci/hosted-exact-head-2026-08-28.md]
+    evidence: [deploy/kind/acceptance-kind-version.txt, deploy/kind/acceptance-node-image.txt, deploy/kind/kind-config.yaml, local/01-kind-setup.sh, .github/workflows/nightly-chaos.yml, docs/ci/hosted-exact-head-2026-08-28.md, docs/evidence/nightly-kind-2026-10-13.md]
     exit_criterion: a fresh cluster boots on the pinned node image and hosted acceptance uses the same qualified environment contract
 
   - id: qualified-readiness-observation

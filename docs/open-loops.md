@@ -51,37 +51,37 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-OP-016 — Keep Gateway API CRD ownership singular in Nightly KIND
 
-- **Status:** in-progress
+- **Status:** done
 - **Priority:** P0
-- **Context:** Nightly run [36406335463](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/36406335463) failed before E2E when Envoy Gateway Helm tried to server-side apply Gateway API CRDs already installed by `kubectl`. The local prereq script now skips chart CRDs and its separately templated safety policy. Helm template and shell syntax checks pass; a hosted run on the changed head is still needed to verify bootstrap and execute E2E.
+- **Context:** Nightly run [38385225450](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/38385225450) on main `845bd530` passed Gateway CRD setup and operator rollout, verifying the CRD ownership fix for this profile. It then failed on vLLM readiness; E2E and runtime acceptance remain open in L-OP-007/L-OP-017.
 - **Reference:** `local/02-prereqs.sh`, `docs/ci/current-state.md`
 
 ### L-OP-017 — Qualify the aligned KIND and gateway stack
 
 - **Status:** open
 - **Priority:** P0
-- **Context:** The default KIND node is now the v0.33.0 release's digest-pinned Kubernetes v1.35.8 image, within Envoy Gateway's published v1.8 range. The local installer uses the v1.8.4 security patch, but this exact combination has no fresh-cluster proof. Run Nightly bootstrap, routing, inference, and recovery on the changed head before claiming runtime acceptance; treat Kubernetes v1.36 with Envoy Gateway v1.9/Gateway API v1.6 as a separate migration.
+- **Context:** Nightly run [38385225450](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/38385225450) boots the pinned KIND v0.33.0/Kubernetes v1.35.8 and Envoy Gateway v1.8.4 stack through operator rollout. Routing, inference, and recovery remain unverified because vLLM crashes before readiness; treat Kubernetes v1.36 with Envoy Gateway v1.9/Gateway API v1.6 as a separate migration.
 - **Reference:** `deploy/kind/acceptance-node-image.txt`, `local/02-prereqs.sh`, `docs/dependency-alignment.md`
 
 ### L-OP-007 — Remove the Nightly KIND pod-readiness race
 
 - **Status:** in-progress
 - **Priority:** P0
-- **Context:** Earlier Nightly run [33081386331](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33081386331) failed during KIND bootstrap before E2E because kubeadm received `etcd.local.extraArgs` as an array instead of a map. The pending checkout changes the config to a map and pins the node profile; a hosted rerun on that exact head remains required.
+- **Context:** Nightly run [38385225450](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/38385225450) passes bootstrap and waits for the created inference pod, which has five vLLM restarts and is in CrashLoopBackOff. The previous readiness-race and kubeadm failures are no longer the observed blocker. The local collector now captures redacted current/previous vLLM logs and termination status before teardown; its hosted validation and the runtime root cause remain open.
 - **Reference:** `local/05-test-inference.sh`, `docs/beta/plan.md`, `docs/beta/readiness-ledger.md`
 
 ### L-OP-008 — Qualify the Nightly KIND inference probe
 
 - **Status:** in-progress
 - **Priority:** P0
-- **Context:** The sample HTTPRoute declares `llama3-8b.ckodex.com`, but the old Gateway probe addressed the allocated IP without a matching `Host` header and accepted any parseable `jq` output. The probe now binds the declared hostname, fails on HTTP errors, requires a non-empty `choices` array, retries transient startup failures, and cleans up port-forwarding; the hosted runtime assertion remains unverified because run [33081386331](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/33081386331) stopped during bootstrap.
+- **Context:** The probe binds the declared hostname, fails on HTTP errors, requires a non-empty `choices` array, retries transient startup failures, and cleans up port-forwarding. The hosted runtime assertion remains unverified because run [38385225450](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/38385225450) stops at vLLM pod readiness before probing inference.
 - **Reference:** `local/05-test-inference.sh`, `local/04-llm-inference-service.yaml`, `internal/gateway/httproute_builder.go`
 
 ### L-OP-009 — Make the repo-native image build reproducible
 
-- **Status:** in-progress
+- **Status:** done
 - **Priority:** P0
-- **Context:** `run/e2e.sh` previously called the legacy Docker builder even though `Dockerfile` uses BuildKit automatic platform arguments; the same invocation transferred a 6.6 GB context because `console/.next` and `console/node_modules` were not excluded. The root `.dockerignore` now bounds the context and Makefile image targets use `docker buildx build --load`; a complete KIND rerun remains required.
+- **Context:** Nightly run [38385225450](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/runs/38385225450) verifies bounded BuildKit operator and storage-initializer builds plus both KIND image loads on main `845bd530`. This closes the observed build/context blocker only; subsequent vLLM readiness and complete runtime acceptance remain open.
 - **Reference:** `.dockerignore`, `Dockerfile`, `Makefile`, `run/e2e.sh`
 
 ### L-OP-010 — Close the stable v1 admission route

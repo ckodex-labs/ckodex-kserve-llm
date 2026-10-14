@@ -25,6 +25,8 @@ vendor/
 test/k6/results/*.json
 coverage.txt
 profile.out
+__pycache__/
+kind-evidence/
 
 # Local secrets & env
 .env

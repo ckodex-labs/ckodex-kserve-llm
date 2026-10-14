@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -108,6 +109,15 @@ class RedactionTests(unittest.TestCase):
         self.assertNotIn("private", output)
         self.assertNotIn("first", output)
         self.assertIn("normal=value", output)
+
+    def test_large_plain_log_token_finishes_within_collection_budget(self):
+        # A subprocess timeout bounds failure too; the old regex takes minutes
+        # on this input. No kubectl, network, model or container is involved.
+        code = "from runpy import run_path; m = run_path('hack/collect-kind-evidence.py'); " \
+               "text = 'x' * 100000 + ' token=credential-private'; " \
+               "out = m['redact'](text); assert out == 'x' * 100000 + ' token=[REDACTED]'"
+        subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True,
+                       text=True, check=True, timeout=5)
 
 
 class CollectionTests(unittest.TestCase):

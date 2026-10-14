@@ -14,7 +14,9 @@ from pathlib import Path
 
 
 REDACTED = "[REDACTED]"
-SENSITIVE = r"(?:[\w.-]*(?:token|password|passwd|secret|api[_-]?key|access[_-]?key|credential|authorization|cookie|private[_-]?key|signature)[\w.-]*)"
+# Bound identifier matching and start only at key boundaries. Otherwise a long
+# ordinary log token makes the overlapping greedy prefixes scan quadratically.
+SENSITIVE = r"(?:[\w.-]{0,96}(?:token|password|passwd|secret|api[_-]?key|access[_-]?key|credential|authorization|cookie|private[_-]?key|signature)[\w.-]{0,96})"
 
 
 def redact(text, literals=()):
@@ -30,7 +32,7 @@ def redact(text, literals=()):
     text = re.sub(r"(?i)\b(?:Bearer|Basic)\s+[A-Za-z0-9+/=_.,-]+", REDACTED, text)
     text = re.sub(r"(?i)(https?://)[^\s/@]+:[^\s/@]+@", r"\1[REDACTED]@", text)
     # Quoted values can contain whitespace; unquoted values stop at delimiters.
-    text = re.sub(r"(?i)([\"']?" + SENSITIVE + r"[\"']?\s*[:=]\s*)"
+    text = re.sub(r"(?i)(?<![\w.-])([\"']?" + SENSITIVE + r"[\"']?\s*[:=]\s*)"
                   r"(?:\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'|[^\s,;&]+)", r"\1[REDACTED]", text)
     text = re.sub(r"(?i)(--" + SENSITIVE + r"\s+)(?:\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'|\S+)",
                   r"\1[REDACTED]", text)

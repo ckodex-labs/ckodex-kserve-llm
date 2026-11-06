@@ -60,20 +60,16 @@ func TestBulkController_Coverage_FinalVer2(t *testing.T) {
 	// 6. LocalModelCache
 	_, _ = (&LocalModelCacheReconciler{Client: cl, Scheme: s, Recorder: record.NewFakeRecorder(10)}).Reconcile(ctx, req)
 
-	// 7. LWS (Struct name is Reconciler, takes *LLMInferenceService)
-	llmSvc := &servingv1alpha2.LLMInferenceService{ObjectMeta: metav1.ObjectMeta{Name: "my-llm", Namespace: "default"}}
-	_ = (&Reconciler{Client: cl, Scheme: s}).Reconcile(ctx, llmSvc)
-
-	// 8. ModelOnboarding
+	// 7. ModelOnboarding
 	_, _ = (&ModelOnboardingReconciler{Client: cl, Scheme: s}).Reconcile(ctx, req)
 
-	// 9. Multimodal
+	// 8. Multimodal
 	_, _ = (&MultimodalInferenceServiceReconciler{Client: cl, Scheme: s}).Reconcile(ctx, req)
 
-	// 10. Session
+	// 9. Session
 	_, _ = (&SessionReconciler{Client: cl, Scheme: s}).Reconcile(ctx, req)
 
-	// 11. TenantQuota
+	// 10. TenantQuota
 	_, _ = (&TenantQuotaReconciler{Client: cl, Scheme: s, Defaults: DefaultTenantQuota()}).Reconcile(ctx, req)
 }
 

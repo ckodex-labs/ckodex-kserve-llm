@@ -20,6 +20,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -37,8 +38,8 @@ func TestLLMInferenceService_ReconcileMultiNodeDelegatesToKServe(t *testing.T) {
 		},
 	}
 	llmSvc.Spec.Parallelism = &servingv1alpha2.ParallelismSpec{
-		Tensor:   ptr32(2),
-		Pipeline: ptr32(2),
+		Tensor:   ptr.To(int32(2)),
+		Pipeline: ptr.To(int32(2)),
 	}
 	modelPVC := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: "model-weights", Namespace: llmSvc.Namespace},

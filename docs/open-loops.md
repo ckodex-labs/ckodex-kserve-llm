@@ -351,12 +351,13 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-RT-002 — Remove the unreferenced LWS reconciler
 
-- **Status:** in-progress
+- **Status:** done
 - **Priority:** P1
 - **Context:** The advanced flags have moved into the vLLM adapter and are
-  covered on the single-node path. The now-redundant LWS reconciler and its
-  remaining compatibility tests still need removal; multi-node continues to
-  delegate to KServe `workerSpec` per ADR-009.
+  covered on the single-node path. Removed obsolete `lws_reconciler.go` and its
+  test suites (`lws_reconciler_test.go`, `lws_reconciler_quant_test.go`), and
+  cleaned up coverage invocation. Multi-node inference continues to delegate
+  to KServe `workerSpec` in `internal/kserve/multinode.go` per ADR-009. (2026-11-06)
 - **Reference:** `internal/kserve/multinode.go`
 
 ### L-RT-003 — Replace the unresolvable GGUF runtime image

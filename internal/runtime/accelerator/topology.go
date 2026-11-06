@@ -86,10 +86,26 @@ var (
 		SupportedQuantizations: []string{"exl3", "nvfp4", "fp4", "mxfp8", "fp8", "awq", "gptq", "bitsandbytes", "bf16", "fp16"},
 	}
 
-	// ProfileROCmMI300X defines the AMD ROCm CDNA3 Instinct accelerator.
+	// ProfileGB300 defines NVIDIA GB300 Grace Blackwell Ultra Desktop Superchip.
+	// Grace 72-core Neoverse V2 CPU with 496 GB LPDDR5X at 396 GB/s,
+	// Blackwell Ultra GPU with 252 GB HBM3E at 7.1 TB/s,
+	// connected via 900 GB/s NVLink-C2C, PCIe Gen5 slots, and 2x 400 Gb/s ConnectX-8 SuperNIC.
+	ProfileGB300 = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeNVIDIA,
+		Model:                  servingv1alpha2.AcceleratorModelGB300,
+		Architecture:           "Blackwell Ultra Superchip",
+		ComputeCapability:      "sm_103",
+		VRAMPerDeviceBytes:     252 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "NVLink-C2C",
+		SupportedQuantizations: []string{"fp4", "nvfp4", "fp8", "bf16", "exl3", "mxfp8", "awq", "gptq", "bitsandbytes", "fp16"},
+	}
+
+	// ProfileROCmMI300X defines the AMD ROCm CDNA3 Instinct MI300X accelerator.
 	ProfileROCmMI300X = HardwareProfile{
 		Vendor:                 servingv1alpha2.AcceleratorTypeROCm,
-		Model:                  "mi300x",
+		Model:                  servingv1alpha2.AcceleratorModelMI300X,
 		Architecture:           "CDNA3",
 		ComputeCapability:      "gfx942",
 		VRAMPerDeviceBytes:     192 * gibibyte,
@@ -97,6 +113,45 @@ var (
 		SupportsExpertParallel: true,
 		Interconnect:           "Infinity-Fabric",
 		SupportedQuantizations: []string{"fp8", "awq", "gptq", "bitsandbytes", "bf16", "fp16"},
+	}
+
+	// ProfileROCmMI325X defines the AMD ROCm CDNA3 Instinct MI325X accelerator.
+	ProfileROCmMI325X = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeROCm,
+		Model:                  servingv1alpha2.AcceleratorModelMI325X,
+		Architecture:           "CDNA3",
+		ComputeCapability:      "gfx942",
+		VRAMPerDeviceBytes:     256 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "Infinity-Fabric",
+		SupportedQuantizations: []string{"fp8", "awq", "gptq", "bitsandbytes", "bf16", "fp16"},
+	}
+
+	// ProfileAppleM4Ultra defines Apple Silicon M4 Ultra unified memory execution.
+	ProfileAppleM4Ultra = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeAppleMetal,
+		Model:                  servingv1alpha2.AcceleratorModelM4Ultra,
+		Architecture:           "Apple Silicon UMA",
+		ComputeCapability:      "metal-3",
+		VRAMPerDeviceBytes:     192 * gibibyte,
+		SupportsTensorParallel: false,
+		SupportsExpertParallel: false,
+		Interconnect:           "UltraFusion-UMA",
+		SupportedQuantizations: []string{"gguf", "mlx", "fp16", "bf16"},
+	}
+
+	// ProfileAppleM3Ultra defines Apple Silicon M3 Ultra unified memory execution.
+	ProfileAppleM3Ultra = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeAppleMetal,
+		Model:                  servingv1alpha2.AcceleratorModelM3Ultra,
+		Architecture:           "Apple Silicon UMA",
+		ComputeCapability:      "metal-3",
+		VRAMPerDeviceBytes:     128 * gibibyte,
+		SupportsTensorParallel: false,
+		SupportsExpertParallel: false,
+		Interconnect:           "UltraFusion-UMA",
+		SupportedQuantizations: []string{"gguf", "mlx", "fp16", "bf16"},
 	}
 
 	// ProfileAppleMLX defines Apple Silicon unified memory execution.
@@ -110,6 +165,123 @@ var (
 		SupportsExpertParallel: false,
 		Interconnect:           "Unified-Memory",
 		SupportedQuantizations: []string{"mlx", "bf16", "fp16"},
+	}
+
+	// ProfileGoogleTPUv6e defines Google Cloud TPU v6e (Trillium) accelerator.
+	ProfileGoogleTPUv6e = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeGoogleTPU,
+		Model:                  servingv1alpha2.AcceleratorModelTPUv6e,
+		Architecture:           "Trillium",
+		ComputeCapability:      "tpu-v6e",
+		VRAMPerDeviceBytes:     32 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "ICI-Torus",
+		SupportedQuantizations: []string{"bf16", "fp8", "int8"},
+	}
+
+	// ProfileGoogleTPUv5p defines Google Cloud TPU v5p accelerator.
+	ProfileGoogleTPUv5p = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeGoogleTPU,
+		Model:                  servingv1alpha2.AcceleratorModelTPUv5p,
+		Architecture:           "TPU-v5p",
+		ComputeCapability:      "tpu-v5p",
+		VRAMPerDeviceBytes:     96 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "ICI-Torus",
+		SupportedQuantizations: []string{"bf16", "fp8"},
+	}
+
+	// ProfileGoogleTPUv5e defines Google Cloud TPU v5e (Lite) accelerator.
+	ProfileGoogleTPUv5e = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeGoogleTPU,
+		Model:                  servingv1alpha2.AcceleratorModelTPUv5e,
+		Architecture:           "TPU-v5e",
+		ComputeCapability:      "tpu-v5e",
+		VRAMPerDeviceBytes:     16 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "ICI-2D-Torus",
+		SupportedQuantizations: []string{"bf16", "int8"},
+	}
+
+	// ProfileGoogleTPUv4 defines Google Cloud TPU v4 accelerator.
+	ProfileGoogleTPUv4 = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeGoogleTPU,
+		Model:                  servingv1alpha2.AcceleratorModelTPUv4,
+		Architecture:           "TPU-v4",
+		ComputeCapability:      "tpu-v4",
+		VRAMPerDeviceBytes:     32 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "ICI-3D-Torus",
+		SupportedQuantizations: []string{"bf16", "int8"},
+	}
+
+	// ProfileAWSTrainium2 defines AWS Trainium2 accelerator.
+	ProfileAWSTrainium2 = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeAWSNeuron,
+		Model:                  servingv1alpha2.AcceleratorModelTrn2,
+		Architecture:           "NeuronCore-v2",
+		ComputeCapability:      "trn2",
+		VRAMPerDeviceBytes:     96 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "NeuronLink-v2",
+		SupportedQuantizations: []string{"bf16", "fp8"},
+	}
+
+	// ProfileAWSTrainium1 defines AWS Trainium1 accelerator.
+	ProfileAWSTrainium1 = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeAWSNeuron,
+		Model:                  servingv1alpha2.AcceleratorModelTrn1,
+		Architecture:           "NeuronCore-v2",
+		ComputeCapability:      "trn1",
+		VRAMPerDeviceBytes:     32 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "NeuronLink-v2",
+		SupportedQuantizations: []string{"bf16", "fp16", "fp8"},
+	}
+
+	// ProfileAWSInferentia2 defines AWS Inferentia2 accelerator.
+	ProfileAWSInferentia2 = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeAWSNeuron,
+		Model:                  servingv1alpha2.AcceleratorModelInf2,
+		Architecture:           "NeuronCore-v2",
+		ComputeCapability:      "inf2",
+		VRAMPerDeviceBytes:     32 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "NeuronLink-v2",
+		SupportedQuantizations: []string{"bf16", "fp16", "fp8"},
+	}
+
+	// ProfileIntelGaudi3 defines Intel Habana Gaudi3 accelerator.
+	ProfileIntelGaudi3 = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeIntelGaudi,
+		Model:                  servingv1alpha2.AcceleratorModelGaudi3,
+		Architecture:           "G3-DualDie",
+		ComputeCapability:      "gaudi3",
+		VRAMPerDeviceBytes:     128 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "Integrated-200GbE-RoCE",
+		SupportedQuantizations: []string{"fp8", "bf16"},
+	}
+
+	// ProfileIntelGaudi2 defines Intel Habana Gaudi2 accelerator.
+	ProfileIntelGaudi2 = HardwareProfile{
+		Vendor:                 servingv1alpha2.AcceleratorTypeIntelGaudi,
+		Model:                  servingv1alpha2.AcceleratorModelGaudi2,
+		Architecture:           "Gaudi2",
+		ComputeCapability:      "gaudi2",
+		VRAMPerDeviceBytes:     96 * gibibyte,
+		SupportsTensorParallel: true,
+		SupportsExpertParallel: true,
+		Interconnect:           "Integrated-100GbE-RoCE",
+		SupportedQuantizations: []string{"bf16", "fp8"},
 	}
 
 	// ProfileHostCPU defines host CPU AVX-512/AMX execution.
@@ -144,8 +316,21 @@ var defaultFleetProfiles = []HardwareProfile{
 	ProfileDGXSpark,
 	ProfileSM100,
 	ProfileSM103,
+	ProfileGB300,
 	ProfileROCmMI300X,
+	ProfileROCmMI325X,
+	ProfileAppleM4Ultra,
+	ProfileAppleM3Ultra,
 	ProfileAppleMLX,
+	ProfileGoogleTPUv6e,
+	ProfileGoogleTPUv5p,
+	ProfileGoogleTPUv5e,
+	ProfileGoogleTPUv4,
+	ProfileAWSTrainium2,
+	ProfileAWSTrainium1,
+	ProfileAWSInferentia2,
+	ProfileIntelGaudi3,
+	ProfileIntelGaudi2,
 	ProfileHostCPU,
 	ProfileGenericNPU,
 }
@@ -155,22 +340,55 @@ func LookupProfile(vendor servingv1alpha2.AcceleratorType, model servingv1alpha2
 	normVendor := strings.ToLower(string(vendor.Vendor()))
 	normModel := strings.ToLower(string(model))
 
+	// Normalize model aliases if raw short forms are passed directly
+	switch normModel {
+	case "v4":
+		normModel = string(servingv1alpha2.AcceleratorModelTPUv4)
+	case "v5e":
+		normModel = string(servingv1alpha2.AcceleratorModelTPUv5e)
+	case "v5p":
+		normModel = string(servingv1alpha2.AcceleratorModelTPUv5p)
+	case "v6e":
+		normModel = string(servingv1alpha2.AcceleratorModelTPUv6e)
+	case "gaudi-2":
+		normModel = string(servingv1alpha2.AcceleratorModelGaudi2)
+	case "gaudi-3":
+		normModel = string(servingv1alpha2.AcceleratorModelGaudi3)
+	case "trn-1":
+		normModel = string(servingv1alpha2.AcceleratorModelTrn1)
+	case "trn-2":
+		normModel = string(servingv1alpha2.AcceleratorModelTrn2)
+	case "inf-2":
+		normModel = string(servingv1alpha2.AcceleratorModelInf2)
+	case "m3ultra":
+		normModel = string(servingv1alpha2.AcceleratorModelM3Ultra)
+	case "m4ultra":
+		normModel = string(servingv1alpha2.AcceleratorModelM4Ultra)
+	}
+
 	for _, profile := range defaultFleetProfiles {
 		pVendor := strings.ToLower(string(profile.Vendor))
 		pModel := strings.ToLower(string(profile.Model))
 
 		if normModel != "" {
-			if pModel == normModel && (normVendor == "" || pVendor == normVendor) {
+			if pModel == normModel && (normVendor == "" || pVendor == normVendor || isAppleFamily(pVendor, normVendor)) {
 				return profile, nil
 			}
 			continue
 		}
-		if normModel == "" && pVendor == normVendor {
+		if normModel == "" && (pVendor == normVendor || isAppleFamily(pVendor, normVendor)) {
 			return profile, nil
 		}
 	}
 
 	return HardwareProfile{}, fmt.Errorf("no accelerator profile registered for vendor %q, model %q", vendor, model)
+}
+
+func isAppleFamily(v1, v2 string) bool {
+	apple := func(v string) bool {
+		return v == string(servingv1alpha2.AcceleratorTypeAppleMLX) || v == string(servingv1alpha2.AcceleratorTypeAppleMetal)
+	}
+	return apple(v1) && apple(v2)
 }
 
 // HardwareTopology represents the concrete physical or virtual hardware configuration.
@@ -247,159 +465,5 @@ func GLM53EXL3Workload() ModelWorkload {
 		RequiredVRAMBytes:    176 * gibibyte,
 		TensorParallelDegree: 4,
 		RequiresExpert:       true,
-	}
-}
-
-// VRAMState represents memory capacity sufficiency.
-type VRAMState string
-
-const (
-	VRAMStateSufficient   VRAMState = "SUFFICIENT"
-	VRAMStateDegraded     VRAMState = "DEGRADED"
-	VRAMStateInsufficient VRAMState = "INSUFFICIENT"
-)
-
-// ParallelismState represents parallel configuration alignment.
-type ParallelismState string
-
-const (
-	ParallelismStateOptimal     ParallelismState = "OPTIMAL"
-	ParallelismStateCompatible  ParallelismState = "COMPATIBLE"
-	ParallelismStateMisaligned  ParallelismState = "MISALIGNED"
-	ParallelismStateUnsupported ParallelismState = "UNSUPPORTED"
-)
-
-// VendorCompatibilityState represents platform and kernel support.
-type VendorCompatibilityState string
-
-const (
-	VendorCompatibilityNative       VendorCompatibilityState = "NATIVE"
-	VendorCompatibilityEmulated     VendorCompatibilityState = "EMULATED"
-	VendorCompatibilityIncompatible VendorCompatibilityState = "INCOMPATIBLE"
-)
-
-// TopologyVectorState encapsulates multi-dimensional state vectors for hardware governance.
-type TopologyVectorState struct {
-	VRAM        VRAMState
-	Parallelism ParallelismState
-	Vendor      VendorCompatibilityState
-}
-
-// TopologyPhase represents the aggregate qualification phase.
-type TopologyPhase string
-
-const (
-	TopologyPhaseCompliant    TopologyPhase = "COMPLIANT"
-	TopologyPhaseNonCompliant TopologyPhase = "NON_COMPLIANT"
-	TopologyPhaseDegraded     TopologyPhase = "DEGRADED"
-)
-
-// TopologyValidationResult contains the full deterministic outcome of topology evaluation.
-type TopologyValidationResult struct {
-	Phase              TopologyPhase
-	Vector             TopologyVectorState
-	TotalAvailableVRAM int64
-	RequiredVRAM       int64
-	HeadroomBytes      int64
-	HeadroomRatio      float64
-	Reasons            []string
-}
-
-// IsCompliant reports whether the hardware topology satisfies the workload requirements.
-func (r TopologyValidationResult) IsCompliant() bool {
-	return r.Phase == TopologyPhaseCompliant || r.Phase == TopologyPhaseDegraded
-}
-
-// ValidateTopology performs multi-dimensional vector validation of a hardware topology against a workload.
-func ValidateTopology(topo HardwareTopology, workload ModelWorkload) TopologyValidationResult {
-	result := TopologyValidationResult{
-		TotalAvailableVRAM: topo.TotalVRAM,
-		RequiredVRAM:       workload.RequiredVRAMBytes,
-		HeadroomBytes:      topo.TotalVRAM - workload.RequiredVRAMBytes,
-		Reasons:            make([]string, 0, 4),
-	}
-
-	if topo.TotalVRAM > 0 {
-		result.HeadroomRatio = float64(result.HeadroomBytes) / float64(topo.TotalVRAM)
-	}
-
-	result.Vector.Vendor = evaluateVendorCompatibility(topo.Profile, workload)
-	result.Vector.Parallelism = evaluateParallelism(topo, workload)
-	result.Vector.VRAM = evaluateVRAM(result.HeadroomBytes, result.HeadroomRatio)
-
-	finalizeResult(&result, topo, workload)
-	return result
-}
-
-func evaluateVendorCompatibility(p HardwareProfile, w ModelWorkload) VendorCompatibilityState {
-	if w.Quantization == "" {
-		return VendorCompatibilityNative
-	}
-	quantLower := strings.ToLower(w.Quantization)
-	for _, supported := range p.SupportedQuantizations {
-		if strings.ToLower(supported) == quantLower {
-			return VendorCompatibilityNative
-		}
-	}
-	return VendorCompatibilityIncompatible
-}
-
-func evaluateParallelism(topo HardwareTopology, w ModelWorkload) ParallelismState {
-	tp := w.TensorParallelDegree
-	if tp <= 1 {
-		return ParallelismStateOptimal
-	}
-
-	if !topo.Profile.SupportsTensorParallel {
-		return ParallelismStateUnsupported
-	}
-
-	if topo.DeviceCount < tp || topo.DeviceCount%tp != 0 {
-		return ParallelismStateMisaligned
-	}
-
-	if topo.DeviceCount == tp {
-		return ParallelismStateOptimal
-	}
-
-	return ParallelismStateCompatible
-}
-
-func evaluateVRAM(headroomBytes int64, headroomRatio float64) VRAMState {
-	if headroomBytes < 0 {
-		return VRAMStateInsufficient
-	}
-	if headroomRatio < 0.05 {
-		return VRAMStateDegraded
-	}
-	return VRAMStateSufficient
-}
-
-func finalizeResult(res *TopologyValidationResult, topo HardwareTopology, w ModelWorkload) {
-	if res.Vector.Vendor == VendorCompatibilityIncompatible {
-		res.Reasons = append(res.Reasons, fmt.Sprintf("hardware %s does not support %s quantization kernels", topo.Profile.Model, w.Quantization))
-	}
-	if res.Vector.Parallelism == ParallelismStateUnsupported {
-		res.Reasons = append(res.Reasons, fmt.Sprintf("accelerator vendor %s lacks tensor parallel interconnect support", topo.Profile.Vendor))
-	}
-	if res.Vector.Parallelism == ParallelismStateMisaligned {
-		res.Reasons = append(res.Reasons, fmt.Sprintf("device count %d is misaligned with required tensor parallel degree %d", topo.DeviceCount, w.TensorParallelDegree))
-	}
-	if res.Vector.VRAM == VRAMStateInsufficient {
-		res.Reasons = append(res.Reasons, fmt.Sprintf("available VRAM (%.2f GiB) is less than required workload VRAM (%.2f GiB)", float64(res.TotalAvailableVRAM)/float64(gibibyte), float64(res.RequiredVRAM)/float64(gibibyte)))
-	}
-	if res.Vector.VRAM == VRAMStateDegraded {
-		res.Reasons = append(res.Reasons, fmt.Sprintf("available VRAM headroom (%.1f%%) is constrained under 5%% KV cache threshold", res.HeadroomRatio*100.0))
-	}
-
-	if res.Vector.Vendor == VendorCompatibilityIncompatible ||
-		res.Vector.Parallelism == ParallelismStateUnsupported ||
-		res.Vector.Parallelism == ParallelismStateMisaligned ||
-		res.Vector.VRAM == VRAMStateInsufficient {
-		res.Phase = TopologyPhaseNonCompliant
-	} else if res.Vector.VRAM == VRAMStateDegraded {
-		res.Phase = TopologyPhaseDegraded
-	} else {
-		res.Phase = TopologyPhaseCompliant
 	}
 }

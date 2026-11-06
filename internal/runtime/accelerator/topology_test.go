@@ -192,12 +192,60 @@ func TestHeterogeneousFleetProfiles(t *testing.T) {
 			supportsTP:  true,
 		},
 		{
+			name:        "NVIDIA GB300",
+			vendor:      servingv1alpha2.AcceleratorTypeNVIDIA,
+			model:       servingv1alpha2.AcceleratorModelGB300,
+			wantVRAMGiB: 252,
+			wantArch:    "Blackwell Ultra Superchip",
+			supportsTP:  true,
+		},
+		{
 			name:        "Apple Silicon MLX",
 			vendor:      servingv1alpha2.AcceleratorTypeAppleMLX,
 			model:       "m-series-ultra",
 			wantVRAMGiB: 128,
 			wantArch:    "Apple Silicon",
 			supportsTP:  false,
+		},
+		{
+			name:        "Apple M4 Ultra",
+			vendor:      servingv1alpha2.AcceleratorTypeAppleMetal,
+			model:       servingv1alpha2.AcceleratorModelM4Ultra,
+			wantVRAMGiB: 192,
+			wantArch:    "Apple Silicon UMA",
+			supportsTP:  false,
+		},
+		{
+			name:        "Google TPU v6e",
+			vendor:      servingv1alpha2.AcceleratorTypeGoogleTPU,
+			model:       servingv1alpha2.AcceleratorModelTPUv6e,
+			wantVRAMGiB: 32,
+			wantArch:    "Trillium",
+			supportsTP:  true,
+		},
+		{
+			name:        "Google TPU v5p",
+			vendor:      servingv1alpha2.AcceleratorTypeGoogleTPU,
+			model:       servingv1alpha2.AcceleratorModelTPUv5p,
+			wantVRAMGiB: 96,
+			wantArch:    "TPU-v5p",
+			supportsTP:  true,
+		},
+		{
+			name:        "AWS Trainium2",
+			vendor:      servingv1alpha2.AcceleratorTypeAWSNeuron,
+			model:       servingv1alpha2.AcceleratorModelTrn2,
+			wantVRAMGiB: 96,
+			wantArch:    "NeuronCore-v2",
+			supportsTP:  true,
+		},
+		{
+			name:        "Intel Gaudi3",
+			vendor:      servingv1alpha2.AcceleratorTypeIntelGaudi,
+			model:       servingv1alpha2.AcceleratorModelGaudi3,
+			wantVRAMGiB: 128,
+			wantArch:    "G3-DualDie",
+			supportsTP:  true,
 		},
 		{
 			name:        "Host CPU",
@@ -310,17 +358,24 @@ func TestCompoundAcceleratorTypeSpec(t *testing.T) {
 func TestGLM53OnBlackwellProfiles(t *testing.T) {
 	workload := GLM53EXL3Workload()
 
-	// 4x SM100 (4x 192 GiB = 768 GiB, TP=4)
-	topoSM100, err := NewHardwareTopology(servingv1alpha2.AcceleratorTypeNVIDIA, servingv1alpha2.AcceleratorModelSM100, 4)
-	if err != nil {
-		t.Fatalf("create SM100 topology: %v", err)
-	}
-	resSM100 := ValidateTopology(topoSM100, workload)
-	if !resSM100.IsCompliant() || resSM100.Phase != TopologyPhaseCompliant {
-		t.Errorf("expected 4x SM100 to be compliant, got %v", resSM100.Phase)
-	}
-	if resSM100.Vector.VRAM != VRAMStateSufficient || resSM100.Vector.Parallelism != ParallelismStateOptimal {
-		t.Errorf("4x SM100 states: VRAM=%v, Parallelism=%v", resSM100.Vector.VRAM, resSM100.Vector.Parallelism)
+	// 4x configurations across Blackwell family (including GB300 desktop superchip)
+	for _, model := range []servingv1alpha2.AcceleratorModel{
+		servingv1alpha2.AcceleratorModelSM100,
+		servingv1alpha2.AcceleratorModelDGXSpark,
+		servingv1alpha2.AcceleratorModelSM103,
+		servingv1alpha2.AcceleratorModelGB300,
+	} {
+		topo, err := NewHardwareTopology(servingv1alpha2.AcceleratorTypeNVIDIA, model, 4)
+		if err != nil {
+			t.Fatalf("create %s topology: %v", model, err)
+		}
+		res := ValidateTopology(topo, workload)
+		if !res.IsCompliant() || res.Phase != TopologyPhaseCompliant {
+			t.Errorf("expected 4x %s to be compliant, got %v", model, res.Phase)
+		}
+		if res.Vector.VRAM != VRAMStateSufficient || res.Vector.Parallelism != ParallelismStateOptimal {
+			t.Errorf("4x %s states: VRAM=%v, Parallelism=%v", model, res.Vector.VRAM, res.Vector.Parallelism)
+		}
 	}
 
 	// 1x SM100 (192 GiB >= 176 GiB, but count=1 < TP=4 => MISALIGNED)
@@ -335,26 +390,6 @@ func TestGLM53OnBlackwellProfiles(t *testing.T) {
 	if resSingle.Vector.Parallelism != ParallelismStateMisaligned {
 		t.Errorf("1x SM100 ParallelismState = %v, want %v", resSingle.Vector.Parallelism, ParallelismStateMisaligned)
 	}
-
-	// 4x DGX Spark (4x 144 GiB = 576 GiB, TP=4)
-	topoSpark, err := NewHardwareTopology(servingv1alpha2.AcceleratorTypeNVIDIA, servingv1alpha2.AcceleratorModelDGXSpark, 4)
-	if err != nil {
-		t.Fatalf("create DGX Spark topology: %v", err)
-	}
-	resSpark := ValidateTopology(topoSpark, workload)
-	if !resSpark.IsCompliant() || resSpark.Phase != TopologyPhaseCompliant {
-		t.Errorf("expected 4x DGX Spark to be compliant, got %v", resSpark.Phase)
-	}
-
-	// 4x SM103 (4x 288 GiB = 1152 GiB, TP=4)
-	topoSM103, err := NewHardwareTopology(servingv1alpha2.AcceleratorTypeNVIDIA, servingv1alpha2.AcceleratorModelSM103, 4)
-	if err != nil {
-		t.Fatalf("create SM103 topology: %v", err)
-	}
-	resSM103 := ValidateTopology(topoSM103, workload)
-	if !resSM103.IsCompliant() || resSM103.Phase != TopologyPhaseCompliant {
-		t.Errorf("expected 4x SM103 to be compliant, got %v", resSM103.Phase)
-	}
 }
 
 func TestBlackwellModernQuantization(t *testing.T) {
@@ -362,6 +397,7 @@ func TestBlackwellModernQuantization(t *testing.T) {
 		servingv1alpha2.AcceleratorModelSM100,
 		servingv1alpha2.AcceleratorModelSM103,
 		servingv1alpha2.AcceleratorModelDGXSpark,
+		servingv1alpha2.AcceleratorModelGB300,
 	}
 
 	quantMethods := []string{"nvfp4", "mxfp8", "fp8", "exl3", "bitsandbytes"}
@@ -430,8 +466,17 @@ func TestHeterogeneousCompoundSpecs(t *testing.T) {
 		{"nvidia/sm100", servingv1alpha2.AcceleratorTypeNVIDIA, servingv1alpha2.AcceleratorModelSM100},
 		{"nvidia-dgx-spark", servingv1alpha2.AcceleratorTypeNVIDIA, servingv1alpha2.AcceleratorModelDGXSpark},
 		{"nvidia/sm103", servingv1alpha2.AcceleratorTypeNVIDIA, servingv1alpha2.AcceleratorModelSM103},
+		{"nvidia/gb300", servingv1alpha2.AcceleratorTypeNVIDIA, servingv1alpha2.AcceleratorModelGB300},
 		{"rocm/mi300x", servingv1alpha2.AcceleratorTypeROCm, "mi300x"},
 		{"apple-mlx", servingv1alpha2.AcceleratorTypeAppleMLX, ""},
+		{"apple-metal/m4-ultra", servingv1alpha2.AcceleratorTypeAppleMetal, servingv1alpha2.AcceleratorModelM4Ultra},
+		{"apple-m4-ultra", servingv1alpha2.AcceleratorTypeAppleMetal, servingv1alpha2.AcceleratorModelM4Ultra},
+		{"google-tpu/tpu-v6e", servingv1alpha2.AcceleratorTypeGoogleTPU, servingv1alpha2.AcceleratorModelTPUv6e},
+		{"google-tpu-v6e", servingv1alpha2.AcceleratorTypeGoogleTPU, servingv1alpha2.AcceleratorModelTPUv6e},
+		{"aws-neuron/trn2", servingv1alpha2.AcceleratorTypeAWSNeuron, servingv1alpha2.AcceleratorModelTrn2},
+		{"aws-trn2", servingv1alpha2.AcceleratorTypeAWSNeuron, servingv1alpha2.AcceleratorModelTrn2},
+		{"intel-gaudi/gaudi3", servingv1alpha2.AcceleratorTypeIntelGaudi, servingv1alpha2.AcceleratorModelGaudi3},
+		{"intel-gaudi3", servingv1alpha2.AcceleratorTypeIntelGaudi, servingv1alpha2.AcceleratorModelGaudi3},
 	}
 
 	for _, tc := range cases {

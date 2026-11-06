@@ -85,6 +85,20 @@ spec:
                     - dgx-spark
                     - sm100
                     - sm103
+                    - gb300
+                    - mi300x
+                    - mi325x
+                    - tpu-v4
+                    - tpu-v5e
+                    - tpu-v5p
+                    - tpu-v6e
+                    - trn1
+                    - trn2
+                    - inf2
+                    - gaudi2
+                    - gaudi3
+                    - m3-ultra
+                    - m4-ultra
                     type: string
                   type:
                     description: Type is the accelerator vendor or platform family.
@@ -92,6 +106,10 @@ spec:
                     - nvidia
                     - rocm
                     - apple-mlx
+                    - apple-metal
+                    - google-tpu
+                    - aws-neuron
+                    - intel-gaudi
                     - cpu
                     - npu
                     type: string

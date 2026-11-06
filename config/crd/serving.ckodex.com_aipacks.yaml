@@ -659,6 +659,7 @@ spec:
                 - Eval
                 - Workflow
                 - PolicyBundle
+                - UTCPManual
                 - Agent
                 type: string
               lora:
@@ -999,6 +1000,35 @@ spec:
                     - read-only
                     - write
                     type: string
+                type: object
+              utcpManual:
+                description: UTCPManual contains Universal Tool Calling Protocol manual
+                  configuration (Kind=UTCPManual).
+                properties:
+                  endpoint:
+                    description: Endpoint is the discovery URL or base URL serving
+                      the manual (e.g. "https://api.example.com/utcp").
+                    type: string
+                  manualInline:
+                    description: ManualInline contains the raw JSON string of the
+                      UTCP manual.
+                    type: string
+                  manualVersion:
+                    description: ManualVersion declares the version of the tool provider
+                      manual.
+                    type: string
+                  toolsCount:
+                    description: ToolsCount is the number of declared native tools
+                      in the manual.
+                    format: int32
+                    type: integer
+                  utcpVersion:
+                    description: UTCPVersion declares the specification version (e.g.,
+                      "1.0.1").
+                    type: string
+                required:
+                - manualVersion
+                - utcpVersion
                 type: object
               workflow:
                 description: Workflow contains workflow configuration (Kind=Workflow).

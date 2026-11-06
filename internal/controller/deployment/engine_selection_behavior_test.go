@@ -106,7 +106,7 @@ func TestApplyEngineSelectionUsesDigestPinnedSGLangAdapter(t *testing.T) {
 	pod := &corev1.PodSpec{Containers: []corev1.Container{{Image: api.VLLMImage}}}
 	(&Builder{RuntimeImage: api.VLLMImage}).applyEngineSelection(service, pod, HardwareNVIDIA)
 
-	assert.Equal(t, "lmsysorg/sglang:v0.5.18@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1", pod.Containers[0].Image)
+	assert.Equal(t, "lmsysorg/sglang:v0.5.22@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae", pod.Containers[0].Image)
 	assert.Equal(t, []string{"python3", "-m", "sglang.launch_server"}, pod.Containers[0].Args[:3])
 	assert.Contains(t, pod.Containers[0].Args, "--model-path")
 	assert.Contains(t, pod.Containers[0].Args, "--enable-metrics")
@@ -172,5 +172,5 @@ func TestApplyEngineSelectionSGLangRewritesPinnedImageInAirGappedMode(t *testing
 	service := &servingv1alpha2.LLMInferenceService{Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "sglang"}}
 	pod := &corev1.PodSpec{Containers: []corev1.Container{{}}}
 	(&Builder{AirGappedMode: true, LocalRegistry: "registry.local"}).applyEngineSelection(service, pod, HardwareNVIDIA)
-	assert.Equal(t, "registry.local/lmsysorg/sglang:v0.5.18@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1", pod.Containers[0].Image)
+	assert.Equal(t, "registry.local/lmsysorg/sglang:v0.5.22@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae", pod.Containers[0].Image)
 }

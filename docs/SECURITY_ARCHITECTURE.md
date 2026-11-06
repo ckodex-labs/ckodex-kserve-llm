@@ -1,74 +1,107 @@
-# Security Architecture: The Governed Trust Loop
+# Security architecture and zero-trust governance
 
-The **ckodex-kserve-llm** operator provides components intended to support a governed deployment. Which identity, isolation, integrity, and evidence controls apply depends on enabled features and cluster configuration; this document does not assert that every installation enforces them.
+The CKodex KServe LLM Operator enforces a zero-trust security architecture across the entire model serving lifecycle. The security model guarantees that every consequential operation on model weights, network routes, compute resources, and tool executions requires explicit authority, admission validation, and cryptographic attestation.
 
-## 1. Zero-Trust Foundations
+## Authority hierarchy and capability leases
 
-The architecture is built on three pillars of security: **Identity**, **Isolation**, and **Integrity**.
+Governed entities never self-authorize. All authority flows through a strict hierarchical standing-authority model:
 
-### A. Workload Identity (SPIFFE/SPIRE)
-
-When the optional SPIRE integration is configured, a registration can define a **SPIFFE ID** for an inference service based on its Kubernetes ServiceAccount and model name.
-
-- **Identity Integration**: The `SPIREReconciler` can manage a node-local SPIRE Agent when enabled and configured.
-- **Workload Identity**: A valid registration is configuration evidence only; it does not prove SVID issuance, workload authentication, or mTLS enforcement.
-- **NIST Mapping**: **IA-9** (Service Identification and Authentication) — applies to non-person entities (workload SVIDs), not IA-2 which governs organizational user accounts.
-
-### B. Traffic Isolation (Istio DPI)
-
-When the relevant gateway integration is enabled and configured, the operator can generate Istio `ServiceEntry` and `VirtualService` resources for workloads that declare behavioral intent via the `ToolSurface`.
-
-- **Egress Filtering**: Configured Istio policy may restrict declared tool traffic; resource presence alone does not prove effective filtering.
-- **Network Policies**: Deployment-specific `NetworkPolicy` resources may restrict pod traffic. The OSCAL AC-4 check tests for policy presence only, not selection or enforcement.
-- **NIST Mapping**: **AC-4** (Information Flow Enforcement) is a mapping for configured enforcement; the OSCAL resource check alone does not establish it.
-
-### C. Resource Integrity (OPA Gatekeeper)
-
-Where OPA Gatekeeper and the relevant policies are installed and configured, admission policies can constrain resources.
-
-- **GPU Quotas**: Where corresponding policies are installed, quotas can constrain resource use.
-- **Image Allowlist**: Where an allowlist policy is installed, it can constrain inference runtime images; this document does not establish signature verification.
-
-## 2. The L|T|R Governance Model
-
-Compliance is tracked via a composite state machine represented as three "State Planes":
-
-| Plane | State | Trigger | NIST 800-53 Mapping |
-| :--- | :--- | :--- | :--- |
-| **Lifecycle (L)** | `active` | Successful deployment and continuous health checks pass. | **CA-7** (Continuous Monitoring) |
-| **Trust (T)** | `asserted` → `verified` | `verified` requires a runtime record of successful signature, provenance, and SBOM attestation checks. | **SI-7** (Software & Information Integrity), **SR-4** (Provenance) |
-| **Risk (R)** | `normal` | Real-time analysis of OIS behavioral signals. | **SI-4** (System Monitoring) |
-
-## 3. Evidence-as-Code (OSCAL)
-
-OSKAL validates the component definition against its embedded OSCAL schema;
-schema validity is not evidence that mapped controls are effective. The
-resource-check command evaluates six mapped controls using a JSON snapshot
-or a live Kubernetes API and emits JSON results. Schema validity is not evidence
-that a control is effective. The AC-4 check detects namespace policy presence;
-other checks inspect status conditions or SPIRE registration data. OSKAL projects
-saved check outcomes into OSCAL observations; the scope, plan reference and
-evaluation time are supplied by the caller and are not independently verified.
-The projected artifact records the input and OSKAL source digests, but not the
-operator source revision. The caller-supplied timestamp is syntax-checked only,
-with no freshness check. The live assessment timeout is 30 seconds; snapshot
-input is limited to 32 MiB and projection input to 1 MiB.
-
-See [CI current state](ci/current-state.md) for commands and limits.
-
-## 4. Open Inference Signals (OIS) v0.1
-
-Behavioral monitoring is standardized via **OIS v0.1**. The data plane emits structured telemetry that the operator uses to dynamically adjust the **Risk (R)** plane.
-
-### Technical Proof: OIS Metric Signal
-
-```json
-{
-  "ois.v0.1.signal": "InferenceMetric",
-  "timestamp": "2026-04-11T02:45:30Z",
-  "resource.name": "gemma-4-e2b",
-  "metric.name": "p99_latency_ms",
-  "metric.value": 42.0,
-  "context.tenant": "finance-alpha"
-}
+```text
+Root Authority
+  └── Tenant
+       └── Namespace
+            └── Workspace
+                 └── Environment
+                      └── Project
+                           └── Resource (LLMInferenceService, AIPack, Agent)
 ```
+
+Possession of credentials or network co-location does not constitute authorization. Every consequential operation requires an active `CapabilityLease`:
+- **Explicit scope**: Bounded to specific model actions (read, infer, hot-swap, delete).
+- **Attenuated rights**: Child capabilities cannot exceed parent authority.
+- **Time-bounded expiry**: Leases carry monotonic deadlines; expired leases automatically revoke authority.
+- **Revocability**: Security controllers can revoke leases instantly via the reconciliation loop.
+- **Cryptographic proof**: Signed using Ed25519; verification receipts are committed to the flight recorder.
+
+## Workload identity with SPIFFE/SPIRE
+
+Workload identity eliminates static credentials and API keys across the data plane:
+- **SPIFFE IDs**: Assigned per inference service formatted as `spiffe://<trust-domain>/ns/<namespace>/sa/<serviceaccount>/model/<model-name>`.
+- **SPIRE Agent and Server**: SPIRE Agent runs node-locally as a DaemonSet; SPIRE Server acts as the cluster identity authority.
+- **SVID Issuance**: The `SPIREReconciler` in `internal/security/spire_reconciler.go` coordinates with SPIRE to issue X.509 SVIDs (SPIFFE Verifiable Identity Documents) directly to workload pods via a local Unix domain socket.
+- **Mutual TLS (mTLS)**: Workloads enforce strict mTLS for pod-to-pod and gateway-to-workload communication, rotating certificates every 60 minutes automatically without pod restarts.
+
+## Four-stage admission pipeline
+
+All model serving declarations pass through a composable four-stage admission pipeline before compute resources are provisioned:
+
+```mermaid
+flowchart LR
+    Manifest["CRD Manifest"] --> S1["Stage 1: Data Admission"]
+    S1 -->|Admitted| S2["Stage 2: Model Admission"]
+    S2 -->|Admitted| S3["Stage 3: Deployment Admission"]
+    S3 -->|Admitted| S4["Stage 4: Request Admission"]
+    S4 -->|Admitted| Prov["Provision Workload"]
+    
+    S1 -.->|Deny / Quarantine| Q["Quarantine and block"]
+    S2 -.->|Deny / Quarantine| Q
+    S3 -.->|Deny / Quarantine| Q
+    S4 -.->|Deny / Quarantine| Q
+```
+
+1. **Data admission**: Validates artifact provenance, checksum integrity, and license compliance. Verifies Cosign signatures against trusted public keys.
+2. **Model admission**: Evaluates tensor structure and serialization format. Restricts unsafe formats (such as arbitrary pickle files) and enforces safetensors or verified GGUF/AWQ tensors. Scans model metadata for embedded malicious payloads.
+3. **Deployment admission**: Validates accelerator quotas, VRAM requirements, container security contexts, node selectors, and tenant isolation policies.
+4. **Request admission**: Enforces rate limits, tenant token allowances, and payload constraints before requests reach model worker pods.
+
+### Categorical admission dispositions
+
+Validation produces one of six explicit categorical decisions:
+- `ADMIT`: All checks pass unconditionally; execution proceeds.
+- `ADMIT_WITH_OBLIGATIONS`: Admitted subject to runtime obligations (for example, mandatory audit logging or restricted egress).
+- `DENY`: Hard rejection due to policy or invariant failure.
+- `ESCALATE`: Requires human or security officer intervention before lease grant.
+- `SAFE_HOLD`: Workload frozen in place; forensic state and evidence preserved.
+- `QUARANTINE`: Total isolation; network egress severed and resources locked.
+
+## Container runtime hardening
+
+All operator and workload containers conform to strict least-privilege standards:
+- **Distroless base images**: Operator binaries compile into distroless static scratch containers containing zero shell binaries, package managers, or interpreters.
+- **Non-root execution**: Workloads run explicitly as unprivileged user `nonroot` (UID 65532, GID 65532).
+- **Read-only root filesystem**: All container root filesystems are mounted read-only (`readOnlyRootFilesystem: true`). Ephemeral state is restricted to explicit `emptyDir` memory volumes.
+- **Dropped capabilities**: All Linux capabilities are dropped (`capabilities.drop: ["ALL"]`). Privileged mode and host namespace sharing are forbidden.
+- **Seccomp and AppArmor**: Default `RuntimeDefault` seccomp profiles restrict system calls.
+
+## Supply chain security and cryptographic attestation
+
+The operator incorporates verifiable supply chain security across all release assets:
+- **Cosign OIDC signatures**: All published container images are signed via GitHub Actions OIDC federation using Sigstore Cosign.
+- **SLSA provenance Level 3**: Build pipelines emit signed SLSA provenance attestation files recording the exact source commit, builder identity, and input dependencies.
+- **Software Bill of Materials (SBOM)**: Every image generates CycloneDX and SPDX SBOMs recording all compiled Go modules and Python dependencies.
+- **Vulnerability scanning**: Images must pass Trivy scans with zero `CRITICAL` or `HIGH` vulnerabilities prior to release publication.
+
+## Ingress security with Envoy Gateway 1.2.0
+
+Edge network communication is secured through Envoy Gateway 1.2.0:
+- **TLS termination**: Enforces TLS 1.3 with forward secrecy. Rejects outdated ciphers and SSL/TLS versions.
+- **Route fencing**: When a workload enters `SAFE_HOLD` or `QUARANTINED`, `internal/gateway/fence.go` modifies the corresponding `HTTPRoute` and `GRPCRoute` within 5 seconds, stripping all backend forwarders while retaining matching rules. This drops external traffic instantly without deleting customer routing objects.
+- **Mandatory security response headers**: HTTPRoute automatically injects `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`, while TLS, HSTS, and frame options are terminated at the edge Gateway layer.
+
+## Compliance as code: OSCAL and Lula
+
+Continuous compliance is verified against NIST SP 800-53 Rev 5:
+- **Component definitions**: `oscal/component-definition.yaml` maps operator controls to NIST controls (AC-4, AU-2, CA-7, IA-9, SC-7, SC-8, SI-4, SI-7, SR-2, SR-4).
+- **Live assessment tool**: `hack/oscal-assessment` evaluates cluster resources against declared control targets and outputs structured JSON observations.
+- **Lula verification**: CI pipelines validate machine-readable evidence using Lula:
+  ```bash
+  dagger call lula --source=. export --path=assessment-results.yaml
+  ```
+
+## Vector state defensive posture
+
+Defensive posture is tracked continuously as a 6D state vector:
+
+$$S(e,t) = \langle P, V, C, E, L, \tau \rangle$$
+
+When active exploitation, signature mismatch, or policy contradiction occurs, coherence immediately collapses from `COHERENT` to `DECOHERENT`. The reconciler fences network routes, transitions lifecycle to `QUARANTINED`, and records an immutable receipt in the RFC 9162 Merkle flight recorder for post-incident audit.

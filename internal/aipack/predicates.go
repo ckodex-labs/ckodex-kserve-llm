@@ -86,6 +86,10 @@ var requiredPredicates = map[v1alpha2.ArtifactKind][]string{
 		v1alpha2.PredSLSAProvenance,
 		v1alpha2.PredCycloneDXBOM,
 	},
+	v1alpha2.KindUTCPManual: {
+		v1alpha2.PredSLSAProvenance,
+		v1alpha2.PredCycloneDXBOM,
+	},
 	v1alpha2.KindAgent: {
 		v1alpha2.PredSLSAProvenance,
 		v1alpha2.PredCycloneDXBOM,

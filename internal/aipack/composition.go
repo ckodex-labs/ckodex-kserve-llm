@@ -19,6 +19,7 @@ var AgentSlotConstraints = map[string][]v1alpha2.ArtifactKind{
 	"skills":           {v1alpha2.KindSkill},
 	"tools":            {v1alpha2.KindTool, v1alpha2.KindMCPServer},
 	"mcpServers":       {v1alpha2.KindMCPServer},
+	"utcpManuals":      {v1alpha2.KindUTCPManual},
 	"systemPrompt":     {v1alpha2.KindPromptTemplate},
 	"guardrailsInput":  {v1alpha2.KindGuardrail},
 	"guardrailsOutput": {v1alpha2.KindGuardrail},

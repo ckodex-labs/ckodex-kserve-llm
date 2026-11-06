@@ -51,3 +51,40 @@ spec:
         }
 
   maxTokens: 4096
+---
+apiVersion: serving.ckodex.com/v1alpha2
+kind: Agent
+metadata:
+  name: deep-researcher
+  namespace: default
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+spec:
+  identity:
+    name: Deep Researcher Agent
+    description: Autonomous research agent equipped with native UTCP system and vision tools
+    version: 1.0.0
+
+  modelRef: kimi-k31-specimen
+
+  utcpManuals:
+    - name: system-tools
+      packRef: utcp-system-tools
+    - name: ocr-manual
+      packRef: aipack-unlimited-ocr-utcp
+
+  tools:
+    - name: unlimited_ocr_parse
+      description: Parse long-horizon documents with Baidu Unlimited-OCR-2
+      protocol: utcp
+      endpoint: http://unlimited-ocr-2.ckodex-inference.svc.cluster.local:8000/v1/chat/completions
+      inputSchema: |
+        {
+          "type": "object",
+          "properties": {
+            "document_url": {"type": "string"}
+          },
+          "required": ["document_url"]
+        }
+
+  maxTokens: 4096

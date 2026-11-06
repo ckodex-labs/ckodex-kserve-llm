@@ -1,60 +1,153 @@
-# Air-Gapped OCI Model Distribution
+# Air-gap deployment and offline operations
 
-The **ckodex-kserve-llm** operator supports disconnected environments by redirecting model and infrastructure requests to a **Local OCI Registry**.
+The CKodex KServe LLM Operator supports disconnected, air-gapped sovereign environments. The operator operates with zero outbound Internet connectivity, redirecting all model downloads, container images, cryptographic verifications, and compliance assessments to local enterprise infrastructure.
 
-## 1. Enabling Air-Gapped Mode
+## Five sovereignty tiers
 
-Configure the operator via environment variables:
+The operator defines five progressive tiers of operational sovereignty:
+
+| Tier | Name | Architectural boundary | Verification requirements |
+|---|---|---|---|
+| **Tier 1** | Local registry mirror | External Internet reachable for build, all deployment images pulled from local OCI registry | Local container image pull verification |
+| **Tier 2** | Local model artifact store | Model weights mirrored to local S3 (SeaweedFS/MinIO) or OCI registry | Digest verification and storage initializer compatibility |
+| **Tier 3** | Offline cryptographic verification | Sigstore TUF disabled; local Cosign public keys verify signatures and attestations | Ed25519 offline signature and SLSA provenance checks |
+| **Tier 4** | Isolated private network | Strict Kubernetes network policies; zero egress to external IP ranges; local DNS only | Automated zero-phone-home test passing |
+| **Tier 5** | Strict physical air-gap | Completely severed physical network; data imported exclusively via encrypted transfer capsules | Immutable offline evidence bundles and Lula OSCAL verification |
+
+## Air-gap configuration
+
+Configure the operator controller manager with air-gap environment variables:
 
 ```yaml
-env:
-  - name: CKODEX_AIRGAPPED_MODE
-    value: "true"
-  - name: CKODEX_LOCAL_REGISTRY
-    value: "registry.corp.internal"
-  - name: CKODEX_LOCAL_COSIGN_KEY_PATH
-    value: "/etc/cosign/cosign.pub"
-  # Alternative when mounting a public-key file is inconvenient:
-  - name: CKODEX_LOCAL_COSIGN_PUBLIC_KEY
-    valueFrom:
-      secretKeyRef:
-        name: cosign-public-key
-        key: cosign.pub
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ckodex-operator-controller-manager
+  namespace: ckodex-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          image: registry.corp.internal/ckodex/operator:v0.20.0
+          env:
+            - name: CKODEX_AIRGAPPED_MODE
+              value: "true"
+            - name: CKODEX_LOCAL_REGISTRY
+              value: "registry.corp.internal"
+            - name: CKODEX_LOCAL_COSIGN_KEY_PATH
+              value: "/etc/cosign/cosign.pub"
+            - name: CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE
+              value: "registry.corp.internal/kserve/storage-initializer:v0.21.0"
+            - name: CKODEX_RUNTIME_IMAGE
+              value: "registry.corp.internal/vllm/vllm-openai:v0.33.0"
+          volumeMounts:
+            - name: cosign-key
+              mountPath: /etc/cosign
+              readOnly: true
+      volumes:
+        - name: cosign-key
+          secret:
+            secretName: cosign-airgap-public-key
 ```
 
-## 2. Model URI Redirection (Auto-Convert)
+When `CKODEX_AIRGAPPED_MODE` is enabled, the operator automatically rewrites all external model URIs and container images to the local mirror registry:
 
-When `CKODEX_AIRGAPPED_MODE` is active, the operator automatically rewrites all external model URIs to your local registry.
+| Standard URI | Air-gapped rewritten URI |
+|---|---|
+| `hf://tiny-random/kimi-k3.1-pro` | `oci://registry.corp.internal/models/kimi-k31-pro:v1` |
+| `hf://baidu/Unlimited-OCR-2` | `oci://registry.corp.internal/models/unlimited-ocr-2:v1` |
+| `hf://facebook/sam3` | `oci://registry.corp.internal/models/sam3:v1` |
+| `vllm/vllm-openai:v0.33.0` | `registry.corp.internal/vllm/vllm-openai:v0.33.0` |
 
-| Original URI | Rewritten URI (Air-Gapped) |
-| :--- | :--- |
-| `hf://google/gemma-4` | `oci://registry.corp.internal/hf/google/gemma-4` |
-| `oci://ghcr.io/ckodex/gemma:v1` | `oci://registry.corp.internal/ghcr.io/ckodex/gemma:v1` |
-| `ocis://ghcr.io/ckodex/gemma:v1` | `ocis://registry.corp.internal/ghcr.io/ckodex/gemma:v1` |
+## Image and artifact mirroring procedures
 
-> [!TIP]
-> Use the **ORAS** CLI to mirror HuggingFace models to your local registry before deployment:
-> `oras copy hf://google/gemma-4 oci://registry.corp.internal/hf/google/gemma-4`
+Before deploying into an air-gapped environment, mirror all required container images and model artifacts using `skopeo` or `oras`.
 
-## 3. Infrastructure Image Redirection
+### 1. Mirror container images
 
-The operator also rewrites all the infrastructure images it manages to ensure they are pulled from the local registry:
+```bash
+REGISTRY="registry.corp.internal"
 
-- `kserve/storage-initializer:v0.21.0@sha256:3a3a6a8053478c8d8d90f96fc5e54c1892c07784102dda70104374d4f89a3672` -> mirror the same digest under `registry.corp.internal`
-- `vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e` -> mirror the same digest under `registry.corp.internal`
+# Operator and initializers
+skopeo copy docker://ghcr.io/runbase-ai/ckodex-kserve-llm-operator:v0.20.0 \
+  docker://${REGISTRY}/ckodex/operator:v0.20.0
 
-## 4. Offline Security Verification
+skopeo copy docker://kserve/storage-initializer:v0.21.0 \
+  docker://${REGISTRY}/kserve/storage-initializer:v0.21.0
 
-In air-gapped mode, external Sigstore (TUF) and OIDC lookups are disabled. `CKODEX_LOCAL_COSIGN_KEY_PATH` is the primary offline verification contract. `CKODEX_LOCAL_COSIGN_PUBLIC_KEY` is supported as an inline fallback for warm-up Jobs or other environments where mounting a file is awkward.
+# Inference engine runtimes
+skopeo copy docker://vllm/vllm-openai:v0.33.0 \
+  docker://${REGISTRY}/vllm/vllm-openai:v0.33.0
 
-Current behavior:
+skopeo copy docker://docker.io/envoyproxy/gateway:v1.2.0 \
+  docker://${REGISTRY}/envoyproxy/gateway:v1.2.0
+```
 
-1. For `oci://` and `ocis://` artifacts, the storage initializer runs `cosign verify`, `cosign verify-attestation --type slsaprovenance1`, and `cosign verify-attestation --type cyclonedx`.
-2. The init container writes a machine-readable runtime verification record to its termination log and to the model cache, and the controllers only report `Compliance-SR-2=True` when that record shows signature, provenance, and SBOM attestation verification succeeded.
-3. If the destination cache is already populated but has no matching verified cache record, the initializer refuses to reuse it.
-4. Non-OCI sources may still download, but they do not qualify for cryptographic provenance verification and should not be treated as `verified` promotion inputs.
+### 2. Package and mirror model weights via ORAS
 
----
+Package Hugging Face weights into OCI artifacts and push to the private registry:
 
-> [!IMPORTANT]
-> Ensure your local registry supports the OCI Artifacts spec (e.g., **Harbor 2.x**, **Zot**, or **Distribution v2.7+**).
+```bash
+cd /staging/models/kimi-k3.1-pro
+oras push registry.corp.internal/models/kimi-k31-pro:v1 \
+  --config /dev/null:application/vnd.ckodex.model.config.v1+json \
+  ./*:application/vnd.ckodex.model.layer.v1+tar
+```
+
+Sign the mirrored artifact with the private offline signing key:
+
+```bash
+cosign sign --key /keys/cosign-offline.key \
+  registry.corp.internal/models/kimi-k31-pro:v1
+```
+
+## Pre-staging weights with LocalModelCache
+
+To avoid saturating the local registry during autoscaling, use `LocalModelCache` to pre-stage weights directly onto cluster worker nodes:
+
+```yaml
+apiVersion: serving.ckodex.com/v1alpha2
+kind: LocalModelCache
+metadata:
+  name: kimi-k31-pro-cache
+spec:
+  modelName: tiny-random-kimi-k31-pro
+  source:
+    uri: oci://registry.corp.internal/models/kimi-k31-pro:v1
+  nodeSelector:
+    accelerator: nvidia-rtx-ada
+  storage:
+    size: 50Gi
+    path: /var/lib/ckodex/models/kimi-k31-pro
+  retentionPolicy: Retain
+```
+
+The operator schedules a daemon-style cache synchronization Job. Once cached, the storage initializer binds the local hostPath mount directly, reducing model initialization time from minutes to under 5 seconds.
+
+## Offline verification and attestation
+
+In air-gapped mode, external certificate authorities, transparency logs (Rekor), and OpenID Connect providers are unreachable. The operator enforces offline verification:
+
+1. **Local Cosign public key**: Mounted via `CKODEX_LOCAL_COSIGN_KEY_PATH` or provided as an inline secret via `CKODEX_LOCAL_COSIGN_PUBLIC_KEY`.
+2. **Signature verification**: Storage initializers execute `cosign verify --key /etc/cosign/cosign.pub` against the local OCI artifact.
+3. **Attestation and provenance**: Verifies offline in-toto attestations (`--type slsaprovenance1`) and CycloneDX SBOMs (`--type cyclonedx`).
+4. **Cache integrity locking**: If a cache directory is present on a node but lacks a valid cryptographic receipt from a prior verified download, the initializer rejects the cache and performs a full re-verification.
+
+## Zero-phone-home test checklist
+
+Before declaring an installation Tier 4 or Tier 5 compliant, execute the following validation commands from inside an inference pod:
+
+```bash
+# 1. Verify DNS does not resolve public domains
+kubectl exec -it deploy/kimi-k31-specimen -c vllm -- \
+  nslookup huggingface.co || echo "DNS egress successfully blocked"
+
+# 2. Verify external HTTP egress fails immediately
+kubectl exec -it deploy/kimi-k31-specimen -c vllm -- \
+  curl -m 3 https://huggingface.co || echo "HTTPS egress successfully blocked"
+
+# 3. Verify internal registry and model download succeed
+kubectl exec -it deploy/kimi-k31-specimen -c vllm -- \
+  curl -s -o /dev/null -w "%{http_code}\n" http://registry.corp.internal/v2/
+```

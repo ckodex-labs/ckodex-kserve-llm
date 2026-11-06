@@ -21,6 +21,7 @@ var KindFamilyMap = map[v1alpha2.ArtifactKind]v1alpha2.ArtifactFamily{
 	v1alpha2.KindDataset:        v1alpha2.FamilyKnowledge,
 	v1alpha2.KindHarness:        v1alpha2.FamilyAssurance,
 	v1alpha2.KindEval:           v1alpha2.FamilyAssurance,
+	v1alpha2.KindUTCPManual:     v1alpha2.FamilyCapability,
 	v1alpha2.KindAgent:          v1alpha2.FamilyComposite,
 }
 

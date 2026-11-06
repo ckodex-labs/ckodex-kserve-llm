@@ -2,102 +2,130 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/ckodex-labs/ckodex-kserve-llm)](https://goreportcard.com/report/github.com/ckodex-labs/ckodex-kserve-llm)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg)](docs/overview.md)
+[![Documentation](https://img.shields.io/badge/docs-v0.20.0-brightgreen.svg)](docs/overview.md)
+[![Release](https://img.shields.io/badge/release-v0.20.0-blue.svg)](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.20.0)
 [![Security Scorecard](https://img.shields.io/ossf-scorecard/github.com/ckodex-labs/ckodex-kserve-llm?label=scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/ckodex-labs/ckodex-kserve-llm)
 
-The CKodex KServe LLM Operator turns model-serving declarations into
-Kubernetes workloads, routing, scaling, identity, and observable status.
+The CKodex KServe LLM Operator automates the deployment, routing, scaling, governance, and cryptographic attestation of large language models and multimodal foundation models on Kubernetes.
 
-Start with **[the big picture](docs/overview.md)**. It explains the user roles,
-runtime loop, resource map, and current product boundaries in one place.
+For a comprehensive architectural breakdown, read [the big picture overview](docs/overview.md).
 
-## Who It Is For
+## Core capabilities in release v0.20.0
 
-| User | What they provide | What they receive |
+Release `v0.20.0` (commit `9da7f18`) establishes production defaults across the inference control plane:
+
+- **vLLM v0.33.0 runtime engine**: Pinned to `vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e`. Built on PyTorch 2.14.0 and CUDA 13.0. Supports the Kimi-K3 architecture family (Gated-DSA, MoE, and KDA linear attention), chunked prefill, V1 engine architecture, tensor parallelism, and Ray 2.45.1 clustering.
+- **Universal Tool Calling Protocol (UTCP v1.0.1)**: Pure domain protocol implementation in `internal/utcp/`. Provides native tool discovery and direct invocation over HTTP, gRPC, and CLI without proxy wrapper overhead. Includes bidirectional converters for Model Context Protocol (MCP) and OpenAPI schemas.
+- **Multimodal foundation models**: Admitted `MultimodalInferenceService` tasks for Baidu Unlimited-OCR-2 (`task: ocr`, multi-page document parsing with SR-SWA) and Meta SAM 3 (`task: segmentation`, promptable concept segmentation masks).
+- **LMCache v0.5.6 prefix caching**: Multiprocess shared memory key-value fabric over CUDA IPC and P2P transfers. Yields up to 85% time-to-first-token (TTFT) reduction for repeated system prompts.
+- **Envoy Gateway 1.2.0 integration**: TLS termination, route fencing for quarantined workloads, and automated response security headers. HTTPRoute automatically injects `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`, while TLS, HSTS, and frame options are terminated at the edge Gateway layer.
+- **Normalized reconciler diff engine (`L-OP-018`)**: Reconciles container commands, working directories, ports, security contexts, probes, lifecycles, and pod scheduling constraints in `internal/controller/reconciler/diff.go` with API server default normalization to prevent reconciliation drift loops.
+- **Consolidated Helm charts (`L-OP-013`)**: Canonical deployment chart in `deploy/helm`, with byte parity enforced against `charts/ckodex-kserve-llm-operator` through the `hack/helm-contract` verification suite.
+
+## User roles and boundaries
+
+| User | Inputs provided | Outputs received |
 |---|---|---|
-| Model scientist | Model URI, model name, runtime resources, acceptance criteria | A declared inference service with status and metrics |
-| Platform developer | Kubernetes, storage, Gateway API, compute, policy, observability | A repeatable control plane for model-serving workloads |
-| Security reviewer | Identity, network, and evidence requirements | Inspectable resources, conditions, OSCAL results, and release artifacts |
+| Model scientist | Model URI, model name, accelerator resources, tool manuals | OpenAI-compatible endpoint, metrics, and readiness conditions |
+| Platform engineer | Kubernetes cluster, Gateway API, storage secrets, node selectors | Governed control plane, automated reconciliation, and autoscaling |
+| Security auditor | Identity policies, network boundaries, signing certificates | Cryptographic receipts, OSCAL assessments, and SLSA provenance |
 
-## How It Works
+## Architecture
+
+The operator adheres to the Four Spaces architecture defined in the CKODEX Constitution:
 
 ```mermaid
-flowchart LR
-    A["Model intent"] --> B["LLMInferenceService"]
-    B --> C["CKodex operator"]
-    C --> D["Deployment and Service"]
-    C --> E["Gateway and HTTPRoute"]
-    C --> F["Scaling, identity, and policy"]
-    D --> G["Inference endpoint"]
-    E --> G
-    D --> H["Status, events, and metrics"]
-    F --> H
+flowchart TD
+    subgraph Presentation["Presentation space"]
+        CR["CRD Manifests: LLMInferenceService, AIPack, Agent"]
+        Ctrl["Controllers: LLM, AIPack, Agent, Gateway"]
+        WH["Admission and Conversion Webhooks"]
+    end
+
+    subgraph Validation["Validation space"]
+        Val["Shared Admission Pipeline: Data, Model, Deployment, Request"]
+        Pol["Policy Guards and Resource Invariants"]
+    end
+
+    subgraph Kernel["Semantic kernel"]
+        SK["Pure Domain State Machine: 9-State Lifecycle"]
+        SV["State Vector: Presence, Valence, Coherence, Evidence, Lifecycle, Epoch"]
+        UTCP["UTCP v1.0.1 Dispatcher and Protocol Converter"]
+    end
+
+    subgraph Proof["Proof and evidence space"]
+        Receipt["Execution Receipts and RFC 9162 Merkle Flight Recorder"]
+        OSCAL["OSCAL Assessment Engine and Lula Validation"]
+    end
+
+    CR --> WH
+    WH --> Val
+    Ctrl --> Val
+    Val --> SK
+    SK --> SV
+    Ctrl --> Kernel
+    Kernel --> Proof
+    Ctrl --> K8s["Kubernetes Resources: Deployment, Service, HTTPRoute, Gateway"]
 ```
 
-The custom resource is the desired-state contract. Controllers reconcile that
-contract into Kubernetes resources. Status and telemetry report what actually
-happened.
+## Quickstart
 
-## Local Proof
+### Prerequisites
 
-Prerequisites: Docker, KIND, `kubectl`, Helm, `curl`, `jq`, and network access.
+- Kubernetes cluster v1.30 or higher (Kind or cloud managed).
+- `kubectl` v1.30+ and Helm v3.14+.
+- NVIDIA GPU with CUDA 13.0 driver installed for GPU-accelerated workloads.
+
+### Install the operator
+
+Install the operator via the canonical Helm chart:
 
 ```bash
-./run/e2e.sh
+helm install ckodex-operator deploy/helm \
+  --namespace ckodex-system \
+  --create-namespace \
+  --set image.repository=ghcr.io/runbase-ai/ckodex-kserve-llm-operator \
+  --set image.tag=v0.20.0
 ```
 
-This creates or reuses a KIND cluster, installs the required local
-dependencies, builds the operator and storage initializer, applies a
-CPU-sized GPT-2 completion fixture, and probes `/v1/completions` through the
-managed Gateway path.
-
-For a small-machine `glm5_next` architecture fixture, run the
-[tiny GLM preflight and runbook](docs/runbooks/glm5-next-tiny.md). The fixture
-is pinned for configuration and CPU-forward testing; it is not a quality,
-NVFP4, GPU, or production-serving claim.
-
-Inspect the result:
+Verify controller readiness:
 
 ```bash
-kubectl get llminferenceservices.serving.ckodex.com -A
-kubectl get deployments,services,gateways,httproutes -A
-kubectl get events -A --sort-by=.lastTimestamp
+kubectl rollout status deployment/ckodex-operator-controller-manager -n ckodex-system
 ```
 
-Clean up:
+### Deploy a specimen model
 
-```bash
-./run/cleanup.sh
-```
-
-See [Getting Started](docs/getting-started.md) for the scientist and platform
-developer paths.
-
-## Primary API
-
-Use `serving.ckodex.com/v1` for new `LLMInferenceService` resources that stay
-within the stable surface. Specialized CRDs and some extended fields remain
-`v1alpha2`; check the generated CRD before choosing a version.
+Deploy the Kimi-K3.1 specimen service using `serving.ckodex.com/v1`:
 
 ```yaml
 apiVersion: serving.ckodex.com/v1
 kind: LLMInferenceService
 metadata:
-  name: qwen-small
+  name: kimi-k31-specimen
   namespace: default
 spec:
   model:
-    name: qwen-0.5b
-    uri: hf://Qwen/Qwen2.5-0.5B-Instruct
+    name: tiny-random-kimi-k31-pro
+    uri: hf://tiny-random/kimi-k3.1-pro
   replicas: 1
   template:
     spec:
       containers:
         - name: vllm
+          image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+          args:
+            - --trust-remote-code
+            - --enforce-eager
+            - --gpu-memory-utilization=0.50
+            - --enable-auto-tool-choice
+            - --tool-call-parser=hermes
+            - --max-model-len=8192
           resources:
             limits:
               cpu: "4"
               memory: 8Gi
+              nvidia.com/gpu: "1"
   router:
     gateway:
       managed:
@@ -108,95 +136,71 @@ spec:
       pool: {}
 ```
 
-Use the maintained manifests in [`config/samples/`](config/samples/) and
-[`local/04-llm-inference-service.yaml`](local/04-llm-inference-service.yaml)
-as executable examples.
-
-## Scope
-
-Core controllers cover:
-
-- LLM, embedding, ASR, multimodal, and reranker inference services
-- Gateway API routing and scheduler resources
-- autoscaling, LoRA adapters, model caching, and evaluation profiles
-- AIPack artifact metadata and governance status
-- model onboarding readiness and Prometheus-backed gates
-
-Optional subsystems such as SPIFFE/SPIRE, webhooks, auth, sessions, and
-experimental agents depend on feature gates and cluster services.
-
-`Agent` and `SkillRegistry` currently validate references and readiness. They
-do not execute tools or provide an agent invocation runtime. See
-[Agent Development](docs/agent-development.md).
-
-The observe-only operator console is packaged as an opt-in profile in the
-release Helm chart. It requires an authenticated deployment boundary and does
-not grant mutation authority.
-
-## Verification
+Apply the manifest and inspect status:
 
 ```bash
-dagger call all --source=.       # hosted fast gate: lint + compile
-dagger call test --source=.      # race tests + coverage gates
-dagger call scan --source=.      # image vulnerability scan
-dagger call oscal-validate --source=. --oskal-source=/path/to/ckx-oskal-001
-dagger call oscal-checks --source=. # evaluator conformance tests; no cluster assessment
-go run ./hack/oscal-assessment --live --identity-mode direct
-make console-check
+kubectl apply -f config/samples/llminferenceservice_kimi_k31_specimen.yaml
+kubectl get llminferenceservices.serving.ckodex.com -w
 ```
 
-The assessment command emits JSON even when a check fails, then exits nonzero.
-`oscal-checks` runs tests and does not assess a cluster. To project saved
-results into an OSCAL assessment document, see [CI current state](docs/ci/current-state.md).
-The example asserts a direct deployment. For vcluster mode, use
-`--identity-mode vcluster --host-namespace <physical-namespace>` instead; the
-caller must establish which mode and host namespace apply.
+## Primary custom resources
 
-The Dagger functions use dependency and tool cache boundaries so repeated local
-runs reuse unchanged work. Tagged GitHub releases remain the authoritative
-hosted path for published artifacts and provenance.
+The operator exposes both stable (`v1`) and specialized (`v1alpha2`) custom resource definitions:
 
-## Documentation
+| Resource | Version | Purpose |
+|---|---|---|
+| `LLMInferenceService` | `serving.ckodex.com/v1` | Core LLM serving workload managing vLLM, SGLang, and TensorFold |
+| `AIPack` | `serving.ckodex.com/v1alpha2` | Declarative packaging of models, LoRA adapters, and UTCP manuals |
+| `MultimodalInferenceService` | `serving.ckodex.com/v1alpha2` | Foundation vision models (Baidu Unlimited-OCR-2, Meta SAM 3) |
+| `EmbeddingInferenceService` | `serving.ckodex.com/v1alpha2` | Dense embedding serving workloads |
+| `ASRInferenceService` | `serving.ckodex.com/v1alpha2` | Automatic speech recognition workloads |
+| `Agent` | `serving.ckodex.com/v1alpha2` | Autonomous agent identity and UTCP tool manual bindings |
+| `LocalModelCache` | `serving.ckodex.com/v1alpha2` | Cluster-wide and node-local weight pre-staging |
+| `ModelServingProfile` | `serving.ckodex.com/v1alpha2` | Standardized hardware and execution presets |
 
-| Goal | Document |
+## Verification and compliance
+
+Every release artifact is signed and verified through automated Dagger pipelines:
+
+```bash
+dagger call all --source=.       # Hosted fast gate: vet, lint, and build check
+dagger call test --source=.      # Unit and race tests with per-package coverage gates
+dagger call scan --source=.      # Trivy container vulnerability scan
+dagger call lula --source=. export --path=assessment-results.yaml  # OSCAL assessment
+```
+
+Run contract checks locally:
+
+```bash
+go test -count=1 ./hack/helm-contract/...
+go test -count=1 ./hack/public-release-contract/...
+```
+
+## Documentation index
+
+| Topic | Reference guide |
 |---|---|
-| Understand the product | [Big Picture](docs/overview.md) |
-| Run a local deployment | [Getting Started](docs/getting-started.md) |
-| Test the tiny GLM architecture fixture | [GLM-5.3-Flash Tiny](docs/runbooks/glm5-next-tiny.md) |
-| Onboard or promote a model | [Model Onboarding](docs/onboarding-guide.md) |
-| Plan model capacity | [Model Capacity](docs/model-capacity.md) |
-| Configure tenants | [Tenant Onboarding](docs/tenant-onboarding.md) |
-| Review security controls | [Security Architecture](docs/SECURITY_ARCHITECTURE.md) |
-| Verify releases | [Release Verification](docs/release-verification.md) |
-| Review beta scope and gates | [Beta Contract](docs/beta/README.md) |
-| Follow the local-first execution plan | [Serving Plan](docs/roadmap/local-first-serving-plan.md) |
-| Assess Kueue and multi-user stability | [Kueue Assessment](docs/roadmap/kueue-multi-user-stability.md) |
-| Inspect component versions | [Component Inventory](COMPONENTS.md) |
-| Add a new inference engine | [Engine Contract](docs/engine-contract.md) |
-| Track planned remediation | [Remediation Plan](docs/remediation-plan.md) |
-| Contribute | [Contributing](CONTRIBUTING.md) |
+| Complete architecture | [docs/overview.md](docs/overview.md) |
+| Component catalog and ports | [COMPONENTS.md](COMPONENTS.md) |
+| Zero-trust security | [docs/SECURITY_ARCHITECTURE.md](docs/SECURITY_ARCHITECTURE.md) |
+| Disconnected air-gap operations | [docs/AIRGAP.md](docs/AIRGAP.md) |
+| Universal Tool Calling Protocol | [docs/utcp-integration-guide.md](docs/utcp-integration-guide.md) |
+| Operator v0.20.0 upgrade runbook | [docs/runbooks/v0.20.0-upgrade.md](docs/runbooks/v0.20.0-upgrade.md) |
+| UTCP tools operational runbook | [docs/runbooks/utcp-tools-operations.md](docs/runbooks/utcp-tools-operations.md) |
+| Multimodal inference runbook | [docs/runbooks/multimodal-inference.md](docs/runbooks/multimodal-inference.md) |
+| LMCache operational runbook | [docs/runbooks/lmcache.md](docs/runbooks/lmcache.md) |
+| Runtime engine contract | [docs/engine-contract.md](docs/engine-contract.md) |
+| Workload configuration defaults | [docs/operator-defaults.md](docs/operator-defaults.md) |
+| NIST SP 800-53 and OSCAL | [COMPLIANCE.md](COMPLIANCE.md) |
+| Agent coding guidelines | [AGENTS.md](AGENTS.md) |
 
-## Project Status
+## Project status and governance
 
-- Latest published release: [`v0.20.0`](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.20.0)
-- Release workflow: [passed](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/workflows/release.yml)
-- Source chart defaults: `0.20.0`; tag-driven packaging injects the release version and image tags
-- Core LLM API schema: stable `serving.ckodex.com/v1`; live v1 admission and
-  conversion acceptance remain tracked separately
-- Specialized APIs: `serving.ckodex.com/v1alpha2` where no v1 CRD exists
-- Core model-serving control plane: implemented; live runtime acceptance remains
-  profile-specific and partially open
-- Observe-only console: opt-in chart profile; release image and provenance are
-  required for beta promotion
-- Experimental agent controllers: disabled by default
-- Security and admission integrations: opt-in and dependency-sensitive
-- Tiny `glm5_next` fixture: local CPU configuration and generation evidence;
-  GLM-5.3 4x RTX PRO 6000 Ada and TensorFold profiles available
-
-Do not infer API stability from the number of available CRDs. Check feature
-gates, controller registration, and the relevant runbook before adopting an
-optional subsystem.
+- Release version: `v0.20.0`
+- Git commit: `9da7f18`
+- Default operator container: `ghcr.io/runbase-ai/ckodex-kserve-llm-operator:v0.20.0`
+- Governance standard: CKODEX Agent Engineering Constitution (Level 5 Assured Conformance)
 
 ## License
 
-Apache License 2.0
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.

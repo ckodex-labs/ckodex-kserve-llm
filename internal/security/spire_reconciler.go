@@ -26,9 +26,9 @@ import (
 
 const (
 	// SPIREAgentImage is the SPIRE Agent container image.
-	SPIREAgentImage = "ghcr.io/spiffe/spire-agent:1.15.1"
+	SPIREAgentImage = "ghcr.io/spiffe/spire-agent:1.15.4"
 	// SPIREServerImage is the SPIRE Server container image.
-	SPIREServerImage = "ghcr.io/spiffe/spire-server:1.15.1"
+	SPIREServerImage = "ghcr.io/spiffe/spire-server:1.15.4"
 	// SPIFFEHelperImage is the SPIFFE helper sidecar image that manages SVID rotation.
 	SPIFFEHelperImage = "ghcr.io/spiffe/spiffe-helper:0.11.0"
 	// SPIFFETrustDomain is the trust domain for SPIFFE IDs.

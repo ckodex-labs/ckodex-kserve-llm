@@ -17,7 +17,7 @@ import (
 
 const engineName = "sglang"
 
-// Adapter renders the SGLang v0.5.18 HTTP server contract.
+// Adapter renders the SGLang v0.5.22 HTTP server contract.
 type Adapter struct{}
 
 func (Adapter) Name() string { return engineName }
@@ -29,8 +29,8 @@ func (Adapter) Tier() inferenceruntime.ConformanceTier {
 func (Adapter) Image() inferenceruntime.ImageContract {
 	return inferenceruntime.ImageContract{
 		Repository: "lmsysorg/sglang",
-		Tag:        "v0.5.18",
-		Digest:     "sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1",
+		Tag:        "v0.5.22",
+		Digest:     "sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae",
 	}
 }
 

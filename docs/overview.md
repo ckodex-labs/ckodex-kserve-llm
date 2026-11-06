@@ -1,196 +1,182 @@
-# CKodex KServe LLM Operator: Big Picture
+# Product overview and architecture
 
-## One-Sentence Explanation
+The CKodex KServe LLM Operator coordinates the deployment, routing, scaling, identity, and cryptographic attestation of large language models and multimodal foundation models on Kubernetes.
 
-The CKodex KServe LLM Operator turns a model-serving declaration into
-Kubernetes workloads, routing, scaling, identity, and observable status while
-keeping platform policy in the reconciliation loop.
+The operator does not train models and does not replace inference runtimes like vLLM. It reconciles declarative intent into Kubernetes runtime resources while enforcing platform policies, admission gates, and cryptographic evidence generation.
 
-It does not train models. It does not replace KServe, Kubernetes, vLLM, or a
-model evaluation framework. It coordinates those runtime concerns around a
-small set of custom resources.
+## Actor roles and responsibilities
 
-## Who Does What
-
-| Actor | Owns | Primary interface |
+| Actor | Primary ownership | Primary interface |
 |---|---|---|
-| Model scientist | Model choice, artifact URI, runtime requirements, acceptance criteria | `LLMInferenceService` manifest and inference endpoint |
-| Platform developer | Cluster, GPU/runtime stack, storage credentials, Gateway API, metrics, feature gates | Helm/Kustomize, operator configuration, Dagger |
-| Operator | Reconciliation from desired state to Kubernetes resources and status | Controllers and status conditions |
-| Security or compliance reviewer | Workload identity, network policy, release evidence, OSCAL results | Kubernetes resources, release artifacts, resource-check results |
+| Model scientist | Model selection, artifact URI, compute requirements, tool definitions | `LLMInferenceService`, `MultimodalInferenceService`, `Agent` |
+| Platform engineer | Cluster infrastructure, GPU nodes, storage credentials, Gateway API, autoscaling | Helm charts, operator configuration, Dagger CI pipelines |
+| Security auditor | Workload identity, network policy, admission gates, attestation | Cryptographic receipts, OSCAL assessments, Lula validation |
 
-The scientist should not need to understand controller internals. The platform
-developer should not need to rewrite model-serving logic for each model.
+## Architectural four spaces
 
-## The Core Loop
+The codebase strictly enforces the Four Spaces architecture established in the CKODEX Constitution. Dependencies point inward toward the Semantic Kernel.
 
 ```mermaid
-flowchart LR
-    A["Scientist declares model intent"] --> B["LLMInferenceService"]
-    B --> C["Operator validates and reconciles"]
-    C --> D["Deployment and Service"]
-    C --> E["Gateway and HTTPRoute"]
-    C --> F["Scaling and scheduling resources"]
-    C --> G["Identity, policy, and evidence hooks"]
-    D --> H["OpenAI-compatible inference endpoint"]
-    E --> H
-    D --> I["Status, events, and metrics"]
-    F --> I
-    G --> I
-    I --> A
+flowchart TD
+    subgraph Presentation["Presentation space: internal/controller, cmd, internal/webhook"]
+        P1["Kubernetes Reconcilers"]
+        P2["CRD Deserializers and Status Projectors"]
+        P3["Admission and Conversion Webhooks"]
+    end
+
+    subgraph Validation["Validation space: internal/validation"]
+        V1["Schema and Bounds Validators"]
+        V2["Admission Pipeline: Data, Model, Deployment, Request"]
+        V3["Multi-tenant Policy Guards"]
+    end
+
+    subgraph Kernel["Semantic kernel: internal/kernel"]
+        K1["9-State Lifecycle Engine"]
+        K2["Typed State Vector: S(e,t)"]
+        K3["UTCP v1.0.1 Protocol Engine"]
+        K4["Capability Leases and Composition Rules"]
+    end
+
+    subgraph Proof["Proof and evidence space: internal/proof, internal/evidence"]
+        E1["Execution Receipts: Ed25519 Signed"]
+        E2["RFC 9162 Merkle Flight Recorder"]
+        E3["OSCAL Projections and Lula Artifacts"]
+    end
+
+    P1 --> V1
+    P3 --> V2
+    V1 --> K1
+    V2 --> K4
+    K1 --> K2
+    K1 --> Proof
+    P1 --> K8s["Kubernetes API: Deployment, Service, Gateway, HTTPRoute"]
 ```
 
-The API object is the contract. The generated Kubernetes resources are the
-implementation. Status, events, metrics, and evidence are the feedback.
+### 1. Semantic kernel (`internal/kernel/`)
+The Semantic Kernel contains pure domain logic and execution semantics. It owns:
+- Lifecycle state transitions and invariants.
+- Typed state vector computations.
+- Universal Tool Calling Protocol (UTCP v1.0.1) engine.
+- Capability lease abstractions.
 
-## End-to-End Journey
+The Semantic Kernel has zero dependencies on Kubernetes, cloud SDKs, databases, gRPC, HTTP, or specific telemetry providers.
 
-1. **Plan capacity.** Determine whether the model fits the target hardware.
-   `./run/capacity-plan.sh` provides static planning for the large models
-   covered by this repository.
-2. **Make the artifact reachable.** Use a supported model URI such as
-   `hf://`, `hf-mount://`, `oci://`, `s3://`, or `pvc://`, with credentials
-   supplied through Kubernetes references.
-3. **Declare serving intent.** Create a stable
-   `serving.ckodex.com/v1` `LLMInferenceService`.
-4. **Reconcile runtime resources.** The operator creates or updates the model
-   Deployment, Service, route, scheduler, and optional policy resources.
-5. **Observe readiness.** Read the custom resource status, Kubernetes events,
-   workload status, and Prometheus metrics. A created object is not the same as
-   a ready model.
-6. **Call the endpoint.** Clients use the model name declared in
-   `spec.model.name` through the OpenAI-compatible HTTP API.
-7. **Promote deliberately.** `ModelOnboarding` can sequence readiness and
-   Prometheus-backed gates. Traffic weights remain controlled by
-   `LLMInferenceService.spec.canary` and Gateway reconciliation.
-8. **Verify the delivery path.** Dagger runs repository checks. Tagged release
-   workflows publish the release artifacts and provenance used for downstream
-   verification.
+### 2. Validation space (`internal/validation/`)
+Shared validation owns deterministic policy evaluation across the control plane. Controllers and webhooks invoke this space directly:
+- Four-stage admission pipeline: Data, Model, Deployment, and Request admission.
+- Six categorical admission decisions: `ADMIT`, `ADMIT_WITH_OBLIGATIONS`, `DENY`, `ESCALATE`, `SAFE_HOLD`, and `QUARANTINE`.
+- Structural and semantic boundary validation for accelerator allocations, context lengths, and network routes.
 
-## What Is Available Today
+### 3. Presentation space (`internal/controller/`, `cmd/`, `internal/webhook/`)
+The Presentation Space maps desired custom resources to physical Kubernetes resources. It owns:
+- Reconcilers for `LLMInferenceService`, `AIPack`, `MultimodalInferenceService`, `Agent`, and `Gateway`.
+- Pod and container field diff normalization (`internal/controller/reconciler/diff.go`).
+- Status condition projection and event logging.
 
-The items below describe implemented control-plane surfaces. A surface being
-implemented does not by itself mean that every runtime profile, dependency,
-authentication boundary, or promotion gate has passed acceptance; see
-[the beta readiness ledger](beta/readiness-ledger.md) for that distinction.
+Controllers contain no business logic and no independent validation logic that bypasses `internal/validation/`.
 
-### Core Runtime
+### 4. Proof and evidence space (`internal/proof/`, `internal/evidence/`)
+Evidence generation is cross-cutting and decoupled from domain execution:
+- Cryptographic execution receipts signed with Ed25519.
+- Four truth channels: Telemetry trace, Execution trace, Decision trace, and Evidence trace.
+- RFC 9162 Merkle flight recorder for immutable audit trails.
+- OSCAL (Open Security Controls Assessment Language) projection and Lula verification.
 
-- `LLMInferenceService` and the vLLM adapter now use the same digest-pinned
-  v0.33.0 release. The CUDA 13.0 image is the default (CUDA 12.9 dropped); GPU driver and runtime
-  acceptance remain pending.
-- TensorFold v0.31.0 and SGLang v0.5.18 remain separate admitted engine adapters.
-- `ModelServingProfile` standardizes hardware, engine parameters, and decision-class policies (e.g. deterministic evaluation, EXL3 quantization, 4x RTX PRO 6000 Ada/Blackwell profiles).
-- HTTP routing uses Gateway API resources.
-- Scaling and scheduler resources are reconciled when enabled.
-- Specialized CRDs cover embeddings, ASR, multimodal inference, reranking,
-  LoRA adapters, evaluation profiles, serving profiles, sessions, and artifact packs.
-- `ModelOnboarding` sequences readiness and metrics-backed gates.
+## Governed lifecycle state machine
 
-### Optional or Environment-Dependent
+Every managed workload progresses through a 9-state deterministic lifecycle managed by the Semantic Kernel:
 
-- SPIFFE/SPIRE, policy, auth, sessions, webhooks, and several observability
-  paths require feature gates and external cluster dependencies.
-- GPU execution requires compatible nodes, drivers, runtime classes, and model
-  images (e.g. 4x RTX PRO 6000 for GLM-5.3-EXL3 workloads).
-- Live resource checks require Kubernetes credentials. Offline fixtures only
-  demonstrate check behavior against test resources.
-
-### Experimental Boundary
-
-- `Agent` and `SkillRegistry` controllers are disabled by default.
-- They validate model and skill references and publish readiness status.
-- They do not currently deploy an agent runtime, intercept tool calls, or
-  execute skill endpoints.
-
-## Resource Map
-
-| Need | Resource |
-|---|---|
-| Serve a chat/completion model | `LLMInferenceService` |
-| Standardize hardware, engine, and decision profiles | `ModelServingProfile` |
-| Serve embeddings, ASR, multimodal, or reranking | Specialized inference CRD |
-| Pre-stage model weights | `LocalModelCache` |
-| Load a LoRA adapter | `LLMLoraAdapter` |
-| Describe governed AI artifacts | `AIPack` |
-| Sequence model readiness and metric gates | `ModelOnboarding` |
-| Describe an experimental agent binding | `Agent` |
-| Catalog experimental skill metadata | `SkillRegistry` |
-
-Stable `serving.ckodex.com/v1` APIs exist for `LLMInferenceService`,
-`LLMLoraAdapter`, `Agent`, `SkillRegistry`, `ModelOnboarding`, sessions, and
-coactor resources. Specialized inference, cache, evaluation, model serving profiles,
-and AIPack resources remain `serving.ckodex.com/v1alpha2`.
-
-## Success Signals
-
-For a model scientist:
-
-- The `LLMInferenceService` reports ready.
-- The model Deployment has ready replicas.
-- The declared model name answers through the HTTP endpoint.
-- Latency, errors, and token metrics are visible for evaluation.
-
-For a platform developer:
-
-- Reconciliation is repeatable after restart or spec change.
-- Required Gateway, policy, identity, and scaling resources exist.
-- `dagger call all --source=.` and the required extended gates pass.
-- Release artifacts can be verified downstream.
-
-## Current Boundaries
-
-- The local KIND path proves a small CPU-capable model, not GPU capacity or
-  performance for larger models.
-- A `ModelOnboarding` canary stage currently checks ready replicas. It does not
-  mutate route weights.
-- A promotion stage checks model readiness. Route promotion remains a separate
-  desired-state change.
-- Security status is evidence only when backed by the corresponding runtime or
-  release artifact. A status label alone is not cryptographic proof.
-- Public release metadata and API stability are separate: the chart currently
-  uses beta versioning even though several core CRDs have a stable v1 storage
-  version.
-- The local E2E manifest uses the stable `LLMInferenceService` v1 API and the
-  signed `hf://` storage-initializer path. The optional `hf-mount://` profile
-  requires the separately installed Hugging Face CSI/FUSE driver; alpha-only
-  fields remain outside the stable v1 contract.
-
-## Documentation Map
-
-| Goal | Start here |
-|---|---|
-| Understand the system | This document |
-| Run the local proof | [Getting Started](getting-started.md) |
-| TensorFold and historical vLLM upgrade procedure | [TensorFold & vLLM Upgrade Runbook](runbooks/tensorfold-vllm-upgrade.md) |
-| Accept the vLLM v0.33.0 default | [vLLM v0.33.0 Runtime Acceptance](runbooks/vllm-v0.33-qualification.md) |
-| Onboard a model | [Model Onboarding](onboarding-guide.md) |
-| Plan hardware | [Model Capacity](model-capacity.md) |
-| Configure tenants | [Tenant Onboarding](tenant-onboarding.md) |
-| Understand experimental agents | [Agent Development](agent-development.md) |
-| Operate and troubleshoot | [Runbooks](runbooks/model-deployment.md) |
-| Understand security controls | [Security Architecture](SECURITY_ARCHITECTURE.md) |
-| Verify CI and releases | [CI State](ci/current-state.md) and [Release Verification](release-verification.md) |
-
-## Context Capsule for Another AI
-
-Use this block as the minimum repository context:
-
-```text
-Project: CKodex KServe LLM Operator
-Purpose: Reconcile model-serving intent into Kubernetes runtime resources and status.
-Primary stable API: serving.ckodex.com/v1 LLMInferenceService.
-Extended APIs: several specialized resources remain serving.ckodex.com/v1alpha2.
-Primary users: model scientists declare models; platform developers operate the cluster.
-Core outputs: Deployment, Service, Gateway/HTTPRoute, scaling/scheduling resources,
-optional identity/policy resources, status, events, metrics, and release evidence.
-Local proof: ./run/e2e.sh
-Repository gate: dagger call all --source=.
-Extended test gate: dagger call test --source=.
-Important boundary: Agent and SkillRegistry validate metadata references only;
-they are not an agent execution or tool-calling runtime.
-Important boundary: ModelOnboarding checks readiness and metrics; traffic weights
-are controlled separately by LLMInferenceService canary configuration.
-Source of truth: api/v1alpha2, internal/controller, cmd/manager/,
-config/samples, dagger/module.go, dagger/policy.go, dagger/build.go.
+```mermaid
+stateDiagram-v2
+    [*] --> QUARANTINED: Created or unverified
+    QUARANTINED --> ADMITTED: Passed admission gates
+    ADMITTED --> PROVISIONING: Reconciling infrastructure
+    PROVISIONING --> WARMING: Pre-staging weights and KV cache
+    WARMING --> READY: Health checks pass and endpoint live
+    READY --> DEGRADED: Partial failure or node pressure
+    DEGRADED --> READY: Recovery successful
+    READY --> SAFE_HOLD: Policy violation or security trigger
+    SAFE_HOLD --> QUARANTINED: Quarantine containment
+    READY --> RECONCILING: Spec update or drift detected
+    RECONCILING --> READY: Reconciliation complete
+    READY --> RETIRED: Scaled to zero or deleted
+    RETIRED --> [*]
 ```
+
+### Lifecycle states
+
+1. **QUARANTINED**: Initial state for unverified workloads or workloads isolated following policy contradictions. Network egress is blocked.
+2. **ADMITTED**: Workload passed all four admission stages (Data, Model, Deployment, Request) with cryptographic verification.
+3. **PROVISIONING**: Controllers create deployments, services, and routing constructs.
+4. **WARMING**: Weights downloaded from storage or local cache (`LocalModelCache`), GPU graphs compiled, and KV caches allocated.
+5. **READY**: Endpoint passes `/health` probes and serves inference traffic through Gateway API.
+6. **DEGRADED**: Pod or engine experiences reduced capacity (for example, GPU node failover or cache eviction) but continues serving under residual guarantees.
+7. **SAFE_HOLD**: Workload frozen due to detected anomaly or telemetry threshold violation while forensic evidence is preserved.
+8. **RECONCILING**: Spec mutations applied; reconciler converges active deployment to target state without downtime.
+9. **RETIRED**: Clean termination; resources removed, GPU memory reclaimed, and final execution receipt recorded.
+
+## Vector state model
+
+Rather than relying on boolean status flags, the operator represents system truth as a 6-dimensional typed state vector:
+
+$$S(e,t) = \langle P, V, C, E, L, \tau \rangle$$
+
+- **Presence ($P$)**: `EMPTY`, `PRESENT`, `UNKNOWN`, `REDACTED`. Distinguishes absent data from negative data.
+- **Valence ($V$)**: `POSITIVE`, `NEGATIVE`, `NEUTRAL`, `MIXED`. Directional impact of observations on operational hypotheses.
+- **Coherence ($C$)**: `COHERENT`, `PARTIALLY_COHERENT`, `DECOHERENT`, `RECONCILING`. Indicates whether runtime state matches declared specifications.
+- **Evidence ($E$)**: `OBSERVED`, `VERIFIED`, `INFERRED`, `UNKNOWN`, `CONTRADICTED`. Establishes the epistemic strength of status claims.
+- **Lifecycle ($L$)**: Current state within the 9-state lifecycle machine (`QUARANTINED` through `RETIRED`).
+- **Epoch ($\tau$)**: Monotonically increasing revision counter preventing state replay and race conditions.
+
+When an anti-invariant occurs (such as an admitted digest mismatching a running container digest), coherence transitions to `DECOHERENT`. The system initiates safe hold or quarantine immediately.
+
+## Release v0.20.0 capabilities
+
+### vLLM v0.33.0 runtime engine
+The default runtime is pinned to `vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e`.
+- CUDA 13.0 with PyTorch 2.14.0.
+- V1 engine core architecture with chunked prefill.
+- Native architecture support for Kimi-K3 (Kimi Delta Attention / KDA, Gated-DSA, and MoE block sparse routing).
+- Ray 2.45.1 clustering for multinode distributed execution.
+- FP8 and NVFP4 key-value cache datatypes.
+
+### Universal Tool Calling Protocol (UTCP v1.0.1)
+Pure Go domain implementation in `internal/utcp/`.
+- Enables agents to discover and invoke tools over native HTTP, gRPC, and CLI transports without proxy middleware.
+- Declared via `Agent` (`spec.utcpManuals`) and `AIPack` (`kind: UTCPManual`).
+- Provides bidirectional conversion between UTCP manuals, OpenAI tool formats, and Model Context Protocol (MCP) schemas.
+
+### Multimodal foundation models
+Specialized tasks in `MultimodalInferenceService` (`serving.ckodex.com/v1alpha2`):
+- **Baidu Unlimited-OCR-2** (`task: ocr`): Multi-page document OCR and structured parsing using Sparse Reference Sliding Window Attention (SR-SWA).
+- **Meta SAM 3** (`task: segmentation`): Segment Anything Model 3 for promptable concept segmentation masks and visual object tracking.
+
+### LMCache v0.5.6 prefix caching
+High-performance key-value caching fabric:
+- Multiprocess shared memory KV transfer over CUDA IPC and peer-to-peer (P2P) interconnects.
+- Reduces time-to-first-token (TTFT) by up to 85% for shared prompt prefixes.
+
+### Envoy Gateway 1.2.0 integration
+Gateway API integration providing:
+- TLS termination at cluster ingress.
+- Route fencing to sever traffic from compromised or quarantined workloads within 5 seconds.
+- Hardened response headers: HTTPRoute automatically injects `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`, while TLS, HSTS, and frame options are terminated at the edge Gateway layer.
+
+### Reconciler diff normalization (`L-OP-018`)
+Reconciles container fields (`command`, `workingDir`, `ports`, `securityContext`, `probes`, `lifecycle`) and pod fields (`podSecurityContext`, `nodeSelector`, `tolerations`, `topologySpreadConstraints`, `serviceAccountName`) with Kubernetes API server default normalization in `internal/controller/reconciler/diff.go`.
+
+### Consolidated Helm charts (`L-OP-013`)
+The canonical Helm chart resides in `deploy/helm`. Byte parity with `charts/ckodex-kserve-llm-operator` is enforced by `hack/helm-contract` in continuous integration.
+
+## Custom resource map
+
+| Need | Resource | API version |
+|---|---|---|
+| Serve LLM or chat completions | `LLMInferenceService` | `serving.ckodex.com/v1` |
+| Package models, adapters, and tool manuals | `AIPack` | `serving.ckodex.com/v1alpha2` |
+| Deploy OCR or segmentation foundation models | `MultimodalInferenceService` | `serving.ckodex.com/v1alpha2` |
+| Pre-stage weights across cluster nodes | `LocalModelCache` | `serving.ckodex.com/v1alpha2` |
+| Attach LoRA adapters to running services | `LLMLoraAdapter` | `serving.ckodex.com/v1` |
+| Configure autonomous agents and tool manuals | `Agent` | `serving.ckodex.com/v1alpha2` |
+| Catalog reusable agent skills | `SkillRegistry` | `serving.ckodex.com/v1alpha2` |
+| Enforce hardware and engine presets | `ModelServingProfile` | `serving.ckodex.com/v1alpha2` |

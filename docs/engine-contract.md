@@ -1,186 +1,84 @@
-# Engine Contract (CKC-ENG)
+# Inference engine runtime contract
 
-Normative contract for inference runtimes served by this operator.
+This normative specification defines the engineering contract for inference runtimes managed by the CKodex KServe LLM Operator. It details capability declarations, conformance tiers, deterministic rendering invariants, and runtime integration requirements.
 
-**Implementation classification: S.** The contract is design-locked and the
-current vLLM and SGLang adapters implement tier-1 subsets. Compile-enforced totality,
-image, metrics, receipt, health, workload extraction, and higher tiers remain
-implementation work tracked in [open-loops.md](open-loops.md).
+## Core contract invariant
 
-This document defines what a runtime must provide to be a first-class engine,
-what it may decline, and what happens when it declines. It is the reference
-consulted when adding a new engine; the decision to adopt it is recorded in
-[ADR-010](adr/010-runtime-engine-contract.md).
+Every engine adapter in `internal/runtime/` must implement a **total capability function**:
 
-## Contract invariant
-
-```text
-the capability matrix has no absent entries; silence is not a declaration
+```go
+Capabilities() inferenceruntime.CapabilityMatrix
 ```
 
-`Capabilities()` is a **total function** over the capability enum. Every
-capability returns `Supported`, `Unsupported`, or `Emulated` — never absent.
-Adding a capability to the enum therefore breaks compilation for every adapter
-until each one declares its position.
+The capability matrix permits no absent entries. Every capability must return `Supported`, `Unsupported`, or `Emulated`. Adding a new capability enum value breaks compilation across all adapters until every engine explicitly declares its support stance.
 
-This is the mechanism that keeps the operator honest as the API grows: a field
-the API accepts is a field the runtime emits, or admission refuses it.
+Admission controllers enforce these declarations: if a custom resource requests a feature marked `Unsupported` by the chosen engine, admission rejects the resource with an explanatory error.
 
 ## Conformance tiers
 
-Not every runtime can do everything. An engine declares a tier; admission
-enforces it.
+Runtimes are categorized into three formal conformance tiers:
 
-| Tier | Name | Must provide | Reference engine |
+| Tier | Name | Required capabilities | Reference runtime in v0.20.0 |
 |---|---|---|---|
-| 3 | Governed | Everything in tier 2, plus KV-aware routing participation, disaggregated prefill/decode, LoRA hot-swap, complete `InferenceReceipt`, deterministic replay | vLLM |
-| 2 | Routed | Everything in tier 1, plus the four EndpointPicker series, so the engine participates in KV-cache-aware scheduling | SGLang |
-| 1 | Served | OpenAI contract, health contract, the uniform `infer.*` family, and an `InferenceReceipt` with its gaps declared | llama.cpp |
-| 0 | Experimental | Feature-gated; refused by admission under `Enforce` | new work |
+| **Tier 3** | Governed | Full OpenAI API, health probes, Prometheus metrics, disaggregated prefill/decode, KV-aware scheduling (EndpointPicker), LoRA hot-swap, deterministic replay, execution receipts | **vLLM v0.33.0** (`vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e`) |
+| **Tier 2** | Routed | OpenAI API, health probes, metrics, KV-cache-aware scheduling via EndpointPicker series | Target tier for scheduled engines |
+| **Tier 1** | Served | Standard `/v1/chat/completions` and `/v1/models` endpoints, health probes, basic metrics | **SGLang v0.5.22** (implements `ConformanceTierServed` in current Go adapter contract), **TensorFold v1.0.0** |
+| **Tier 0** | Experimental | Feature-gated development runtimes; rejected in production admission | Untested community runtimes |
 
-The tier is load-bearing, not documentation:
+## The eight architectural clauses
 
-- A service that sets `router.scheduler` on a tier-1 engine is **refused at
-  admission**, not silently degraded.
-- `ModelAdmissionPolicy` may require a minimum tier per namespace or tenant.
-- A tier is earned by passing the shared conformance suite at that tier. Nothing
-  else promotes an engine.
+### C0: Identity and provenance
+- The adapter name must be a DNS-label-safe identifier matching `spec.engine` (for example, `vllm`, `sglang`, `tensorfold`).
+- Images must resolve to explicit digests in production manifests, never mutable tags.
+- Missing hardware variants are omitted rather than fabricated. For example, ROCm images without official upstream verification are omitted with an explicit operator error.
 
-## The eight clauses
+### C1: Capability matrix declaration
+- The adapter must implement `Capabilities()` over all dimensions: `TensorParallel`, `PipelineParallel`, `DataParallel`, `ExpertParallel`, `KVCacheDtype`, `CPUOffload`, `KVTransfer`, `SpeculativeDecoding`, `Quantization`, and `LoRAHotSwap`.
+- `Validate()` must return a `field.Error` for any requested spec field marked `Unsupported`.
 
-### C0 — Identity and provenance
+### C2: Deterministic argument rendering
+- The `Render(request)` function must be purely functional: identical `RenderRequest` inputs produce byte-identical command line arguments, environment variables, ports, and probes.
+- Zero clock reads, randomness, or cluster API lookups are permitted inside `Render()`.
+- Explicit user arguments in `spec.template.spec.containers` take precedence over adapter defaults.
 
-- A stable, DNS-label-safe adapter name. It becomes the `spec.engine` value and
-  the pod engine label consumed by the EndpointPicker.
-- Images resolved to digests per hardware profile. Never tags.
-- Variants that do not exist upstream are **absent, not fabricated**. The
-  existing ROCm handling — an empty image constant plus an explicit operator
-  error — is the precedent to follow.
-- An entry in [`COMPONENTS.md`](../COMPONENTS.md) with an upstream release link,
-  and inclusion in the CI vulnerability scan matrix.
+### C3: OpenAI serving contract
+- The runtime must expose `/v1/chat/completions`, `/v1/completions`, and `/v1/models` on the declared container port (default 8000).
+- Independent probes:
+  - Startup probe: Accommodates large model loading and weight pre-staging (up to 10 minutes without tripping liveness).
+  - Readiness probe: Signals readiness to receive traffic via Gateway API.
+  - Liveness probe: Detects deadlocks or hung processes on `/health`.
+- Graceful termination: Runtimes must intercept `SIGTERM` and drain active inference streams within `terminationGracePeriodSeconds`.
 
-### C1 — Capability declaration
+### C4: Metrics and observability contract
+- Exposes Prometheus metrics on `/metrics` (or declared port/path).
+- Reports the four canonical series for KV-aware scheduling:
+  1. `vllm:num_requests_queued`
+  2. `vllm:num_requests_running`
+  3. `vllm:gpu_cache_usage_factor`
+  4. `vllm:num_active_loras`
 
-- `Capabilities()` is total over the enum, as above.
-- `Validate()` returns a `field.Error` for every spec field the matrix marks
-  `Unsupported`, naming the field path and the reason.
-- A generated table test asserts the correspondence between the matrix and
-  `Validate()` adapter by adapter. An engine cannot claim a capability its
-  renderer does not emit, nor silently drop a field it declares unsupported.
+### C5: Accelerator and parallelism contract
+- Supports tensor parallelism (`--tensor-parallel-size`) across single-node GPUs.
+- Supports pipeline parallelism (`--pipeline-parallel-size`) and Ray 2.45.1 clustering for multinode distributed execution.
+- Configures expert parallelism and load balancing (`--enable-eplb`) for Mixture-of-Experts architectures like Kimi-K3 and DeepSeek-V3.
 
-This clause is the contract. The rest is detail.
+### C6: Key-value cache and transfer contract
+- Supports typed KV cache datatypes: `auto`, `fp16`, `bf16`, `fp8`, and `nvfp4`.
+- Integrates with LMCache connector specifications (`LMCacheConnectorV1` or `LMCacheMPConnector`) for prefix caching and shared memory transfers.
 
-### C2 — Deterministic rendering
+### C7: Security and sandboxing invariants
+- Container command overrides are rejected to prevent bypassing security flags.
+- FastAPI documentation endpoints (`/docs`, `/redoc`) remain disabled (`--disable-fastapi-docs`).
+- Remote code execution requires explicit opt-in (`--trust-remote-code`).
+- CORS parameters reject wildcard (`*`) origins and require explicit trusted domains.
 
-- `Render()` is pure: the same `RenderRequest` produces byte-identical
-  arguments, environment, ports, and probes.
-- No clock reads, no randomness, no cluster reads inside `Render()`.
-- An explicitly user-supplied argument always wins over an adapter default.
-- Rendering is idempotent under repeated reconciliation. Arguments must not
-  accumulate across reconciles.
+## Modern feature annotations for vLLM v0.33.0
 
-Purity is what makes golden-file tests and deterministic replay possible.
+The vLLM adapter in `internal/runtime/vllm/adapter.go` recognizes declarative workload annotations:
 
-### C3 — Serving contract
-
-- OpenAI-compatible `/v1/chat/completions`, `/v1/completions`, and `/v1/models`
-  on the declared port — or a declared translation shim that provides them.
-- Startup, readiness, and liveness mapped to `HealthContract`. Startup is a
-  separate probe because model load legitimately takes minutes and must not trip
-  liveness.
-- Graceful drain on `SIGTERM` within the pod termination grace period.
-
-### C4 — Metrics contract
-
-- A scrape endpoint and path, plus the pod engine label value.
-- Either the four EndpointPicker series — queued requests, running requests,
-  KV-cache utilization, LoRA adapters — or an explicit `Unsupported` for
-  KV-aware routing, which caps the engine at tier 1.
-- Derivation rules for the uniform `infer.*` family defined in CKC-OBS §8:
-  native series where they exist, a documented mapping where they do not.
-
-Sourcing operational metrics through the adapter is what makes `infer.ttft` mean
-the same thing on every engine.
-
-### C5 — Receipt contract
-
-For each `InferenceReceipt` field, declare the source: native metric, response
-header, sidecar observation, or `not-available`.
-
-- `model_digest`, `runtime_digest`, `container_image_digest`, `quantization`,
-  and `adapters` are **mandatory**. The adapter contract identifies the allowed
-  runtime image and rendered configuration. The reconciled Deployment image and
-  runtime-reported `imageID` identify what actually ran; never substitute the
-  adapter's `Image()` for a user or operator image override. Qualification
-  vLLM v0.33.0 hardware qualification resolves to the same image digest as the
-  active adapter contract; it records runtime evidence, not a second vLLM
-  version.
-- Token usage, time-to-first-token, and inter-token latency are native or
-  sidecar-derived.
-- Content minimization is not negotiable. An adapter may not route raw prompt or
-  output into a receipt, and the receipt type does not permit it. See CKC-OBS §7.
-
-### C6 — Failure semantics
-
-- Declare engine behaviour on out-of-memory, model-load failure, and context
-  overflow, mapped onto the standard outcome vocabulary
-  (`allow`, `deny`, `degrade`, `quarantine`).
-- An engine that cannot start must surface a terminal status condition on the
-  owning resource, not an unexplained crash loop.
-
-### C7 — Air-gap behaviour
-
-- The image must be mirrorable into a local registry.
-- Any runtime fetch — weights, kernels, tokenizers, compile caches — is either
-  absent or explicitly declared.
-
-An engine that reaches the network on first token is a tier-0 engine in a
-sovereign deployment regardless of what else it does.
-
-### C8 — Conformance suite
-
-The engine passes the shared suite at its declared tier:
-
-- golden-file rendering, one fixture per supported capability;
-- the capability/validation correspondence table;
-- the cross-engine end-to-end assertion that one `LLMInferenceService` produces
-  the same OpenAI contract, readiness semantics, status conditions, and `infer.*`
-  family regardless of `spec.engine`;
-- metric presence at the declared tier;
-- receipt completeness against the declared `ReceiptContract`.
-
-## Adding an engine
-
-```text
-internal/runtime/<name>/
-    adapter.go            # the eight clauses
-    capabilities.go       # total over the enum — compiler-enforced
-    testdata/*.golden     # one fixture per supported capability
-    adapter_test.go       # shared suite, invoked at the declared tier
-
-register  in the adapter registry
-add       the image digest to COMPONENTS.md and the vulnerability scan matrix
-add       the engine to run/e2e.sh's cross-engine matrix
-declare   the tier; admission and the generated docs follow from it
-```
-
-No controller changes. No CRD changes. No vendored client library. No upstream
-patches.
-
-If adding an engine requires any of those, the adapter seam is in the wrong
-place and should be moved rather than worked around.
-
-## What the contract does not require
-
-An engine need not support LoRA, tensor parallelism, KV transfer, or structured
-output. It need not be fast. It need not be maintained by this project.
-
-It must only be honest about itself. The capability matrix and admission convert
-that honesty into behaviour a user can predict before they deploy.
-
-## References
-
-- [ADR-010: Runtime engine contract](adr/010-runtime-engine-contract.md)
-- [ADR-011: Canonical observability planes](adr/011-canonical-observability-planes.md)
-- [ADR-009: KServe 0.19 and llm-d integration boundary](adr/009-kserve-019-and-llm-d-boundary.md)
-- [Remediation plan](remediation-plan.md)
+| Annotation | Effect on container arguments | Purpose |
+|---|---|---|
+| `serving.ckodex.com/fast-restart: "true"` | Injects `--load-format ipc_cache --enable-fast-restart` | Reclaims shared memory weights after pod restart |
+| `serving.ckodex.com/enable-flashmla: "true"` | Injects `--enable-flashmla` | Enables Flash Multi-Head Latent Attention kernels |
+| `serving.ckodex.com/mega-gate: "true"` | Injects `--enable-mega-gate` | Enables hardware-accelerated MoE router gating |
+| `serving.ckodex.com/trust-request-mm-kwargs: "true"` | Injects `--trust-request-mm-kwargs` | Permits dynamic multimodal image processing kwargs |

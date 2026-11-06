@@ -263,14 +263,11 @@ spec:
                 minimum: 0
                 type: integer
               runtime:
-                allOf:
-                - enum:
-                  - vllm
-                - enum:
-                  - vllm
                 default: vllm
                 description: Runtime selects the serving runtime. Currently only vllm
                   is supported.
+                enum:
+                - vllm
                 type: string
               runtimeImage:
                 description: |-
@@ -363,22 +360,15 @@ spec:
                     type: object
                 type: object
               task:
-                allOf:
-                - enum:
-                  - vision-language
-                  - image-generation
-                  - text-to-speech
-                  - ocr
-                  - segmentation
-                - enum:
-                  - vision-language
-                  - image-generation
-                  - text-to-speech
-                  - ocr
-                  - segmentation
                 default: vision-language
                 description: Task describes the type of multimodal workload. Defaults
                   to vision-language.
+                enum:
+                - vision-language
+                - image-generation
+                - text-to-speech
+                - ocr
+                - segmentation
                 type: string
               template:
                 description: |-

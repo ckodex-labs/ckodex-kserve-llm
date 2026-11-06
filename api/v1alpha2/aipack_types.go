@@ -209,7 +209,7 @@ type AIPack struct {
 // AIPackSpec defines the desired state of an AIPack artifact.
 type AIPackSpec struct {
 	// Kind is the artifact kind per §3.3. Mandatory.
-	// +kubebuilder:validation:Enum=BaseModel;LoRA;FineTune;Skill;Tool;MCPServer;PromptTemplate;Guardrail;RetrievalIndex;Dataset;Harness;Eval;Workflow;PolicyBundle;Agent
+	// +kubebuilder:validation:Enum=BaseModel;LoRA;FineTune;Skill;Tool;MCPServer;PromptTemplate;Guardrail;RetrievalIndex;Dataset;Harness;Eval;Workflow;PolicyBundle;UTCPManual;Agent
 	Kind ArtifactKind `json:"kind"`
 
 	// Family is the artifact family per §3.2. Optional.
@@ -291,6 +291,10 @@ type AIPackSpec struct {
 	// PolicyBundleSpec contains policy bundle configuration (Kind=PolicyBundle).
 	// +optional
 	PolicyBundleSpec *PolicyBundleSpec `json:"policyBundle,omitempty"`
+
+	// UTCPManual contains Universal Tool Calling Protocol manual configuration (Kind=UTCPManual).
+	// +optional
+	UTCPManual *UTCPManualSpec `json:"utcpManual,omitempty"`
 }
 
 // +kubebuilder:object:root=true

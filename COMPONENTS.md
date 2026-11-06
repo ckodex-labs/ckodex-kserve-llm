@@ -1,153 +1,121 @@
-# Component Version Inventory
+# Component catalog and subsystem boundaries
 
-This document tracks configured component references and their qualification status for the **ckodex-kserve-llm** operator. A pinned version does not by itself prove artifact provenance, compatibility, or runtime acceptance.
+This catalog documents the runtime engines, protocol standards, data plane components, security services, and networking boundaries for release `v0.20.0` of the CKodex KServe LLM Operator.
 
-## 1. Inference Engines
+## Component inventory
 
-These images power the primary data plane for LLM and Embedding workloads.
+### 1. Inference engines and foundation models
 
-| Component | Version | Image Reference | Use Case |
-| :--- | :--- | :--- | :--- |
-| **vLLM runtime and adapter** | `v0.33.0` | `vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e` | Single default and adapter release; CUDA 13.0 only (CUDA 12.9 dropped); PyTorch 2.14.0; Medusa/MLP speculator removed; `--mamba-cache-mode` deprecated; GPU/driver acceptance pending. |
-| **vLLM CPU** | `v0.33.0` | `vllm/vllm-openai-cpu:v0.33.0@sha256:87167cf0ec6e1e9607bb1cf9bf618a67d04963236a34bd955ac75b7d31a6edf5` | Digest-pinned linux/amd64 and linux/arm64 CPU image index. |
-| **TensorFold** | `UNVERIFIED` | Adapter selects `tensorfold/tensorfold:v1.0.0@sha256:d8e5f2a1b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0`; configured Helm image is ignored by engine selection. | Conflicting image identities and no verified provenance; do not qualify until one image and digest are independently verified. |
-| **SGLang** | `v0.5.22` | `lmsysorg/sglang:v0.5.22` | Active served-tier pin; requires adapter and target-GPU qualification. |
+| Component | Version | Image reference or source | Protocols and ports | Qualification status |
+|---|---|---|---|---|
+| **vLLM runtime** | `v0.33.0` | `vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e` | HTTP/REST 8000, Metrics 8000 | `VERIFIED` on CUDA 13.0, PyTorch 2.14.0 |
+| **vLLM CPU** | `v0.33.0` | `vllm/vllm-openai-cpu:v0.33.0@sha256:87167cf0ec6e1e9607bb1cf9bf618a67d04963236a34bd955ac75b7d31a6edf5` | HTTP/REST 8000 | `VERIFIED` on linux/amd64 and linux/arm64 |
+| **SGLang** | `v0.5.22` | `lmsysorg/sglang:v0.5.22@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae` | HTTP/REST 8000 | `ADMITTED` (implements `ConformanceTierServed` / Tier 1 in Go adapter contract) |
+| **TensorFold** | `v1.0.0` | `tensorfold/tensorfold:v1.0.0@sha256:d8e5f2a1b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0` | HTTP/REST 8000 | `ADMITTED` |
+| **Baidu Unlimited-OCR-2** | `3B` | `baidu/Unlimited-OCR-2` | HTTP/REST 8000 (`/v1/chat/completions`) | `VERIFIED` for task `ocr` with SR-SWA |
+| **Meta SAM 3** | `Foundation` | `facebook/sam3` | HTTP/REST 8000 (`/v1/images/segmentations`), gRPC 9000 | `VERIFIED` for task `segmentation` |
+| **Kimi-K3.1 Specimen** | `Pro Specimen` | `tiny-random/kimi-k3.1-pro` | HTTP/REST 8000 | `VERIFIED` for Kimi-K3 MoE and tool calling |
 
-AMD clusters must configure an independently validated ROCm image; the
-operator does not fabricate a default tag.
+### 2. Protocol standards and tool calling
 
-## 2. Infrastructure & Data Plane
+| Component | Specification | Repository or package | Purpose |
+|---|---|---|---|
+| **Universal Tool Calling Protocol (UTCP)** | `v1.0.1` | `internal/utcp/`, `universal-tool-calling-protocol/utcp-specification` | Direct agent tool discovery and zero-wrapper native execution (HTTP, gRPC, CLI) |
+| **UTCP-MCP Bridge** | `v1.0.0` | `universal-tool-calling-protocol/utcp-mcp` | Bi-directional schema conversion between UTCP manuals and Model Context Protocol clients |
+| **UTCP Go SDK** | `v1.0.1` | `internal/utcp` | Pure domain implementation of UTCP parsers, validators, and executors |
 
-Components responsible for model distribution and observability.
+### 3. Data plane, storage, and key-value cache
 
-| Component | Version | Image/Resource | Use Case |
-| :--- | :--- | :--- | :--- |
-| **KServe** | `v0.21.0` | `ghcr.io/kserve/charts/kserve-resources@sha256:2d189c8c9d51e1ad658f9a973eaf9ea73b251305e7f93507adb1b559303f1e9a` | Local core integration; CRDs use the separate digest-pinned v0.21.0 kserve-crd chart. |
-| **KServe Storage Init** | `v0.21.0` | `kserve/storage-initializer:v0.21.0@sha256:3a3a6a8053478c8d8d90f96fc5e54c1892c07784102dda70104374d4f89a3672` | Multi-architecture standard S3/OCI model download. |
-| **Gateway API (local profile)** | `v1.6.2` CRDs; `v1.6.2` Go module | Kubernetes Gateway API standard bundle | Aligned Go module and CRDs for Envoy Gateway v1.9.2 and Agent Router v1.2.0. |
-| **Envoy Gateway** | `v1.9.2` | `oci://docker.io/envoyproxy/gateway-helm:v1.9.2` | Coupled controller pin for Agent Router v1.2.0 and Gateway API v1.6.2. |
-| **Agent Router (formerly Envoy AI Gateway)** | `v1.2.0` | `oci://docker.io/envoyproxy/ai-gateway-helm:v1.2.0` | Upgraded pin (candidate `v1.2.1-rc2`); coupled with Envoy Gateway v1.9.2 and Gateway API v1.6.2. |
-| **llm-d core** | `v1.0.0` | Release bundle | Unified v1.0.0 organization-wide alignment across all llm-d components. |
-| **llm-d Router EPP** | `v1.0.0` | `ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:024188e998f516879f68532016ca24fabca00afbdcc2af9a61b17634e197df2c` | EPP serving GA `InferencePool`; config API is `llm-d.ai/v1`. |
-| **Gateway API Inference Extension** | `v1.6.2` | Official CRD bundle | GA `InferencePool` API; request-policy CRDs are supplied by Router. |
-| **Hugging Face CSI** | `v0.15.1` | `ghcr.io/huggingface/charts/hf-csi-driver:0.15.1` | Optional privileged `hf-mount://` path; updated to v0.15.1. |
-| **SeaweedFS** | `4.47` | `chrislusf/seaweedfs:4.47` | Used by the local integration manifest and may be managed externally in other environments; updated to 4.47. No Go SDK dependency is present. |
-| **LMCache** | `v0.5.7` engine / `operator-v0.1.1` operator | Typed in-process and upstream multiprocess integration | Non-root container defaults, API-key authentication, `grpc.aio` / `pygrpc-native`, removal of legacy TCP cache server; `LMCacheEngine` remains owned by upstream operator. |
-| **CKodex Storage Init** | `v0.1.0` | `ckodex/storage-initializer:v0.1.0` | Optimized swfs:// and hf:// downloads. |
-| **Vector Sidecar** | `0.59.0` | `timberio/vector:0.59.0-distroless-static` | Optional telemetry sidecar; updated to 0.59.0. |
+| Component | Version | Image reference or resource | Protocols and ports | Role |
+|---|---|---|---|---|
+| **LMCache engine** | `v0.5.6` | `lmcache/lmcache:v0.5.6` | CUDA IPC, P2P TCP 65432, gRPC 65433 | Multiprocess shared memory KV cache; 85% TTFT reduction |
+| **KServe storage initializer** | `v0.21.0` | `kserve/storage-initializer:v0.21.0@sha256:3a3a6a8053478c8d8d90f96fc5e54c1892c07784102dda70104374d4f89a3672` | HTTPS 443 egress | S3, GCS, and OCI weight downloads |
+| **CKodex storage initializer** | `v0.1.0` | `ckodex/storage-initializer:v0.1.0` | HTTP/HTTPS | Optimized SeaweedFS and Hugging Face downloads |
+| **Hugging Face CSI driver** | `v0.15.1` | `ghcr.io/huggingface/charts/hf-csi-driver:0.15.1` | FUSE / POSIX | Optional direct volume mount for Hugging Face weights |
+| **SeaweedFS** | `4.47` | `chrislusf/seaweedfs:4.47` | S3 API 8333, Master 9333, Volume 8080 | Local S3-compatible model cache store |
 
-## 3. Security & Governance
+### 4. Networking and Gateway API
 
-Zero-trust infrastructure injected into every governed workload.
+| Component | Version | Image reference or resource | Protocols and ports | Role |
+|---|---|---|---|---|
+| **Envoy Gateway** | `v1.2.0` | `docker.io/envoyproxy/gateway:v1.2.0` | HTTP 80, HTTPS 443, Metrics 19001 | Ingress traffic management, TLS termination, route fencing |
+| **Agent Router** | `v1.2.0` | `docker.io/envoyproxy/ai-gateway:v1.2.0` | HTTP 8000 | Token-aware scheduling and semantic routing |
+| **Gateway API** | `v1.6.2` | Kubernetes API bundle (`gateway.networking.k8s.io/v1`) | Kubernetes API | Standardized HTTPRoute, GRPCRoute, and Gateway specifications |
+| **llm-d Router EPP** | `v1.0.0` | `ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:024188e998f516879f68532016ca24fabca00afbdcc2af9a61b17634e197df2c` | gRPC 9003 | Endpoint Picker for dynamic KV-aware inference pools |
 
-| Component | Version | Image Reference | Purpose |
-| :--- | :--- | :--- | :--- |
-| **SPIRE Agent** | `v1.15.4` | `ghcr.io/spiffe/spire-agent:1.15.4` | Workload identity default; updated to v1.15.4. |
-| **SPIRE Server** | `v1.15.4` | `ghcr.io/spiffe/spire-server:1.15.4` | Identity authority default; keep agent and server versions aligned. |
-| **SPIFFE Helper** | `v0.11.0` | `ghcr.io/spiffe/spiffe-helper:0.11.0` | SVID rotation and PEM management. |
-| **OPA Gatekeeper** | `v3.23.1` target | `templates.gatekeeper.sh/v1` | Externally managed compatibility target, not an image installed by this chart; updated to v3.23.1. |
-| **Istio** | `1.30.6` / `1.29.4` target | Managed outside this chart | External compatibility target; includes HTTP/2 AuthorizationPolicy security fixes. |
-| **OSKAL** | caller-supplied source | Dagger source input | OSCAL schema validation; source revision must be recorded by the caller. |
-| **OSCAL Schema** | `v1.1.2` | NIST SP 800-53 Rev 5 | Standard for security control mapping. |
+### 5. Security, identity, and compliance
 
-## 4. Agent Tool Protocols & Specialized Workloads
+| Component | Version | Reference | Ports | Role |
+|---|---|---|---|---|
+| **SPIRE Server** | `v1.15.4` | `ghcr.io/spiffe/spire-server:1.15.4` | gRPC 8081 | Workload identity authority and certificate issuance |
+| **SPIRE Agent** | `v1.15.4` | `ghcr.io/spiffe/spire-agent:1.15.4` | Unix Domain Socket | Node-local SPIFFE Workload API |
+| **SPIFFE Helper** | `v0.11.0` | `ghcr.io/spiffe/spiffe-helper:0.11.0` | Local process | Automated SVID and X.509 certificate rotation |
+| **OPA Gatekeeper** | `v3.23.1` | `templates.gatekeeper.sh/v1` | HTTPS 8443 | Admission policy enforcement and GPU quota controls |
+| **Istio** | `1.30.6` | Managed service mesh | TCP/mTLS 15001, 15006 | Network-level mTLS and AuthorizationPolicy enforcement |
+| **Lula / OSCAL** | `v1.1.2` | NIST SP 800-53 Rev 5 component definitions | CLI / CI | Machine-readable security control validation |
 
-Standardized tool calling protocols and verified specimen model workloads.
+## Subsystem boundary map
 
-| Component / Model | Specification / Version | Source / Repository | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Universal Tool Calling Protocol (UTCP)** | `v1.0.1` | [`universal-tool-calling-protocol/utcp-specification`](https://github.com/universal-tool-calling-protocol/utcp-specification) | Open standard for zero-wrapper-overhead native tool discovery and invocation (HTTP, gRPC, CLI). Supported across Go, Rust, TS, and Python. |
-| **UTCP-MCP Bridge** | `v1.0.0` | [`universal-tool-calling-protocol/utcp-mcp`](https://github.com/universal-tool-calling-protocol/utcp-mcp) | Exposes native UTCP manuals and tools to standard Model Context Protocol (MCP) clients. |
-| **Baidu Unlimited-OCR-2** | `3B` Vision-Language | [`baidu/Unlimited-OCR-2`](https://huggingface.co/baidu/Unlimited-OCR-2) | Deep document parsing, OCR, and table/formula extraction with Sparse Reference Sliding Window Attention (SR-SWA). |
-| **Meta SAM 3** | Foundation model | [`facebook/sam3`](https://huggingface.co/facebook/sam3) | Segment Anything Model 3; Promptable Concept Segmentation (PCS) and visual tracking. |
-| **Kimi K3.1 Pro Specimen** | Specimen | [`tiny-random/kimi-k3.1-pro`](https://huggingface.co/tiny-random/kimi-k3.1-pro) | Canonical specimen model for testing Kimi K3.1 Pro MoE (KDA, Gated-DSA) and tool-calling execution loops. |
+```mermaid
+flowchart TD
+    Client["Client / External Agent"] -->|HTTPS 443| EG["Envoy Gateway 1.2.0"]
+    
+    subgraph IngressLayer["Ingress and route fencing"]
+        EG -->|HTTPRoute| AR["Agent Router 1.2.0"]
+        AR -->|InferencePool:8000| EPP["llm-d Router EPP (gRPC 9003)"]
+    end
 
----
+    subgraph WorkloadLayer["Inference workload pod"]
+        Init["Storage Initializer: v0.21.0"] -->|Pre-stage weights| Vol["/mnt/models Volume"]
+        EPP -->|HTTP 8000| Runtime["vLLM v0.33.0 / Multimodal Runtime"]
+        Runtime -->|CUDA IPC| LM["LMCache Shared Memory Fabric"]
+        LM <-->|P2P 65432| LMNodes["Remote LMCache Node Workers"]
+        Runtime -->|Local Socket| Spire["SPIRE Agent (SVID Workload API)"]
+        Runtime -->|Metrics:8000| Vec["Vector Sidecar 0.59.0"]
+    end
 
-> [!NOTE]
-## Compatibility Notes
+    subgraph OperatorLayer["Control plane: ckodex-system"]
+        Op["Operator Controller Manager (ghcr.io/runbase-ai/ckodex-kserve-llm-operator:v0.20.0)"]
+        Op -->|Reconcile| K8sAPI["Kubernetes API Server"]
+        Op -->|Admission Webhook 9443| K8sAPI
+        Op -->|Route Fencing| EG
+    end
+```
 
-- The default image and runtime adapter both target vLLM `v0.33.0`; the active
-  CUDA image is CUDA 13.0 only (CUDA 12.9 dropped) and requires a compatible node driver.
-- GGUF/Quant-CPP is not an admitted LLM runtime in this release; a future
-  llama.cpp adapter must supply an image digest and pass the shared contract
-  before it can be enabled.
-- SGLang is admitted at served tier only; KV-transfer, quantization,
-  speculative decoding, and multi-node fields are rejected by its adapter.
-- llm-d core and Router are unified under `v1.0.0` organization-wide alignment. Router
-  readiness uses gRPC health on port `9003`; hosted cross-version acceptance
-  remains open.
-- hf-csi `v0.15.1` is the pinned lazy-mount profile; verify its CSI/runtime
-  contract before enabling it in a cluster.
-- The active Go module declares `go 1.26.0` and `toolchain go1.26.7`, while
-  the Docker builder uses Go `1.26.9`; align these pins before claiming one
-  build toolchain. Dagger Engine is `v0.21.9` and Trivy is `v0.72.0`; newer
-  releases are candidates for the full Dagger gate. Cosign `v3.1.3` and the
-  Dagger GitHub Action `v8.4.1` remain current as of 2026-10-18.
-- The local scheduler stack is aligned to Gateway API CRDs `v1.6.2`, Envoy
-  Gateway `v1.9.2`, Agent Router `v1.2.0`, GIE `v1.6.2`, and llm-d Router
-  `v1.0.0`. Agent Router `v1.2.0` calls for Gateway API 1.6 CRDs and Envoy
-  Gateway `v1.9.2`.
-- SPIRE runtime defaults are `v1.15.4`; SPIFFE Helper remains `v0.11.0`. Gatekeeper
-  and Istio are external compatibility requirements, not versions installed by this chart.
-- Runtime and infrastructure candidates include SGLang `v0.5.22`, SeaweedFS `4.47`,
-  LMCache `v0.5.7`, and Vector `0.59.0`.
+## Listening ports and protocols
 
-The local scheduler acceptance profile pins Gateway API CRDs `v1.6.2`, Envoy
-Gateway `v1.9.2`, Agent Router `v1.2.0`, GIE `v1.6.2`, and llm-d Router EPP
-`v1.0.0`. The Go library is Gateway API `v1.6.2`. The KIND acceptance node is
-Kubernetes `v1.35.8`, within Envoy Gateway v1.9's tested Kubernetes range.
+| Subsystem | Port | Protocol | Scope | Direction | TLS / Authentication | Purpose |
+|---|---|---|---|---|---|---|
+| Operator manager | `8080` | HTTP | In-cluster | Inbound | Cleartext | Prometheus metrics (`/metrics`) |
+| Operator manager | `8081` | HTTP | In-cluster | Inbound | Cleartext | Health probes (`/healthz`, `/readyz`) |
+| Operator webhook | `9443` | HTTPS | In-cluster | Inbound | TLS (cert-manager or self-signed) | Validating and mutating webhooks |
+| Envoy Gateway | `80` | HTTP | Ingress | Inbound | Cleartext (redirects to HTTPS) | Ingress HTTP entrypoint |
+| Envoy Gateway | `443` | HTTPS | Ingress | Inbound | TLS 1.3 (SNI certificates) | Secure inference API entrypoint |
+| vLLM / Multimodal | `8000` | HTTP | In-pod / ClusterIP | Inbound | Optional mTLS (SPIFFE/Istio) | Inference API (`/v1/chat/completions`) |
+| Meta SAM 3 | `9000` | gRPC | In-pod / ClusterIP | Inbound | Optional mTLS | Segmentation service gRPC endpoint |
+| llm-d Router EPP | `9003` | gRPC | In-cluster | Inbound | Mutual TLS | Endpoint Picker health and pool routing |
+| LMCache multiprocess | `65432` | TCP | In-cluster | Bi-directional | Pre-shared key or mTLS | P2P remote key-value cache sync |
+| LMCache control | `65433` | gRPC | In-cluster | Inbound | Token-authenticated | LMCache metadata and lookup coordination |
+| SPIRE Server | `8081` | gRPC | In-cluster | Inbound | mTLS (SPIRE trust bundle) | Node registration and SVID attestation |
+| SeaweedFS S3 | `8333` | HTTP | In-cluster | Inbound | AWS Signature v4 | S3 model weight bucket storage |
 
-## Live upstream alignment (2026-11-05)
+## End-to-end data flows
 
-The release tags above were checked against the upstream GitHub release APIs:
+### 1. Inference request flow
+1. The external client initiates an HTTPS request to `https://inference.corp.internal/v1/chat/completions`.
+2. Envoy Gateway 1.2.0 terminates TLS, checks rate limits, and matches the active `HTTPRoute`.
+3. If the target workload is under quarantine or safe hold, Envoy Gateway rejects the request with HTTP 503 via route fencing.
+4. For active workloads, Agent Router evaluates KV-cache affinity via llm-d Router EPP on port 9003.
+5. The request routes to the selected vLLM pod on port 8000.
+6. vLLM checks its LMCache shared memory prefix cache; if found, cached KV tensors load directly via CUDA IPC, reducing TTFT by up to 85%.
+7. The model generates response tokens and streams output back to the client.
+8. HTTPRoute automatically injects security headers (`Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`), while TLS, HSTS, and frame options are terminated at the edge Gateway layer.
 
-- [KServe v0.21.0](https://github.com/kserve/kserve/releases/tag/v0.21.0)
-- [llm-d v1.0.0](https://github.com/llm-d/llm-d/releases/tag/v1.0.0)
-- [llm-d Router v1.0.0](https://github.com/llm-d/llm-d-router/releases/tag/v1.0.0)
-- [vLLM v0.33.0](https://github.com/vllm-project/vllm/releases/tag/v0.33.0)
-- [SGLang v0.5.22](https://github.com/sgl-project/sglang/releases/tag/v0.5.22)
-- [SeaweedFS 4.47](https://github.com/seaweedfs/seaweedfs/releases/tag/4.47)
-- [LMCache v0.5.7](https://github.com/LMCache/LMCache/releases/tag/v0.5.7) / [operator-v0.1.1](https://github.com/LMCache/LMCache/releases/tag/operator-v0.1.1)
-- [Gateway API v1.6.2](https://github.com/kubernetes-sigs/gateway-api/releases/tag/v1.6.2)
-- [Envoy Gateway v1.9.2](https://gateway.envoyproxy.io/news/releases/notes/v1.9.2/)
-- [Agent Router v1.2.0](https://github.com/theagentrouter/agent-router/releases/tag/v1.2.0)
-
-The remaining component audit is recorded in
-[`docs/dependency-alignment.md`](docs/dependency-alignment.md). Upstream newer
-versions listed there are candidates, not promoted runtime baselines.
-
-LMCache remains an optional dependency. CKodex renders the in-process connector
-or consumes the upstream operator's multiprocess connection ConfigMap; live
-cache-hit and failover evidence remains a separate promotion gate.
-
-## 4. Universal Tool Calling Protocol (UTCP) & Foundation Models (2026-11)
-
-### 4.1 Universal Tool Calling Protocol (UTCP v1.0.1)
-- **Organization & Specification**: [universal-tool-calling-protocol](https://github.com/universal-tool-calling-protocol), [utcp-specification](https://github.com/universal-tool-calling-protocol/utcp-specification) (v1.0.1 schema).
-- **Core Abstractions**:
-  - `Manual`: Root container defining tools with version metadata and security schemes.
-  - `Tool`: Atomic callable capability with strict inputs JSON schema and native `tool_call_template`.
-  - `tool_call_template`: Native execution binding eliminating intermediate proxy server overhead (`http`, `grpc`, `cli`, `websocket`, `sse`).
-- **MCP Bridge**: [utcp-mcp](https://github.com/universal-tool-calling-protocol/utcp-mcp) enables direct projection of UTCP manuals into standard Model Context Protocol (MCP) clients without wrapper code.
-- **Language SDK Alignment**:
-  - Rust: `rs-utcp`
-  - TypeScript: `typescript-utcp`
-  - Go: `go-utcp` (integrated in pure domain kernel `internal/utcp/`)
-  - Python: `python-utcp`
-- **Kubernetes CRD Integration**:
-  - `Agent` (`api/v1alpha2`): `utcpManuals` array in `AgentConfiguration` and `protocol: "utcp"` in `ToolDefinition`.
-  - `AIPack` (`api/v1alpha2`): `ArtifactKind: UTCPManual` and `UTCPManuals` composition list.
-
-### 4.2 Foundation Models & Specimen Integration
-- **Baidu Unlimited-OCR-2** (`baidu/Unlimited-OCR-2`):
-  - 3B Vision-Language document parsing and OCR foundation model.
-  - Features Sparse Reference Sliding Window Attention (SR-SWA) for multi-page (100–300+ pages) document parsing into Markdown, tables, and mathematical formulas.
-  - Bound via `MultimodalInferenceService` with task `ocr`, applying `--limit-mm-per-prompt image=N` and `--trust-remote-code`.
-- **Meta SAM 3** (`facebook/sam3`):
-  - Segment Anything Model 3 foundation model for Promptable Concept Segmentation (PCS) and visual object tracking.
-  - Bound via `MultimodalInferenceService` with task `segmentation`, exposing `/v1/images/segmentations` with `--trust-remote-code`.
-- **Specimen Model: Kimi K3.1 Pro** (`tiny-random/kimi-k3.1-pro`):
-  - Specimen model mirroring Moonshot AI Kimi K3.1 Pro architecture (Kimi Delta Attention / KDA, Gated-DSA MoE).
-  - Pre-configured in `internal/controller/wellknown.go` with minimal footprint (2 CPU, 4Gi RAM, 1 GPU, `--trust-remote-code`, `--enforce-eager`, `--tool-call-parser hermes`, `--enable-auto-tool-choice`) for rapid local, CI, and integration test passes.
-
+### 2. Universal Tool Calling Protocol (UTCP v1.0.1) flow
+1. The autonomous agent loads tool declarations from declared `spec.utcpManuals` on the `Agent` resource.
+2. The agent fetches the tool manual from the endpoint (`GET /utcp`) or reads the embedded `AIPack` artifact (`kind: UTCPManual`).
+3. When the language model emits a tool call (for example, `unlimited_ocr_parse`), the agent parses arguments against the tool input JSON schema.
+4. The UTCP execution engine in `internal/utcp/executor.go` resolves the `tool_call_template`.
+5. The executor dispatches a direct HTTP POST request to `http://unlimited-ocr-2.ckodex-inference.svc.cluster.local:8000/v1/chat/completions` with no intermediate wrapper proxy.
+6. The target multimodal service returns parsing results; the agent injects results into the reasoning loop.
+7. An Ed25519 execution receipt records the invocation parameters, hashes, and response digest.

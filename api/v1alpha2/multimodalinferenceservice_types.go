@@ -11,8 +11,6 @@ import (
 )
 
 // MultimodalTask describes the type of multimodal workload.
-//
-// +kubebuilder:validation:Enum=vision-language;image-generation;text-to-speech;ocr;segmentation
 type MultimodalTask string
 
 const (
@@ -43,8 +41,6 @@ const (
 )
 
 // MultimodalRuntime selects the serving runtime for multimodal models.
-//
-// +kubebuilder:validation:Enum=vllm
 type MultimodalRuntime string
 
 const (

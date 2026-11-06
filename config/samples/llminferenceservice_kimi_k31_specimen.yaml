@@ -29,8 +29,8 @@ spec:
             - "8192"
           resources:
             requests:
-              cpu: "2"
-              memory: 4Gi
+              cpu: "4"
+              memory: 8Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "4"

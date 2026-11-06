@@ -13,8 +13,27 @@ spec:
     ref: registry.corp.internal/aipack/unlimited-ocr-utcp@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
     mediaType: application/vnd.ai.utcpmanual.v1+json
 
-  tool:
-    protocol: utcp
-    schema: urn:tool:schema:unlimited-ocr:v1
-    idempotent: true
-    sideEffects: read-only
+  utcpManual:
+    utcpVersion: "1.0.1"
+    manualVersion: "1.0.0"
+    endpoint: http://unlimited-ocr-2.ckodex-inference.svc.cluster.local:8000/utcp
+---
+apiVersion: serving.ckodex.com/v1alpha2
+kind: AIPack
+metadata:
+  name: utcp-system-tools
+  namespace: default
+  labels:
+    aipack.ckodex.com/kind: UTCPManual
+    aipack.ckodex.com/family: capability
+spec:
+  kind: UTCPManual
+  family: capability
+  source:
+    ref: registry.corp.internal/aipack/utcp-system-tools@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    mediaType: application/vnd.ai.utcpmanual.v1+json
+
+  utcpManual:
+    utcpVersion: "1.0.1"
+    manualVersion: "1.0.0"
+    endpoint: http://utcp-catalog.default.svc.cluster.local/utcp/system-tools.json

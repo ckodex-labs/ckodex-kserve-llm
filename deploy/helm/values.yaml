@@ -152,7 +152,7 @@ vllm:
   dbo:
     enabled: false     # Dual-Batch Overlap for throughput
 
-# hf-mount:// is an explicit opt-in path. Install hf-csi-driver v0.14.0
+# hf-mount:// is an explicit opt-in path. Install hf-csi-driver v0.15.1
 # separately before using it; the chart does not install privileged node software.
 # Plain hf:// downloads do not require the CSI driver.
 
@@ -204,8 +204,8 @@ engines:
       decisionInference: true
   sglang:
     enabled: true
-    version: "v0.5.18"
-    image: "lmsysorg/sglang:v0.5.18@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1"
+    version: "v0.5.22"
+    image: "lmsysorg/sglang:v0.5.22@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae"
     tier: 2
     supportedHardware:
       - nvidia
@@ -291,10 +291,10 @@ scheduler:
 spire:
   enabled: false
   server:
-    image: "ghcr.io/spiffe/spire-server:1.15.1"
+    image: "ghcr.io/spiffe/spire-server:1.15.4"
     replicas: 1
   agent:
-    image: "ghcr.io/spiffe/spire-agent:1.15.1"
+    image: "ghcr.io/spiffe/spire-agent:1.15.4"
   trustDomain: "ckodex.com"
 
 # Gateway API

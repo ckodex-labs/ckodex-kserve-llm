@@ -24,7 +24,7 @@ func TestReleaseDefaultsStayAligned(t *testing.T) {
 	assert.Equal(t, controllerapi.HuggingFaceInitializerImage, cfg.Defaults.HuggingFaceInitializerImage)
 	assert.Equal(t, scheduler.EPPImage, cfg.Defaults.SchedulerImage)
 	assert.Equal(t, scheduler.EPPImage, cfg.Scheduler.Image)
-	assert.Equal(t, "ghcr.io/spiffe/spire-agent:1.15.1", security.SPIREAgentImage)
-	assert.Equal(t, "ghcr.io/spiffe/spire-server:1.15.1", security.SPIREServerImage)
+	assert.Equal(t, "ghcr.io/spiffe/spire-agent:1.15.4", security.SPIREAgentImage)
+	assert.Equal(t, "ghcr.io/spiffe/spire-server:1.15.4", security.SPIREServerImage)
 	assert.Equal(t, "ghcr.io/spiffe/spiffe-helper:0.11.0", security.SPIFFEHelperImage)
 }

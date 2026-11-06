@@ -18,6 +18,7 @@ const (
 	MediaTypeEval           = "application/vnd.ai.eval.v1+json"
 	MediaTypeWorkflow       = "application/vnd.ai.workflow.v1+json"
 	MediaTypePolicyBundle   = "application/vnd.ai.policy-bundle.v1+json"
+	MediaTypeUTCPManual     = "application/vnd.ai.utcpmanual.v1+json"
 	MediaTypeAgent          = "application/vnd.ai.agent.v1+json"
 )
 
@@ -50,6 +51,7 @@ var kindToMediaType = map[v1alpha2.ArtifactKind]string{
 	v1alpha2.KindEval:           MediaTypeEval,
 	v1alpha2.KindWorkflow:       MediaTypeWorkflow,
 	v1alpha2.KindPolicyBundle:   MediaTypePolicyBundle,
+	v1alpha2.KindUTCPManual:     MediaTypeUTCPManual,
 	v1alpha2.KindAgent:          MediaTypeAgent,
 }
 

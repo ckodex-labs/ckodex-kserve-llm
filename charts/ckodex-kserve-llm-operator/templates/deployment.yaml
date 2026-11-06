@@ -1,0 +1,216 @@
+{{- if and .Values.webhook.enabled (not .Values.certManager.enabled) }}
+{{- fail "certManager.enabled must be true when webhook.enabled is true; this chart provisions webhook TLS through cert-manager" }}
+{{- end }}
+{{- if ne (empty .Values.aipackVerification.cosign.certificateIdentity) (empty .Values.aipackVerification.cosign.certificateOIDCIssuer) }}
+{{- fail "aipackVerification.cosign.certificateIdentity and certificateOIDCIssuer must be set together" }}
+{{- end }}
+{{- if and .Values.aipackVerification.cosign.trustedPublicKeySecretName .Values.aipackVerification.cosign.certificateIdentity }}
+{{- fail "configure either a trusted public key Secret or keyless certificate identity, not both" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-controller-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/component: controller-manager
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    control-plane: controller-manager
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ckodex-kserve-llm-operator
+        app.kubernetes.io/component: controller-manager
+        control-plane: controller-manager
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8091"
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "ckodex-kserve-llm-operator.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: manager
+          image: "{{ .Values.image.repository }}:{{ include "ckodex-kserve-llm-operator.imageTag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /manager
+          args:
+            - --metrics-bind-address={{ .Values.metrics.bindAddress }}
+            - --health-probe-bind-address={{ .Values.probes.healthz.bindAddress }}
+            - --leader-elect={{ .Values.leaderElection.enabled }}
+            {{- if .Values.webhook.enabled }}
+            - --webhook-port={{ .Values.webhook.port }}
+            {{- end }}
+          ports:
+            {{- if .Values.webhook.enabled }}
+            - containerPort: {{ .Values.webhook.port }}
+              name: webhook-server
+              protocol: TCP
+            {{- end }}
+            - containerPort: 8091
+              name: metrics
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          env:
+            # POD_NAMESPACE is used by ImagePullSecretReconciler to locate source pull secrets.
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- if .Values.proxy.httpProxy }}
+            - name: HTTP_PROXY
+              value: {{ .Values.proxy.httpProxy | quote }}
+            {{- end }}
+            {{- if .Values.proxy.httpsProxy }}
+            - name: HTTPS_PROXY
+              value: {{ .Values.proxy.httpsProxy | quote }}
+            {{- end }}
+            {{- if .Values.proxy.noProxy }}
+            - name: NO_PROXY
+              value: {{ .Values.proxy.noProxy | quote }}
+            {{- end }}
+            {{- if .Values.registry.mirrorURL }}
+            - name: CKODEX_HF_MIRROR_URL
+              value: {{ .Values.registry.mirrorURL | quote }}
+            {{- end }}
+            - name: CKODEX_HUGGING_FACE_INITIALIZER_IMAGE
+              value: {{ include "ckodex-kserve-llm-operator.huggingFaceInitializerImage" . | quote }}
+            - name: CKODEX_CUSTOM_STORAGE_INITIALIZER_IMAGE
+              value: {{ .Values.vllm.customStorageInitializerImage | quote }}
+            - name: CKODEX_VLLM_CPU_REQUEST
+              value: {{ .Values.vllm.cpuRequest | quote }}
+            - name: CKODEX_VLLM_MEMORY_REQUEST
+              value: {{ .Values.vllm.memoryRequest | quote }}
+            - name: CKODEX_TERMINATION_GRACE_PERIOD_SECONDS
+              value: {{ .Values.vllm.terminationGracePeriodSeconds | quote }}
+            - name: CKODEX_ASR_CPU_REQUEST
+              value: {{ .Values.vllm.asrCPURequest | quote }}
+            - name: CKODEX_ASR_MEMORY_REQUEST
+              value: {{ .Values.vllm.asrMemoryRequest | quote }}
+            - name: CKODEX_ASR_TERMINATION_GRACE_PERIOD_SECONDS
+              value: {{ .Values.vllm.asrTerminationGracePeriodSeconds | quote }}
+            - name: CKODEX_CACHE_CPU_REQUEST
+              value: {{ .Values.vllm.cacheCPURequest | quote }}
+            - name: CKODEX_CACHE_MEMORY_REQUEST
+              value: {{ .Values.vllm.cacheMemoryRequest | quote }}
+            # Feature Gates
+            - name: CKODEX_FEATURE_ENABLE_SECURITY
+              value: {{ .Values.features.enableSecurity | quote }}
+            - name: CKODEX_FEATURE_ENABLE_WEBHOOKS
+              value: {{ .Values.webhook.enabled | quote }}
+            - name: CKODEX_FEATURE_ENABLE_AUTOSCALER
+              value: {{ .Values.features.enableAutoscaler | quote }}
+            - name: CKODEX_FEATURE_ENABLE_GATEWAY
+              value: {{ .Values.features.enableGateway | quote }}
+            - name: CKODEX_FEATURE_ENABLE_SCHEDULER
+              value: {{ .Values.features.enableScheduler | quote }}
+            - name: CKODEX_FEATURE_ENABLE_EXPERIMENTAL_AGENTS
+              value: {{ .Values.features.enableExperimentalAgents | quote }}
+            - name: CKODEX_FEATURE_ENABLE_EXPERIMENTAL_HARDWARE_SELECTION
+              value: {{ .Values.features.enableExperimentalHardwareSelection | quote }}
+            - name: CKODEX_FEATURE_ENABLE_EXPERIMENTAL_STATUS_HARDENING
+              value: {{ .Values.features.enableExperimentalStatusHardening | quote }}
+            - name: CKODEX_RUNTIME_IMAGE
+              value: {{ .Values.vllm.defaultImage | quote }}
+            {{- if .Values.engines }}
+            - name: CKODEX_ADMITTED_ENGINES
+              value: {{ keys .Values.engines | sortAlpha | join "," | quote }}
+            {{- end }}
+            {{- if and .Values.engines .Values.engines.tensorfold .Values.engines.tensorfold.enabled }}
+            - name: CKODEX_TENSORFOLD_RUNTIME_IMAGE
+              value: {{ .Values.engines.tensorfold.image | quote }}
+            {{- end }}
+            - name: CKODEX_ENVOY_GATEWAY_NAMESPACE
+              value: {{ .Values.gateway.dataPlaneNamespace | quote }}
+            - name: CKODEX_AUDIT_LOG_PATH
+              value: /var/log/ckodex/audit.jsonl
+            {{- if .Values.audit.otlpEndpoint }}
+            - name: CKODEX_AUDIT_OTLP_ENDPOINT
+              value: {{ .Values.audit.otlpEndpoint | quote }}
+            {{- end }}
+            {{- if .Values.aipackVerification.cosign.trustedPublicKeySecretName }}
+            - name: CKODEX_COSIGN_TRUSTED_KEY_REF
+              value: {{ printf "k8s://%s/%s" .Release.Namespace .Values.aipackVerification.cosign.trustedPublicKeySecretName | quote }}
+            - name: CKODEX_COSIGN_TRUSTED_KEY_PATH
+              value: /var/run/secrets/ckodex-cosign/cosign.pub
+            {{- end }}
+            {{- if .Values.aipackVerification.cosign.certificateIdentity }}
+            - name: CKODEX_COSIGN_CERT_IDENTITY
+              value: {{ .Values.aipackVerification.cosign.certificateIdentity | quote }}
+            - name: CKODEX_COSIGN_CERT_OIDC_ISSUER
+              value: {{ .Values.aipackVerification.cosign.certificateOIDCIssuer | quote }}
+            {{- end }}
+            {{- if .Values.aipackVerification.cosign.rekorURL }}
+            - name: CKODEX_COSIGN_REKOR_URL
+              value: {{ .Values.aipackVerification.cosign.rekorURL | quote }}
+            {{- end }}
+          resources: {{ toYaml .Values.controller.resources | nindent 12 }}
+          securityContext: {{ toYaml .Values.controller.securityContext | nindent 12 }}
+          volumeMounts:
+            - mountPath: /var/log/ckodex
+              name: audit-logs
+          {{- if .Values.webhook.enabled }}
+            - mountPath: {{ .Values.webhook.certDir }}
+              name: cert
+              readOnly: true
+          {{- end }}
+          {{- if .Values.aipackVerification.cosign.trustedPublicKeySecretName }}
+            - mountPath: /var/run/secrets/ckodex-cosign
+              name: aipack-cosign-key
+              readOnly: true
+          {{- end }}
+      volumes:
+        - name: audit-logs
+          {{- if .Values.audit.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-audit
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- if .Values.webhook.enabled }}
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-webhook-cert
+      {{- end }}
+      {{- if .Values.aipackVerification.cosign.trustedPublicKeySecretName }}
+        - name: aipack-cosign-key
+          secret:
+            defaultMode: 288
+            items:
+              - key: cosign.pub
+                path: cosign.pub
+            secretName: {{ .Values.aipackVerification.cosign.trustedPublicKeySecretName }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}

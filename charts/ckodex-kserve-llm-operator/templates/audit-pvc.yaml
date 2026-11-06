@@ -4,7 +4,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-audit
   labels:
-    {{- include "ckodex-kserve-llm-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/component: audit
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   accessModes:
     {{- toYaml .Values.audit.persistence.accessModes | nindent 4 }}

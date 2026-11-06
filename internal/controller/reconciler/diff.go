@@ -70,6 +70,31 @@ func SyncDeployment(ctx context.Context, existing, desired *appsv1.Deployment, r
 		existing.Spec.Template.Spec.Tolerations = desired.Spec.Template.Spec.Tolerations
 		changed = true
 	}
+	if !equality.Semantic.DeepEqual(existing.Spec.Template.Spec.NodeSelector, desired.Spec.Template.Spec.NodeSelector) {
+		logger.Info("Deployment nodeSelector changed, updating", "name", existing.Name)
+		existing.Spec.Template.Spec.NodeSelector = desired.Spec.Template.Spec.NodeSelector
+		changed = true
+	}
+	if !equality.Semantic.DeepEqual(existing.Spec.Template.Spec.TopologySpreadConstraints, desired.Spec.Template.Spec.TopologySpreadConstraints) {
+		logger.Info("Deployment topologySpreadConstraints changed, updating", "name", existing.Name)
+		existing.Spec.Template.Spec.TopologySpreadConstraints = desired.Spec.Template.Spec.TopologySpreadConstraints
+		changed = true
+	}
+	if !equality.Semantic.DeepEqual(existing.Spec.Template.Spec.SecurityContext, desired.Spec.Template.Spec.SecurityContext) {
+		logger.Info("Deployment pod securityContext changed, updating", "name", existing.Name)
+		existing.Spec.Template.Spec.SecurityContext = desired.Spec.Template.Spec.SecurityContext
+		changed = true
+	}
+	if !equality.Semantic.DeepEqual(existing.Spec.Template.Spec.TerminationGracePeriodSeconds, desired.Spec.Template.Spec.TerminationGracePeriodSeconds) {
+		logger.Info("Deployment terminationGracePeriodSeconds changed, updating", "name", existing.Name)
+		existing.Spec.Template.Spec.TerminationGracePeriodSeconds = desired.Spec.Template.Spec.TerminationGracePeriodSeconds
+		changed = true
+	}
+	if existing.Spec.Template.Spec.ServiceAccountName != desired.Spec.Template.Spec.ServiceAccountName {
+		logger.Info("Deployment serviceAccountName changed, updating", "name", existing.Name)
+		existing.Spec.Template.Spec.ServiceAccountName = desired.Spec.Template.Spec.ServiceAccountName
+		changed = true
+	}
 
 	return changed
 }
@@ -141,7 +166,16 @@ func ContainersEqual(a, b []corev1.Container) bool {
 		if effectivePullPolicy(a[i]) != effectivePullPolicy(b[i]) {
 			return false
 		}
+		if !CommandEqual(a[i].Command, b[i].Command) {
+			return false
+		}
 		if !equality.Semantic.DeepEqual(a[i].Args, b[i].Args) {
+			return false
+		}
+		if a[i].WorkingDir != b[i].WorkingDir {
+			return false
+		}
+		if !PortsEqual(a[i].Ports, b[i].Ports) {
 			return false
 		}
 		if !EnvsEqual(a[i].Env, b[i].Env) {
@@ -154,6 +188,21 @@ func ContainersEqual(a, b []corev1.Container) bool {
 			return false
 		}
 		if !equality.Semantic.DeepEqual(a[i].VolumeMounts, b[i].VolumeMounts) {
+			return false
+		}
+		if !SecurityContextEqual(a[i].SecurityContext, b[i].SecurityContext) {
+			return false
+		}
+		if !ProbesEqual(a[i].StartupProbe, b[i].StartupProbe) {
+			return false
+		}
+		if !ProbesEqual(a[i].ReadinessProbe, b[i].ReadinessProbe) {
+			return false
+		}
+		if !ProbesEqual(a[i].LivenessProbe, b[i].LivenessProbe) {
+			return false
+		}
+		if !LifecycleEqual(a[i].Lifecycle, b[i].Lifecycle) {
 			return false
 		}
 	}
@@ -221,4 +270,116 @@ func VolumesEqual(a, b []corev1.Volume) bool {
 		}
 	}
 	return true
+}
+
+// CommandEqual compares container entrypoint commands treating nil and empty as equal.
+func CommandEqual(a, b []string) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	return equality.Semantic.DeepEqual(a, b)
+}
+
+type portKey struct {
+	port     int32
+	protocol corev1.Protocol
+}
+
+func effectiveProtocol(p corev1.Protocol) corev1.Protocol {
+	if p == "" {
+		return corev1.ProtocolTCP
+	}
+	return p
+}
+
+// PortsEqual compares container ports as an order-insensitive set with protocol defaulting.
+func PortsEqual(a, b []corev1.ContainerPort) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	am := make(map[portKey]corev1.ContainerPort, len(a))
+	for _, cp := range a {
+		normalized := cp
+		normalized.Protocol = effectiveProtocol(cp.Protocol)
+		am[portKey{port: cp.ContainerPort, protocol: normalized.Protocol}] = normalized
+	}
+	for _, cp := range b {
+		normalized := cp
+		normalized.Protocol = effectiveProtocol(cp.Protocol)
+		existing, ok := am[portKey{port: cp.ContainerPort, protocol: normalized.Protocol}]
+		if !ok || !equality.Semantic.DeepEqual(existing, normalized) {
+			return false
+		}
+	}
+	return true
+}
+
+// ProbesEqual compares probes with Kubernetes default normalization to avoid false updates.
+func ProbesEqual(a, b *corev1.Probe) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return equality.Semantic.DeepEqual(normalizeProbe(a), normalizeProbe(b))
+}
+
+func normalizeProbe(p *corev1.Probe) *corev1.Probe {
+	if p == nil {
+		return nil
+	}
+	cp := p.DeepCopy()
+	if cp.TimeoutSeconds == 0 {
+		cp.TimeoutSeconds = 1
+	}
+	if cp.PeriodSeconds == 0 {
+		cp.PeriodSeconds = 10
+	}
+	if cp.SuccessThreshold == 0 {
+		cp.SuccessThreshold = 1
+	}
+	if cp.FailureThreshold == 0 {
+		cp.FailureThreshold = 3
+	}
+	if cp.HTTPGet != nil && cp.HTTPGet.Scheme == "" {
+		cp.HTTPGet.Scheme = corev1.URISchemeHTTP
+	}
+	return cp
+}
+
+// SecurityContextEqual compares security contexts, treating nil and empty structs as equal.
+func SecurityContextEqual(a, b *corev1.SecurityContext) bool {
+	if isSecurityContextEmpty(a) && isSecurityContextEmpty(b) {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return equality.Semantic.DeepEqual(a, b)
+}
+
+func isSecurityContextEmpty(sc *corev1.SecurityContext) bool {
+	if sc == nil {
+		return true
+	}
+	return equality.Semantic.DeepEqual(sc, &corev1.SecurityContext{})
+}
+
+// LifecycleEqual compares container lifecycle handlers, treating nil and empty as equal.
+func LifecycleEqual(a, b *corev1.Lifecycle) bool {
+	if isLifecycleEmpty(a) && isLifecycleEmpty(b) {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return equality.Semantic.DeepEqual(a, b)
+}
+
+func isLifecycleEmpty(l *corev1.Lifecycle) bool {
+	if l == nil {
+		return true
+	}
+	return equality.Semantic.DeepEqual(l, &corev1.Lifecycle{})
 }

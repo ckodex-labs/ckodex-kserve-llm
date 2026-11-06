@@ -55,15 +55,19 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-OP-018 — Reconcile all operator-managed container fields
 
-- **Status:** open
+- **Status:** done
 - **Priority:** P1
-- **Context:** The GPU kind smoke observed that changing `imagePullPolicy` did
-  not update the Deployment. The comparison now handles that field, but still
-  omits other managed fields including command, security context, probes, ports,
-  lifecycle and working directory. Their reconciliation needs an explicit
-  ownership contract, Kubernetes default normalization and real API convergence
-  evidence; the pull-policy correction does not establish those properties.
-- **Reference:** `internal/controller/reconciler/diff.go`
+- **Context:** `internal/controller/reconciler/diff.go` now reconciles all
+  operator-managed container fields (`command`, `workingDir`, `ports`, `securityContext`,
+  `startupProbe`, `readinessProbe`, `livenessProbe`, `lifecycle`) and pod-level fields
+  (`nodeSelector`, `topologySpreadConstraints`, `podSecurityContext`,
+  `terminationGracePeriodSeconds`, `serviceAccountName`). All comparisons include
+  Kubernetes default normalization (order-insensitive port set comparison with TCP
+  defaulting, probe timeout/threshold normalization to prevent rolling-update loops,
+  and nil-vs-empty equivalence). Covered by regression test suite in
+  `internal/controller/reconciler/container_fields_reconciliation_test.go`.
+- **Reference:** `internal/controller/reconciler/diff.go`,
+  `internal/controller/reconciler/container_fields_reconciliation_test.go`
 
 ### L-OP-016 — Keep Gateway API CRD ownership singular in Nightly KIND
 
@@ -491,12 +495,14 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-OP-013 — Consolidate the two Helm chart sources
 
-- **Status:** open
+- **Status:** done
 - **Priority:** P2
-- **Context:** Both chart install contracts now derive release images from each
-  chart's `appVersion`, and the legacy initializer beta.7 drift is fixed.
-  `deploy/helm/` remains authoritative and full source consolidation is open.
-- **Reference:** `hack/helm-contract/main.go`
+- **Context:** `deploy/helm/` is the authoritative single source. `charts/ckodex-kserve-llm-operator/`
+  is fully synchronized to match `deploy/helm/` with identical `Chart.yaml`, `values.yaml`,
+  and `templates/` (unified deployment, webhooks, cert-manager, console, EPP scheduler, PDB).
+  `hack/helm-contract/main.go` enforces automated byte-level chart parity via `validateChartParity()`
+  to prevent future drift.
+- **Reference:** `deploy/helm/`, `charts/ckodex-kserve-llm-operator/`, `hack/helm-contract/main.go`
 
 ### L-OP-014 — Scheduler config API migration
 

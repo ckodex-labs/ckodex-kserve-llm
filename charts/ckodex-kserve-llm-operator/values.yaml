@@ -1,16 +1,16 @@
-# Default values for ckodex-kserve-llm-operator.
-
-replicaCount: 1
+# CKodex KServe LLM Operator Helm Values
+# replicaCount: 2 ensures one replica survives node drain/eviction while the other reconciles.
+# Requires leaderElection.enabled=true (already the default) so only the leader reconciles.
+replicaCount: 2
 
 image:
   repository: ghcr.io/ckodex-labs/ckodex-kserve-llm
-  pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
+  # Empty resolves to Chart.appVersion. Set explicitly only for a deliberate
+  # image override; release images retain the leading "v" from the Git tag.
   tag: ""
+  pullPolicy: IfNotPresent
 
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
 
 serviceAccount:
   create: true
@@ -20,48 +20,45 @@ serviceAccount:
 rbac:
   create: true
 
-# managedNamespaces lists namespaces where the platform pre-provisions the
-# shared ckodex-epp ServiceAccount, Role, and RoleBinding. If unset, the
-# operator namespace is used as the implicit managed namespace to avoid a
-# silent no-op install. Add additional workload namespaces explicitly.
-managedNamespaces: []
+controller:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  securityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
 
-crds:
-  install: false
+webhook:
+  # Admission webhooks are opt-in. When false the Deployment does not mount a
+  # serving certificate or expose the webhook port.
+  enabled: false
+  port: 9443
+  certDir: /tmp/k8s-webhook-server/serving-certs
 
-featureGates:
-  enableScheduler: true
-  enableGateway: true
-  enableAutoscaler: true
-  enableSecurity: false
-  enableLocalModelCache: false
+# cert-manager integration — provisions TLS certificates for the webhook server.
+# Requires cert-manager v1.14+ installed in the cluster before enabling.
+# Enable this together with webhook.enabled. Helm then creates the Certificate,
+# Issuer, Service, and webhook configurations; cainjector populates caBundle.
+certManager:
+  enabled: false
+  # issuerRef: reference an existing Issuer or ClusterIssuer.
+  # When name is empty a self-signed ClusterIssuer + intermediate CA are created automatically.
+  # For production use a trusted PKI: Vault, AWS ACM-PCA, Let's Encrypt, etc.
+  issuerRef:
+    name: ""
+    kind: ClusterIssuer
 
-runtime:
-  # CUDA 13.0 image index digest for vLLM v0.33.0 (linux/amd64 + linux/arm64).
-  defaultImage: "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
-  # Installed KServe ClusterServingRuntime for v0.19 workerSpec workloads.
-  kserveMultiNodeRuntime: "kserve-huggingfaceserver-multinode"
-  # Empty follows Chart.appVersion; set a digest-pinned override when required.
-  huggingFaceInitializerImage: ""
-  customStorageInitializerImage: "ckodex/storage-initializer:v0.1.0"
-  vllmCPURequest: "2"
-  vllmMemoryRequest: "4Gi"
-  terminationGracePeriodSeconds: 60
-  asrCPURequest: "1"
-  asrMemoryRequest: "2Gi"
-  asrTerminationGracePeriodSeconds: 30
-  cacheCPURequest: "1"
-  cacheMemoryRequest: "1Gi"
-
-gateway:
-  # Namespace where Envoy Gateway creates its data-plane proxy pods.
-  dataPlaneNamespace: "envoy-gateway-system"
-
-config:
-  # HuggingFace Mirror for air-gapped environments
-  hfMirror: ""
-  # OpenTelemetry collector endpoint
-  otelEndpoint: "localhost:4317"
+metrics:
+  enabled: true
+  bindAddress: ":8091"
+  serviceMonitor:
+    enabled: false  # opt-in — requires prometheus-operator CRDs installed
+    interval: "30s"
 
 audit:
   # Optional OTLP/HTTP logs endpoint. Empty keeps the audit log sink local.
@@ -73,22 +70,26 @@ audit:
     accessModes:
       - ReadWriteOnce
 
-metrics:
-  enabled: true
-  serviceMonitor:
-    enabled: false
-    interval: 30s
-    scrapeTimeout: 10s
+# AIPack signature verification trust comes from operator configuration, never
+# from a key or Rekor URL supplied by the AIPack itself. For public-key mode,
+# create a Secret in the operator namespace with key `cosign.pub` and set
+# trustedPublicKeySecretName. For keyless mode, set both certificate fields.
+aipackVerification:
+  cosign:
+    trustedPublicKeySecretName: ""
+    certificateIdentity: ""
+    certificateOIDCIssuer: ""
+    rekorURL: ""
 
 console:
-  # Disabled by default; an empty tag follows Chart.appVersion when enabled.
+  # The console is an observe-only surface and is opt-in for the beta chart.
   enabled: false
   replicas: 1
-  spireRegistrationNamespace: spire
   image:
     repository: ghcr.io/ckodex-labs/ckodex-kserve-llm-console
-    pullPolicy: IfNotPresent
+    # Empty resolves to Chart.appVersion.
     tag: ""
+    pullPolicy: IfNotPresent
   service:
     type: ClusterIP
     port: 3000
@@ -99,6 +100,7 @@ console:
     automountServiceAccountToken: true
   rbac:
     create: true
+  spireRegistrationNamespace: spire
   resources:
     limits:
       cpu: 500m
@@ -106,34 +108,284 @@ console:
     requests:
       cpu: 100m
       memory: 128Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
 
-podAnnotations: {}
+probes:
+  healthz:
+    bindAddress: ":8081"
 
-podSecurityContext:
-  runAsNonRoot: true
-  seccompProfile:
-    type: RuntimeDefault
+leaderElection:
+  enabled: true
+  id: "ckodex-kserve-llm.ckodex.com"
 
-securityContext:
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-    - ALL
+# Default vLLM settings
+# Release tags are resolved from Chart.appVersion unless explicitly overridden.
+# Production registries should mirror and pin the resolved digest after
+# policy/signature verification.
+vllm:
+  # CUDA 13.0 image index digest for vLLM v0.33.0 (linux/amd64 + linux/arm64).
+  defaultImage: "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
+  # Purpose-built Xet-aware image; dependencies are installed at image build time.
+  huggingFaceInitializerImage: ""
+  customStorageInitializerImage: "ckodex/storage-initializer:v0.1.0"
+  cpuRequest: "2"
+  memoryRequest: "4Gi"
+  terminationGracePeriodSeconds: 60
+  asrCPURequest: "1"
+  asrMemoryRequest: "2Gi"
+  asrTerminationGracePeriodSeconds: 30
+  cacheCPURequest: "1"
+  cacheMemoryRequest: "1Gi"
 
-service:
-  type: ClusterIP
-  port: 80
+  # v0.20.0 features
+  cpuKvOffloading:
+    enabled: false     # general CPU KV cache offloading
+  dbo:
+    enabled: false     # Dual-Batch Overlap for throughput
 
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 100m
-    memory: 128Mi
+# hf-mount:// is an explicit opt-in path. Install hf-csi-driver v0.14.0
+# separately before using it; the chart does not install privileged node software.
+# Plain hf:// downloads do not require the CSI driver.
+
+# Gemma 4 Model Profiles
+# Pre-configured resource profiles for each model variant.
+gemma4:
+  e2b:
+    enabled: true
+    resources:
+      requests: { cpu: "4", memory: "16Gi", nvidia.com/gpu: "1" }
+      limits:   { cpu: "8", memory: "32Gi", nvidia.com/gpu: "1" }
+  e4b:
+    enabled: false
+    resources:
+      requests: { cpu: "8", memory: "32Gi", nvidia.com/gpu: "1" }
+      limits:   { cpu: "16", memory: "64Gi", nvidia.com/gpu: "1" }
+  "26b-a4b":
+    enabled: false
+    moe: true          # Mixture-of-Experts flag
+    resources:
+      requests: { cpu: "16", memory: "64Gi", nvidia.com/gpu: "1" }
+      limits:   { cpu: "32", memory: "128Gi", nvidia.com/gpu: "1" }
+  "31b":
+    enabled: false
+    tensorParallel: 2
+    resources:
+      requests: { cpu: "16", memory: "128Gi", nvidia.com/gpu: "2" }
+      limits:   { cpu: "32", memory: "256Gi", nvidia.com/gpu: "2" }
+
+# Admitted Inference Engines
+# Configures runtime images, versions, and tiers for supported engines.
+engines:
+  vllm:
+    enabled: true
+    tier: 3
+    supportedHardware:
+      - nvidia
+      - cpu
+  tensorfold:
+    enabled: true
+    version: "v0.31.0"
+    image: "ghcr.io/ckodex-labs/tensorfold-runtime:v0.31.0"
+    tier: 3
+    supportedHardware:
+      - nvidia
+    features:
+      exl3Quantization: true
+      tensorParallel: true
+      decisionInference: true
+  sglang:
+    enabled: true
+    version: "v0.5.18"
+    image: "lmsysorg/sglang:v0.5.18@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1"
+    tier: 2
+    supportedHardware:
+      - nvidia
+
+# Hardware Options and Accelerator Profiles
+# Maps hardware footprints to admitted engines and model targets.
+hardwareProfiles:
+  rtx6000:
+    name: "RTX-PRO-6000"
+    accelerator: "nvidia"
+    deviceCount: 4
+    memoryPerGpu: "48Gi"
+    recommendedEngine: "tensorfold"
+    targetModels:
+      - "GLM-5.3-EXL3"
+    nodeSelector:
+      nvidia.com/gpu.product: "RTX-PRO-6000"
+  hopper:
+    name: "H100-SXM"
+    accelerator: "nvidia"
+    deviceCount: 8
+    memoryPerGpu: "80Gi"
+    recommendedEngine: "vllm"
+    nodeSelector:
+      nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
+
+# GLM-5.3 Model Profiles
+# Resource and parallelism profiles for GLM-5.3 variants.
+glm53:
+  exl3Rtx6000:
+    enabled: true
+    engine: tensorfold
+    runtimeImage: "ghcr.io/ckodex-labs/tensorfold-runtime:v0.31.0"
+    tensorParallel: 4
+    pipelineParallel: 1
+    quantization: exl3
+    hardware:
+      accelerator: nvidia
+      model: "RTX-PRO-6000"
+      count: 4
+    resources:
+      requests: { cpu: "32", memory: "128Gi", nvidia.com/gpu: "4" }
+      limits:   { cpu: "32", memory: "128Gi", nvidia.com/gpu: "4" }
+
+# Model Serving Profiles
+# Standardized specifications for decision-class and specialized workloads.
+modelServingProfiles:
+  decisionEvaluator:
+    enabled: true
+    workloadClass: decision
+    decisionCapabilities:
+      - predicate
+      - choice
+      - score
+    engine: tensorfold
+    targetHardware: "4x-rtx-pro-6000"
+    quantization: exl3
+    sla:
+      maxLatencyMillis: 500
+      timeoutSeconds: 60
+      targetAvailability: "99.9%"
+      targetThroughputRPS: 50
+    inferencePolicy:
+      temperature: 0.0
+      topP: 1.0
+      deterministic: true
+      enforceStructuredOutput: true
+      maxTokens: 8192
+
+# EPP Scheduler defaults
+scheduler:
+  image: "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:024188e998f516879f68532016ca24fabca00afbdcc2af9a61b17634e197df2c"
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# SPIRE configuration
+spire:
+  enabled: false
+  server:
+    image: "ghcr.io/spiffe/spire-server:1.15.1"
+    replicas: 1
+  agent:
+    image: "ghcr.io/spiffe/spire-agent:1.15.1"
+  trustDomain: "ckodex.com"
+
+# Gateway API
+gateway:
+  className: "envoy"
+  # Namespace where Envoy Gateway creates its data-plane proxy pods.
+  dataPlaneNamespace: "envoy-gateway-system"
+
+# Resilience defaults
+resilience:
+  circuitBreaker:
+    failureThreshold: 5
+    successThreshold: 3
+    timeoutSeconds: 30
+  retry:
+    maxRetries: 3
+    baseBackoffMs: 100
+  bulkhead:
+    maxConcurrent: 100
+  timeoutCascade:
+    clientSeconds: 30
+    gatewaySeconds: 25
+    inferenceSeconds: 20
+
+# Observability
+observability:
+  otel:
+    enabled: true
+    endpoint: ""
+  logging:
+    level: info
+    format: json
+
+# Feature Gates
+# Controls which subsystems and experimental features are enabled.
+features:
+  # enableSecurity enables SPIFFE/SPIRE, eBPF, OPA, and Vault integration.
+  enableSecurity: false
+  # enableAutoscaler enables HPA/KEDA/WVA autoscaling.
+  enableAutoscaler: true
+  # enableGateway enables Gateway API resource management.
+  enableGateway: true
+  # enableScheduler enables the EPP scheduler.
+  enableScheduler: true
+  # enableExperimentalAgents enables the Agent and SkillRegistry controllers (M3).
+  enableExperimentalAgents: false
+  # enableExperimentalHardwareSelection enables hardware-specific image tag selection.
+  enableExperimentalHardwareSelection: false
+  # enableExperimentalStatusHardening enables the new DeploymentReady status check.
+  enableExperimentalStatusHardening: false
+
+# Chaos engine
+chaos:
+  enabled: false
+
+# Network policies
+networkPolicies:
+  enabled: true
+
+# managedNamespaces lists namespaces where the operator SA is granted
+# namespace-scoped workload permissions and where the shared ckodex-epp
+# ServiceAccount, Role, and RoleBinding are pre-provisioned.
+# If unset, the operator namespace is used as an implicit managed namespace
+# to avoid a silent no-op install. For every workload namespace, add it here
+# and label it with ckodex.com/tenant-id=<id> to activate per-tenant quota
+# enforcement.
+# Example:
+#   managedNamespaces:
+#     - team-a
+#     - team-b
+managedNamespaces: []
+
+# Air-gap and private registry support.
+# When mirrorURL is set, the operator rewrites hf:// model URIs to hf-mirror:// at admission
+# time so the storage initializer fetches from your internal HuggingFace Hub proxy instead of
+# the public huggingface.co. The operator itself also uses mirrorURL for all HF API calls.
+# mirrorURL must include scheme: e.g. "https://hf-mirror.corp.internal"
+registry:
+  mirrorURL: ""
+
+# Outbound HTTP/HTTPS proxy for storage client and OIDC provider requests.
+# Mirrors the standard Go proxy env vars; set these when the operator runs in an environment
+# that requires a forward proxy to reach the internet (HuggingFace Hub, ECR, OCI registries).
+proxy:
+  # httpProxy: "http://proxy.corp.internal:3128"
+  # httpsProxy: "http://proxy.corp.internal:3128"
+  # noProxy: "localhost,127.0.0.1,.corp.internal"
+  httpProxy: ""
+  httpsProxy: ""
+  noProxy: ""
 
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}

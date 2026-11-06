@@ -72,6 +72,9 @@ func run() error {
 	if err := validateBetaConversionIdentity(ctx); err != nil {
 		return err
 	}
+	if err := validateChartParity(); err != nil {
+		return err
+	}
 	return validateStaticRBAC()
 }
 
@@ -558,6 +561,23 @@ func findCertificate(
 	for _, object := range objects {
 		if object.GetKind() == "Certificate" && strings.HasSuffix(object.GetName(), suffix) {
 			return object
+		}
+	}
+	return nil
+}
+
+func validateChartParity() error {
+	for _, relPath := range []string{"Chart.yaml", "values.yaml"} {
+		f1, err := os.ReadFile("deploy/helm/" + relPath)
+		if err != nil {
+			return fmt.Errorf("read deploy/helm/%s: %w", relPath, err)
+		}
+		f2, err := os.ReadFile("charts/ckodex-kserve-llm-operator/" + relPath)
+		if err != nil {
+			return fmt.Errorf("read charts/ckodex-kserve-llm-operator/%s: %w", relPath, err)
+		}
+		if !bytes.Equal(f1, f2) {
+			return fmt.Errorf("chart parity drift in %s between deploy/helm and charts/ckodex-kserve-llm-operator", relPath)
 		}
 	}
 	return nil

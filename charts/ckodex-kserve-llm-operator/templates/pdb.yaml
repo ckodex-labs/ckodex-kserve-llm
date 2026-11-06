@@ -1,0 +1,27 @@
+{{- /*
+PodDisruptionBudget for the operator Deployment.
+Guarantees at least 1 replica is available during voluntary disruptions (node drain,
+rolling upgrade). Without this, the cluster scheduler may evict both replicas simultaneously,
+causing a reconcile gap that can last until a new pod is scheduled.
+
+minAvailable: 1 is the conservative choice: it blocks the node drain if only 1 pod is
+running (e.g. during initial rollout or when a pod is unhealthy). Operators that need
+zero-downtime upgrades can switch to maxUnavailable: 1 instead, which allows drains to
+proceed even when all pods are healthy.
+*/}}
+{{- if gt (int .Values.replicaCount) 1 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-controller-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ckodex-kserve-llm-operator
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+{{- end }}

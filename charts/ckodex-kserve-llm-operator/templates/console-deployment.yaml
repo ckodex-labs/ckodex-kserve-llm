@@ -3,64 +3,69 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "ckodex-kserve-llm-operator.fullname" . }}-console
+  namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "ckodex-kserve-llm-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/name: ckodex-kserve-llm-console
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
     component: console
 spec:
   replicas: {{ .Values.console.replicas }}
   revisionHistoryLimit: 3
   selector:
     matchLabels:
-      {{- include "ckodex-kserve-llm-operator.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/name: ckodex-kserve-llm-console
+      app.kubernetes.io/instance: {{ .Release.Name }}
       component: console
   template:
     metadata:
       labels:
-        {{- include "ckodex-kserve-llm-operator.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/name: ckodex-kserve-llm-console
+        app.kubernetes.io/instance: {{ .Release.Name }}
         component: console
     spec:
       serviceAccountName: {{ include "ckodex-kserve-llm-operator.consoleServiceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.console.podSecurityContext | nindent 8 }}
       containers:
-      - name: console
-        image: "{{ required "console.image.repository is required when console.enabled=true" .Values.console.image.repository }}:{{ .Values.console.image.tag | default .Chart.AppVersion }}"
-        imagePullPolicy: {{ .Values.console.image.pullPolicy }}
-        ports:
-        - name: http
-          containerPort: 3000
-          protocol: TCP
-        env:
-        - name: CKODEX_AUDIT_LOG_PATH
-          value: "/var/log/ckodex/audit.jsonl"
-        - name: CKODEX_SPIRE_REGISTRATION_NAMESPACE
-          value: {{ .Values.console.spireRegistrationNamespace | quote }}
-        securityContext:
-          {{- toYaml .Values.securityContext | nindent 10 }}
-        resources:
-          {{- toYaml .Values.console.resources | nindent 10 }}
-        volumeMounts:
-        - name: audit-logs
-          mountPath: /var/log/ckodex
-          readOnly: true
-        livenessProbe:
-          httpGet:
-            path: /api/health
-            port: 3000
-          initialDelaySeconds: 30
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /api/health
-            port: 3000
-          initialDelaySeconds: 15
-          periodSeconds: 10
+        - name: console
+          image: "{{ required "console.image.repository is required when console.enabled=true" .Values.console.image.repository }}:{{ include "ckodex-kserve-llm-operator.consoleImageTag" . }}"
+          imagePullPolicy: {{ .Values.console.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: CKODEX_AUDIT_LOG_PATH
+              value: /var/log/ckodex/audit.jsonl
+            - name: CKODEX_SPIRE_REGISTRATION_NAMESPACE
+              value: {{ .Values.console.spireRegistrationNamespace | quote }}
+          securityContext:
+            {{- toYaml .Values.console.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.console.resources | nindent 12 }}
+          volumeMounts:
+            - name: audit-logs
+              mountPath: /var/log/ckodex
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
       volumes:
-      - name: audit-logs
-        {{- if .Values.audit.persistence.enabled }}
-        persistentVolumeClaim:
-          claimName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-audit
-        {{- else }}
-        emptyDir: {}
-        {{- end }}
+        - name: audit-logs
+          {{- if .Values.audit.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "ckodex-kserve-llm-operator.fullname" . }}-audit
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
 {{- end }}

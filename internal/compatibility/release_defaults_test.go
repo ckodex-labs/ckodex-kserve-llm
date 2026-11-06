@@ -15,10 +15,10 @@ import (
 func TestReleaseDefaultsStayAligned(t *testing.T) {
 	cfg := config.DefaultOperatorConfig()
 
-	assert.Equal(t, "vllm/vllm-openai:v0.28.0", controller.DefaultVLLMImage)
+	assert.Equal(t, "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e", controller.DefaultVLLMImage)
 	assert.Equal(t, controller.DefaultVLLMImage, controllerapi.VLLMImage)
 	assert.Equal(t, controller.DefaultVLLMImage, cfg.Defaults.RuntimeImage)
-	assert.Equal(t, "kserve/storage-initializer:v0.20.0", controller.StorageInitializerImage)
+	assert.Equal(t, "kserve/storage-initializer:v0.21.0@sha256:3a3a6a8053478c8d8d90f96fc5e54c1892c07784102dda70104374d4f89a3672", controller.StorageInitializerImage)
 	assert.Equal(t, controller.StorageInitializerImage, controllerapi.StorageInitializerImage)
 	assert.Equal(t, controller.StorageInitializerImage, cfg.Defaults.StorageInitializerImage)
 	assert.Equal(t, controllerapi.HuggingFaceInitializerImage, cfg.Defaults.HuggingFaceInitializerImage)

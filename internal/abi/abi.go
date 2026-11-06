@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0.
 
 // Package abi defines the canonical OpenInferenceSpec Application Binary Interface (ABI).
 // It establishes a stable, pure domain seam across heterogeneous execution backends
-// (KServe, llm-d, vLLM v0.31.0, TensorFold, SGLang) without binding to transport,
+// (KServe, llm-d, vLLM v0.33.0, TensorFold, SGLang) without binding to transport,
 // container runtime flags, or Kubernetes-specific schemas.
 package abi
 

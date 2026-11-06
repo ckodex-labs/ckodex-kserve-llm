@@ -1,0 +1,50 @@
+---
+# Meta AI Segment Anything Model 3 (SAM 3) — Promptable Concept Segmentation foundation model.
+# Supports text-guided concept masks, bounding box prompts, and video object tracking.
+#
+# Apply:
+#   kubectl apply -f config/samples/multimodalinferenceservice_sam3_segmentation.yaml
+#
+# Verify:
+#   kubectl get mmsvc -n ckodex-inference
+#
+# Test (with port-forward):
+#   kubectl port-forward svc/sam3 8000:8000 -n ckodex-inference
+#   curl http://localhost:8000/v1/images/segmentations \
+#     -H "Content-Type: application/json" \
+#     -d '{
+#       "model": "facebook/sam3",
+#       "image": "https://example.com/scene.jpg",
+#       "prompt": "yellow school bus"
+#     }'
+apiVersion: serving.ckodex.com/v1alpha2
+kind: MultimodalInferenceService
+metadata:
+  name: sam3
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+    serving.ckodex.com/task: segmentation
+spec:
+  model:
+    name: sam3
+    uri: hf://facebook/sam3
+
+  task: segmentation
+  runtime: vllm
+
+  replicas: 1
+
+  template:
+    spec:
+      containers:
+        - name: vllm
+          resources:
+            requests:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "16"
+              memory: 64Gi
+              nvidia.com/gpu: "1"

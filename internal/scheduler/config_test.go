@@ -7,6 +7,7 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -44,13 +45,14 @@ func minimalLLMSvc(name, ns string) *servingv1alpha2.LLMInferenceService {
 
 // ---- buildDefaultConfig ----------------------------------------------------
 
-func TestBuildDefaultConfig_ContainsServiceName(t *testing.T) {
+func TestBuildDefaultConfig_UsesRouterV1Config(t *testing.T) {
 	r := &ConfigReconciler{}
 	svc := minimalLLMSvc("my-model", "default")
 	data := r.buildDefaultConfig(svc)
 	yaml, ok := data["scheduler.yaml"]
 	require.True(t, ok, "scheduler.yaml key must be present")
-	assert.Contains(t, yaml, "my-model")
+	assert.Contains(t, yaml, "apiVersion: llm-d.ai/v1")
+	assert.Contains(t, yaml, "kind: EndpointPickerConfig")
 }
 
 func TestBuildDefaultConfig_ContainsExpectedPlugins(t *testing.T) {
@@ -83,9 +85,29 @@ func TestBuildDefaultConfig_ValidYAMLProfile(t *testing.T) {
 	yaml := data["scheduler.yaml"]
 
 	assert.Contains(t, yaml, "schedulingProfiles:")
-	assert.Contains(t, yaml, "apiVersion: llm-d.ai/v1alpha1")
+	assert.Contains(t, yaml, "apiVersion: llm-d.ai/v1")
 	assert.Contains(t, yaml, "- name: default")
 	assert.Contains(t, yaml, "plugins:")
+}
+
+func TestInlineSchedulingProfilesEmitsNumericWeights(t *testing.T) {
+	profiles, err := inlineSchedulingProfiles([]servingv1alpha2.SchedulingProfile{{
+		Name:    "default",
+		Plugins: []servingv1alpha2.WeightedPluginRef{{PluginRef: "queue-scorer", Weight: "2.5"}},
+	}})
+	require.NoError(t, err)
+
+	data, err := json.Marshal(profiles)
+	require.NoError(t, err)
+	assert.JSONEq(t, `[{"name":"default","plugins":[{"pluginRef":"queue-scorer","weight":2.5}]}]`, string(data))
+}
+
+func TestInlineSchedulingProfilesRejectsNonNumericWeight(t *testing.T) {
+	_, err := inlineSchedulingProfiles([]servingv1alpha2.SchedulingProfile{{
+		Name:    "default",
+		Plugins: []servingv1alpha2.WeightedPluginRef{{PluginRef: "queue-scorer", Weight: "many"}},
+	}})
+	require.Error(t, err)
 }
 
 // ---- Reconcile — ConfigMap create/update -----------------------------------

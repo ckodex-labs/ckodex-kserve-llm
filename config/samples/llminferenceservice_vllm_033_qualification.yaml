@@ -1,0 +1,64 @@
+# Optional hardware acceptance path for the default vLLM v0.33.0 CUDA 13 image.
+# Runtime and node-driver acceptance have not yet been demonstrated.
+apiVersion: serving.ckodex.com/v1
+kind: LLMInferenceService
+metadata:
+  name: qwen3-vllm-033-qualification
+  namespace: default
+  labels:
+    serving.ckodex.com/profile: vllm-v0.33.0-qualification
+  annotations:
+    serving.ckodex.com/runtime-qualification: vllm-v0.33.0
+spec:
+  model:
+    name: Qwen/Qwen3-0.6B
+    uri: hf://Qwen/Qwen3-0.6B
+    revision: c1899de289a04d12100db370d81485cdf75e47ca
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+          imagePullPolicy: IfNotPresent
+          args:
+            - --allowed-origins
+            - '[]'
+            - --allowed-methods
+            - '["GET","POST"]'
+            - --allowed-headers
+            - '["Authorization","Content-Type","OpenAI-Organization","OpenAI-Project","X-CKodex-Adapter","X-Request-ID"]'
+            - --disable-fastapi-docs
+            - --no-allow-credentials
+            - --no-trust-remote-code
+            - --max-model-len
+            - "4096"
+            - --max-num-seqs
+            - "4"
+          env:
+            - name: VLLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vllm-api-credentials
+                  key: api-key
+            - name: VLLM_MAX_N_SEQUENCES
+              value: "128"
+            - name: VLLM_MEDIA_URL_ALLOW_REDIRECTS
+              value: "0"
+            - name: VLLM_SERVER_DEV_MODE
+              value: "0"
+          resources:
+            requests:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+  router:
+    gateway:
+      existingRef:
+        name: vllm-qualification-gateway
+    route:
+      httpRoute: {}

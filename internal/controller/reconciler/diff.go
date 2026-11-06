@@ -2,8 +2,11 @@ package reconciler
 
 import (
 	"context"
+	_ "crypto/sha256" // Register digest algorithms supported by Kubernetes image parsing.
+	_ "crypto/sha512"
 	"strings"
 
+	"github.com/distribution/reference"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -135,6 +138,9 @@ func ContainersEqual(a, b []corev1.Container) bool {
 		if a[i].Image != b[i].Image {
 			return false
 		}
+		if effectivePullPolicy(a[i]) != effectivePullPolicy(b[i]) {
+			return false
+		}
 		if !equality.Semantic.DeepEqual(a[i].Args, b[i].Args) {
 			return false
 		}
@@ -152,6 +158,24 @@ func ContainersEqual(a, b []corev1.Container) bool {
 		}
 	}
 	return true
+}
+
+// effectivePullPolicy mirrors Kubernetes container defaulting when the policy
+// is omitted. An invalid image defaults to IfNotPresent, as in the API server.
+func effectivePullPolicy(container corev1.Container) corev1.PullPolicy {
+	if container.ImagePullPolicy != "" {
+		return container.ImagePullPolicy
+	}
+	name, err := reference.ParseNormalizedNamed(container.Image)
+	if err != nil {
+		return corev1.PullIfNotPresent
+	}
+	tagged, hasTag := name.(reference.Tagged)
+	_, hasDigest := name.(reference.Digested)
+	if (hasTag && tagged.Tag() == "latest") || (!hasTag && !hasDigest) {
+		return corev1.PullAlways
+	}
+	return corev1.PullIfNotPresent
 }
 
 // EnvsEqual compares two slices of environment variables as sets (order-insensitive).

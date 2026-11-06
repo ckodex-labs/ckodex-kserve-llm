@@ -88,7 +88,7 @@ func inventoryKey(version, kind string) string {
 
 func crdSpecInventory() []crdSpecInventoryEntry {
 	return []crdSpecInventoryEntry{
-		{version: "v1alpha2", kind: "Agent", typeOf: reflect.TypeOf(servingv1alpha2.AgentConfiguration{}), fields: []string{"identity", "modelRef", "skills", "tools", "maxTokens", "template"}},
+		{version: "v1alpha2", kind: "Agent", typeOf: reflect.TypeOf(servingv1alpha2.AgentConfiguration{}), fields: []string{"identity", "modelRef", "skills", "tools", "utcpManuals", "maxTokens", "template"}},
 		{version: "v1alpha2", kind: "SkillRegistry", typeOf: reflect.TypeOf(servingv1alpha2.SkillRegistrySpec{}), fields: []string{"entries"}},
 		{version: "v1alpha2", kind: "ModelOnboarding", typeOf: reflect.TypeOf(servingv1alpha2.ModelOnboardingSpec{}), fields: []string{"modelRef", "stages", "rollbackOnFailure"}},
 		{version: "v1alpha2", kind: "AIPack", typeOf: reflect.TypeOf(servingv1alpha2.AIPackSpec{}), fields: []string{"kind", "family", "source", "composition", "attestation", "policy", "baseModel", "lora", "fineTune", "skill", "tool", "mcpServer", "promptTemplate", "guardrail", "retrievalIndex", "dataset", "harness", "eval", "workflow", "policyBundle"}},

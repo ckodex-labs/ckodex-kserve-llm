@@ -8,13 +8,13 @@ package controller
 const (
 	// DefaultVLLMImage is the default vLLM container image.
 	// Pinned to a specific version — never use :latest (supply chain risk, air-gapped incompatible).
-	// Update: change the tag, rebuild, then update the digest comment below.
-	// Verify: cosign verify vllm/vllm-openai:v0.28.0 --certificate-oidc-issuer=https://token.actions.githubusercontent.com
-	DefaultVLLMImage = "vllm/vllm-openai:v0.28.0"
+	// Update the tag and digest together after verifying the upstream manifest.
+	// The active release is vllm/vllm-openai:v0.33.0.
+	DefaultVLLMImage = "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
 
 	// StorageInitializerImage is the default KServe init container image for standard storage (s3, gs, etc).
 	// Pinned — :latest is an air-gapped deployment blocker and violates supply chain security policy.
-	StorageInitializerImage = "kserve/storage-initializer:v0.20.0"
+	StorageInitializerImage = "kserve/storage-initializer:v0.21.0@sha256:3a3a6a8053478c8d8d90f96fc5e54c1892c07784102dda70104374d4f89a3672"
 	// CKodexStorageInitializerImage is our custom Go image supporting s3://, hf://, GitHub, GitLab, etc.
 	// Build with: make storage-initializer-load   (builds + loads into KIND)
 	// Image source: Dockerfile target `storage-initializer`

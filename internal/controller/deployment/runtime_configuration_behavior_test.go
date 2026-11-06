@@ -15,7 +15,21 @@ func TestEnsureVLLMEnvDefaultsModelAndDoesNotOverwriteExistingValues(t *testing.
 	(&Builder{}).ensureVLLMEnv(service, pod)
 	assert.Equal(t, "/custom", envValue(pod.Containers[0].Env, "HOME"))
 	assert.Equal(t, "hf:..org.model", envValue(pod.Containers[0].Env, "OIS_MODEL_ID"))
+	assert.Equal(t, "128", envValue(pod.Containers[0].Env, "VLLM_MAX_N_SEQUENCES"))
+	assert.Equal(t, "0", envValue(pod.Containers[0].Env, "VLLM_SERVER_DEV_MODE"))
+	assert.Equal(t, "0", envValue(pod.Containers[0].Env, "VLLM_MEDIA_URL_ALLOW_REDIRECTS"))
 	(&Builder{}).ensureVLLMEnv(service, &corev1.PodSpec{})
+}
+
+func TestEnsureVLLMEnvSecurityDefaultsAreVLLMOnlyAndRespectExplicitValues(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "sglang"},
+	}
+	pod := &corev1.PodSpec{Containers: []corev1.Container{{Env: []corev1.EnvVar{{Name: "VLLM_MAX_N_SEQUENCES", Value: "8"}}}}}
+	(&Builder{}).ensureVLLMEnv(service, pod)
+	assert.Equal(t, "8", envValue(pod.Containers[0].Env, "VLLM_MAX_N_SEQUENCES"))
+	assert.Empty(t, envValue(pod.Containers[0].Env, "VLLM_SERVER_DEV_MODE"))
+	assert.Empty(t, envValue(pod.Containers[0].Env, "VLLM_MEDIA_URL_ALLOW_REDIRECTS"))
 }
 
 func TestGPUDeviceSelectionDefaultsAndPreservesExplicitValue(t *testing.T) {

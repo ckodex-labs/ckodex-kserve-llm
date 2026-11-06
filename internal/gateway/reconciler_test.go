@@ -35,9 +35,34 @@ func TestBuildCanaryHTTPRoute_TwoBackendsPerRule(t *testing.T) {
 	llmSvc := canarySvc("canary-model", "default", "stable-model", 20)
 	route := BuildCanaryHTTPRoute(llmSvc, nil)
 
-	require.Len(t, route.Spec.Rules, 7, "same 7 paths as standard route")
+	require.Len(t, route.Spec.Rules, 9, "same approved paths as standard route")
 	for i, rule := range route.Spec.Rules {
 		assert.Len(t, rule.BackendRefs, 2, "rule[%d] must have canary+stable backends", i)
+	}
+}
+
+func TestBuildCanaryHTTPRoute_SandboxSharesPathMethodAllowlist(t *testing.T) {
+	llmSvc := canarySvc("canary", "default", "stable", 20)
+	adapter := servingv1alpha2.LLMLoraAdapter{Spec: servingv1alpha2.LLMLoraAdapterSpec{
+		Sandbox: &servingv1alpha2.SandboxConfig{Enable: true, HeaderValue: "adapter-test"},
+	}}
+	route := BuildCanaryHTTPRoute(llmSvc, []servingv1alpha2.LLMLoraAdapter{adapter})
+	require.Len(t, route.Spec.Rules, 18)
+	for index, rule := range route.Spec.Rules[:9] {
+		require.Len(t, rule.BackendRefs, 1, "sandbox rule[%d] must route only to canary", index)
+		assert.Equal(t, gwapiv1.ObjectName("canary"), rule.BackendRefs[0].Name)
+		for _, match := range rule.Matches {
+			require.NotNil(t, match.Path)
+			require.NotNil(t, match.Path.Value)
+			assert.NotEqual(t, "/", *match.Path.Value, "sandbox route must not use a catch-all path")
+			assert.NotNil(t, match.Method, "sandbox route must constrain the HTTP method")
+			assert.Contains(t, match.Headers, gwapiv1.HTTPHeaderMatch{Name: "x-ckodex-adapter", Value: "adapter-test"})
+		}
+		require.Len(t, rule.Filters, 1)
+		assert.NotNil(t, rule.Filters[0].ResponseHeaderModifier)
+	}
+	for index, rule := range route.Spec.Rules[9:] {
+		assert.Len(t, rule.BackendRefs, 2, "standard canary rule[%d] must split traffic", index)
 	}
 }
 
@@ -181,6 +206,7 @@ func TestReconciler_Reconcile_UpdatesExistingGateway(t *testing.T) {
 			GatewayClassName: "stale-class",
 		},
 	}
+	existing.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(llmSvc, servingv1alpha2.SchemeGroupVersion.WithKind("LLMInferenceService"))}
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(llmSvc, existing).Build()
 
 	r := &Reconciler{Client: fakeClient, Scheme: scheme}
@@ -200,6 +226,7 @@ func TestReconciler_Reconcile_UpdatesExistingHTTPRoute(t *testing.T) {
 	existing := &gwapiv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{Name: "svc-httproute", Namespace: "default"},
 	}
+	existing.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(llmSvc, servingv1alpha2.SchemeGroupVersion.WithKind("LLMInferenceService"))}
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(llmSvc, existing).Build()
 
 	r := &Reconciler{Client: fakeClient, Scheme: scheme}
@@ -208,7 +235,7 @@ func TestReconciler_Reconcile_UpdatesExistingHTTPRoute(t *testing.T) {
 	var updated gwapiv1.HTTPRoute
 	require.NoError(t, fakeClient.Get(context.Background(),
 		k8stypes.NamespacedName{Name: "svc-httproute", Namespace: "default"}, &updated))
-	assert.Len(t, updated.Spec.Rules, 10, "updated route must carry 10 path rules (7 original + /version, /server_info, /v1/responses)")
+	assert.Len(t, updated.Spec.Rules, 9, "updated route must carry only the approved inference and health path rules")
 }
 
 func TestReconciler_Reconcile_IsIdempotent(t *testing.T) {
@@ -288,6 +315,7 @@ func TestReconciler_Reconcile_UpdatesExistingGRPCRoute(t *testing.T) {
 	existing := &gwapiv1.GRPCRoute{
 		ObjectMeta: metav1.ObjectMeta{Name: "svc-grpcroute", Namespace: "default"},
 	}
+	existing.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(llmSvc, servingv1alpha2.SchemeGroupVersion.WithKind("LLMInferenceService"))}
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(llmSvc, existing).Build()
 
 	r := &Reconciler{Client: fakeClient, Scheme: scheme, EnableGRPC: true}

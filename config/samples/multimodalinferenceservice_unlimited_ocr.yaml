@@ -1,0 +1,59 @@
+---
+# Baidu Unlimited-OCR-2 — 3B vision-language document parsing and OCR foundation model.
+# Optimized for long-horizon multi-page parsing into markdown, tables, and formulas.
+#
+# Apply:
+#   kubectl apply -f config/samples/multimodalinferenceservice_unlimited_ocr.yaml
+#
+# Verify:
+#   kubectl get mmsvc -n ckodex-inference
+#
+# Test (with port-forward):
+#   kubectl port-forward svc/unlimited-ocr-2 8000:8000 -n ckodex-inference
+#   curl http://localhost:8000/v1/chat/completions \
+#     -H "Content-Type: application/json" \
+#     -d '{
+#       "model": "baidu/Unlimited-OCR-2",
+#       "messages": [{
+#         "role": "user",
+#         "content": [
+#           {"type": "image_url", "image_url": {"url": "https://example.com/document-page1.png"}},
+#           {"type": "text", "text": "Parse document layout and extract all text, tables, and formulas into markdown."}
+#         ]
+#       }]
+#     }'
+apiVersion: serving.ckodex.com/v1alpha2
+kind: MultimodalInferenceService
+metadata:
+  name: unlimited-ocr-2
+  namespace: ckodex-inference
+  labels:
+    app.kubernetes.io/part-of: ckodex-llm-operator
+    serving.ckodex.com/task: ocr
+spec:
+  model:
+    name: Unlimited-OCR-2
+    uri: hf://baidu/Unlimited-OCR-2
+
+  task: ocr
+  runtime: vllm
+  # runtimeImage: defaults to vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+
+  # Unlimited-OCR-2 supports long document sequences and multi-image batches
+  maxImagesPerPrompt: 16
+
+  replicas: 1
+
+  template:
+    spec:
+      containers:
+        - name: vllm
+          resources:
+            requests:
+              cpu: "8"
+              memory: 32Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "16"
+              memory: 64Gi
+              nvidia.com/gpu: "1"

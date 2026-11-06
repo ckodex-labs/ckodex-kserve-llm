@@ -35,6 +35,10 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Priority:** P2
 - **Context:** `dagger/module.go:Lula` added (2026-06-13). Downloads binary,
   verifies checksum via sha256sum, runs `lula validate`, returns assessment file.
+- **Superseded:** the Lula function was retired. OSKAL schema validation and
+  resource checks now run separately. OSKAL projects saved check results into
+  assessment observations. The collector was exercised against an isolated
+  Kubernetes 1.35 API; verification against a deployed cluster remains open.
 - **Reference:** `dagger/module.go`
 
 ### L-CI-004 — Coverage gate in module `Test` function
@@ -48,6 +52,18 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 ---
 
 ## Operator
+
+### L-OP-018 — Reconcile all operator-managed container fields
+
+- **Status:** open
+- **Priority:** P1
+- **Context:** The GPU kind smoke observed that changing `imagePullPolicy` did
+  not update the Deployment. The comparison now handles that field, but still
+  omits other managed fields including command, security context, probes, ports,
+  lifecycle and working directory. Their reconciliation needs an explicit
+  ownership contract, Kubernetes default normalization and real API convergence
+  evidence; the pull-policy correction does not establish those properties.
+- **Reference:** `internal/controller/reconciler/diff.go`
 
 ### L-OP-016 — Keep Gateway API CRD ownership singular in Nightly KIND
 
@@ -121,10 +137,33 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 ### L-OP-006 — Validate LMCache live behavior without conflating it with model-weight caching
 
-- **Status:** implementation-complete; live acceptance open
-- **Priority:** P1
-- **Context:** Typed in-process and upstream `LMCacheEngine` multiprocess configuration are reconciled while the original low-level connector contract remains compatible. A live cache-hit, transfer-tail-latency, image/ABI, and failover run remains required before promotion. `LocalModelCache` continues to own model-weight placement.
-- **Reference:** ADR-009, `internal/scheduler/epp_manager.go`
+- **Status:** in-progress
+- **Priority:** P0
+- **Context:** A real in-process reload returned different token IDs from the
+  cold/control result despite matching prompt token IDs and 512 external-cache
+  hits. An unsigned build of an unmerged upstream change, selected through
+  vLLM's dynamic connector API, passed that case and three additional cases;
+  the operator's default connector could not start with that build because its
+  adapter import path changed. A separate v0.5.6 source backport now passes
+  225 CUDA tensor tests and eight bounded end-to-end cases on one RTX 3500,
+  including the original failing case, using the default connector. The patched
+  image is local and unsigned; other hardware and production qualification
+  remain unverified. A multiprocess client failed CUDA IPC buffer mapping on the
+  default engine image.
+  A locally built same-UID engine image, configured through the upstream
+  operator, passed a bounded reload and post-restart parity check. It remains
+  unsigned, privileged, and local-only; the setup script can now select an
+  explicitly supplied image digest. Keep LMCache out of promotion until broader
+  parity, supported IPC,
+  failover and recovery are demonstrated.
+  `LocalModelCache` owns model-weight placement separately.
+- **Enforcement gap:** On 2026-11-02, a server-side admission dry run accepted
+  the previously failing in-process configuration. This is a documented
+  promotion restriction, not an enforced runtime quarantine. Reconciliation
+  validation alone does not stop existing or paused deployments. A policy for
+  digest-bound qualification and containment remains to be designed and tested.
+- **Reference:** `docs/beta/lmcache-kind-verification-20261101.md`,
+  `internal/controller/deployment/kv_transfer.go`
 
 ### L-OP-005 — Align LoRA cache ownership with cluster-scoped LocalModelCache
 
@@ -463,7 +502,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 
 - **Status:** done
 - **Priority:** P2
-- **Context:** The operator emits `llm-d.ai/v1alpha1/EndpointPickerConfig` and deploys the Router EPP digest; GIE `v1.5.0` remains installed for the GA `InferencePool` CRD, with hosted fresh-cluster acceptance still required.
+- **Context:** The operator emits `llm-d.ai/v1/EndpointPickerConfig` and pins the Router v1.0.0 EPP digest; GIE `v1.6.2` supplies the GA `InferencePool` CRD. Hosted fresh-cluster acceptance remains required.
 - **Reference:** `internal/scheduler/config.go`, `local/02-prereqs.sh`
 
 ### L-OP-015 — Restrict dynamic RBAC mutation authority
@@ -514,3 +553,10 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
   nested local fields are structurally pinned; behavior mapping and API-server
   conversion evidence remain open beyond LLM.
 - **Evidence/Reference:** `test/conformance/crd_schema_contract_test.go`, `internal/validation/crd_surface_inventory_test.go`, `internal/validation/surface.go`, `surface_test.go`, [remediation-plan.md](remediation-plan.md) items 0.5–0.6
+
+### L-OP-024 — Universal Tool Calling Protocol (UTCP) & Vision Foundation Models
+
+- **Status:** done
+- **Priority:** P1
+- **Context:** Integrated UTCP v1.0.1 specification and `utcp-mcp` bridge into pure domain kernel (`internal/utcp/`). Extended `Agent` and `AIPack` CRDs to natively support UTCP manuals and tool templates (`http`, `grpc`, `cli`, `websocket`, `sse`). Added OCR (`baidu/Unlimited-OCR-2`) and segmentation (`facebook/sam3`) support to `MultimodalInferenceService`. Integrated primary specimen model `tiny-random/kimi-k3.1-pro` into well-known configuration presets for rapid CI and tool-calling validation.
+- **Evidence/Reference:** `internal/utcp/`, `docs/utcp-integration-guide.md`, `COMPONENTS.md`, `config/samples/`

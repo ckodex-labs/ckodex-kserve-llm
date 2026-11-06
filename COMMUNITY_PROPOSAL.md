@@ -25,7 +25,7 @@ We propose a hardened profile that layers the following capabilities onto a stan
 1. Native workload identity with SPIFFE/SPIRE.
 2. Gateway API-based routing for HTTP and gRPC inference traffic.
 3. Open Inference Signals for behavioral telemetry and policy decisions.
-4. OSCAL/Lula validation for build-time compliance evidence.
+4. OSKAL schema validation and explicit resource checks.
 5. Cosign signing and SLSA provenance hooks for release artifacts.
 6. Optional air-gap support for disconnected environments.
 

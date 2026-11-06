@@ -1,43 +1,58 @@
 # Security Compliance & OSCAL Mapping
 
-This document outlines the security controls implemented by the **ckodex-kserve-llm** operator, mapped to the **NIST 800-53 Rev 5** catalog. The project uses **OSCAL (Open Security Controls Assessment Language)** for machine-readable transparency and automated validation via **Lula**.
+This document maps selected operator features and status signals to the **NIST 800-53 Rev 5** catalog. The mappings are not a control-effectiveness determination. The project uses **OSCAL (Open Security Controls Assessment Language)** for machine-readable observations and schema validation via **OSKAL**.
 
 ## 1. Control Mapping (NIST 800-53)
 
 | Control ID | Control Name | Operator Feature | Condition / Evidence |
 | :--- | :--- | :--- | :--- |
-| **AC-4** | Information Flow Enforcement | ToolSurface Istio DPI & default-deny NetworkPolicies | `Compliance-AC-4` condition · `lula/network-policy-validation.yaml` |
-| **AU-2** | Audit Events | Structured JSONL audit logging to shared audit plane | `Compliance-AU-2` condition · `lula/governance-validation.yaml` |
+| **AC-4** | Information Flow Enforcement | NetworkPolicy / ToolSurface-related features (deployment and configuration dependent) | `hack/oscal-assessment/` checks namespace policy presence only |
+| **AU-2** | Audit Events | Audit-related status signal, where implemented and enabled | `Compliance-AU-2` status condition · `hack/oscal-assessment/` |
 | **CA-7** | Continuous Monitoring | Lifecycle (L) plane tracks active/healthy state via Deployment readiness | Lifecycle state = `active` |
-| **IA-9** | Service Identification and Authentication | SPIFFE/SPIRE issues X.509 SVIDs for all inference workloads (non-person entity auth) | `SPIRERegistrationReconciler` · `lula/spire-identity-validation.yaml` |
-| **SI-4** | System Monitoring | Open Inference Signals (OIS) v0.1 behavioral telemetry | `Compliance-SI-4` condition · `lula/ois-validation.yaml` |
-| **SI-7** | Software, Firmware, and Information Integrity | Cosign signatures + SLSA provenance + SBOM attestation | `Compliance-SI-7` condition · `lula/supply-chain-validation.yaml` |
-| **SR-2** | Supply-Chain Risk Management Plan | Supply-Chain Contract v1.0 (the risk-management plan wrapper) | `Compliance-SR-2` condition · `lula/supply-chain-validation.yaml` |
+| **IA-9** | Service Identification and Authentication | SPIRE registration support is optional and deployment dependent; not proof of issued SVIDs or authenticated workloads | `hack/oscal-assessment/` checks registration configuration |
+| **SI-4** | System Monitoring | OIS-related status signal, where implemented and enabled | `Compliance-SI-4` status condition · `hack/oscal-assessment/` |
+| **SI-7** | Software, Firmware, and Information Integrity | Integrity-related status signal, where implemented and enabled | `Compliance-SI-7` status condition · `hack/oscal-assessment/` |
+| **SR-2** | Supply-Chain Risk Management Plan | Provenance-related status signal, where implemented and enabled | `Compliance-SR-2` status condition · `hack/oscal-assessment/` |
 | **SR-4** | Provenance | Release workflow generates SLSA provenance + cosign attestation per artifact | Release OIDC-backed provenance artifacts; tag-driven GHA path |
 
 ## 2. Governed States (L|T|R)
 
 The operator's internal state machine supports these controls, but not every signal should be interpreted as cryptographic proof:
 
-- **Lifecycle (L)**: Maps to **CA-7** (continuous monitoring) — the `active` lifecycle state reflects that health checks are passing continuously, not that a contingency plan (CP-2) exists.
-- **Trust (T)**: Maps to **SI-7** (software integrity — signature/provenance/SBOM verification) and **SR-4** (provenance of artifacts in the supply chain). **AC-4** (information flow enforcement) belongs to the isolation pillar, not the Trust plane.
-- **Risk (R)**: Maps to **SI-4**. If OIS signals detect anomalous tool usage or out-of-bounds metrics, the risk level escalates and can trigger quarantine.
+- **Lifecycle (L)**: The `active` lifecycle state may be relevant to **CA-7** (continuous monitoring); it is not itself proof of continuous monitoring or a contingency plan (CP-2).
+- **Trust (T)**: Trust-related signals may map to **SI-7** (software integrity) and **SR-4** (provenance). The resource checks do not independently verify signatures, provenance, or SBOM attestations. **AC-4** (information flow enforcement) belongs to the isolation mapping, not the Trust plane.
+- **Risk (R)**: Risk-related signals may map to **SI-4**. These OSCAL checks do not establish OIS anomaly detection or automatic quarantine behavior.
 
 ## 3. Automated Assessment
 
-Compliance evidence is generated continuously, but the evidence surface is still environment-dependent:
+OSKAL validates `oscal/component-definition.yaml` using a caller-supplied source
+checkout. `hack/oscal-assessment` evaluates six resource checks against a JSON
+snapshot or a live cluster and emits JSON. The live path requires Kubernetes
+credentials, is bounded by a 30-second request timeout, and reads a snapshot of
+at most 32 MiB. `dagger call oscal-checks` runs evaluator tests; it does not
+assess a cluster or produce assessment results. `oscal-project` converts saved
+check results into schema-validated OSCAL observations using the OSKAL SDK; its
+caller supplies the scope, plan and evaluation time, which are not independently
+verified by the adapter. Projection accepts check input up to 1 MiB. The
+supplied RFC3339 evaluation time is not checked for freshness or compared with
+the time checks actually ran.
 
-- **Build Time**: The Dagger CI pipeline runs `lula validate` against the **OSCAL Component Definition** in `lula/lula-component.yaml`.
-- **Artifacts**: CI exports `oscal-assessment-results.yaml` to `bin/`. On tagged releases, GitHub Actions is configured to publish signing and provenance artifacts for downstream review.
-- **Enforcement**: **FedRAMP Mode** and admission controls enforce configuration policy, but supply-chain verification should only be treated as complete when `Compliance-SR-2` is backed by recorded cryptographic results.
+AC-4 checks only that a NetworkPolicy exists in each service namespace; this
+does not establish enforcement. AU-2, SI-4, SI-7 and SR-2 read status conditions;
+these are not independent cryptographic verification. IA-9 checks registration
+configuration, not SVID issuance or workload authentication.
 
-> **Implementation status:** AC-4, AU-2, IA-9, SI-4, SI-7, and SR-2 have Lula validation definitions. CA-7 and SR-4 are tracked via reconciler conditions and release artifacts respectively.
+For a full assessment or an IA-9-only check, the caller must specify the
+identity mode. Use `--identity-mode direct` for a direct deployment, or
+`--identity-mode vcluster --host-namespace <physical-namespace>` for a
+vcluster deployment. This context is asserted by the caller and is not
+independently verified by the check.
 
----
+```bash
+dagger call oscal-validate --source=. --oskal-source=/path/to/ckx-oskal-001
+dagger call oscal-checks --source=. # evaluator conformance tests only
+go run ./hack/oscal-assessment --live --identity-mode direct
+```
 
-> [!TIP]
-> To run the compliance validation locally, use the following command:
->
-> ```bash
-> lula validate -f lula/lula-component.yaml
-> ```
+The projected artifact includes the check-input digest and OSKAL checkout
+content digest. It does not identify or bind the operator source revision.

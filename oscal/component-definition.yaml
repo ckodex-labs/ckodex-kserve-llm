@@ -1,0 +1,67 @@
+component-definition:
+  uuid: 7BF90550-EA5E-42FE-8729-684D28B81E79
+  metadata:
+    title: KServe LLM Operator - Hardened v1.0.0
+    last-modified: 2026-06-27T21:45:00Z
+    version: 1.0.0
+    oscal-version: 1.1.2
+    parties:
+      - uuid: 11111111-1111-4111-8111-111111111111
+        type: organization
+        name: CKodex Labs
+  components:
+    - uuid: 22222222-2222-4222-8222-222222222222
+      type: software
+      title: kserve-llm-operator
+      description: Hardened KServe LLM Operator with Zero-Trust enforcement
+      purpose: Serve LLMs securely on Kubernetes
+      responsible-roles:
+        - role-id: provider
+          party-uuids:
+            - 11111111-1111-4111-8111-111111111111
+      control-implementations:
+        - uuid: 33333333-3333-4333-8333-333333333333
+          source: https://doi.org/10.6028/NIST.SP.800-53r5
+          description: NIST 800-53 security controls for containerized inference
+          implemented-requirements:
+            - uuid: 44444444-4444-4444-8444-444444444445
+              control-id: ac-4
+              description: >-
+                Check that a NetworkPolicy exists in the namespace of each
+                LLMInferenceService.
+              remarks: >-
+                This presence check does not evaluate policy selectors or rules,
+                establish that the policy applies to the workload, or verify
+                enforcement by the network implementation.
+            - uuid: 44444444-4444-4444-8444-444444444446
+              control-id: au-2
+              description: Ensure audit events are captured and persistent
+            - uuid: 44444444-4444-4444-8444-444444444447
+              control-id: si-7
+              description: >-
+                Ensure software and information integrity via cosign signature
+                verification, SLSA provenance attestation, and CycloneDX SBOM
+                presence on all LLMInferenceService workloads.
+              set-parameters:
+                - param-id: si-7_prm_1
+                  values:
+                    - "cosign signature + SLSA provenance + CycloneDX SBOM"
+              remarks: >-
+                The operator records cryptographic verification results as
+                Kubernetes status conditions (Compliance-SI-7). The resource check evaluates
+                that this condition is True and has reason IntegrityVerified
+                on all LLMInferenceService resources cluster-wide.
+            - uuid: 44444444-4444-4444-8444-444444444448
+              control-id: si-4
+              description: Information system monitoring via Open Inference Signals (OIS)
+            - uuid: 44444444-4444-4444-8444-444444444449
+              control-id: sr-2
+              description: Supply chain risk management via SLSA provenance
+            - uuid: 9E4120B6-FA9B-44FB-BFC4-3525A2ED35FB
+              control-id: ia-9
+              description: >-
+                Ensure every LLMInferenceService has a bounded SPIRE registration
+                entry for X.509 SVID issuance and workload authentication.
+              remarks: >-
+                The validation checks the SPIFFE ID, workload selectors, SVID TTL,
+                and DNS SAN configuration emitted by SPIRERegistrationReconciler.

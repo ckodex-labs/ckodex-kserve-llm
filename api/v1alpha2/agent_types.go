@@ -51,6 +51,10 @@ type AgentConfiguration struct {
 	// +optional
 	Tools []ToolDefinition `json:"tools,omitempty"`
 
+	// UTCPManuals lists UTCP manual references for native tool discovery and invocation.
+	// +optional
+	UTCPManuals []UTCPManualRef `json:"utcpManuals,omitempty"`
+
 	// MaxTokens is the maximum token budget per agent invocation.
 	// +kubebuilder:validation:Minimum=1
 	// +optional
@@ -88,6 +92,20 @@ type SkillRef struct {
 	Version string `json:"version,omitempty"`
 }
 
+// UTCPManualRef references a Universal Tool Calling Protocol manual.
+type UTCPManualRef struct {
+	// Name identifies the manual or tool namespace.
+	Name string `json:"name"`
+
+	// Endpoint is the discovery URL or base URL serving the manual (GET /utcp).
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// PackRef references an AIPack containing a UTCPManual.
+	// +optional
+	PackRef string `json:"packRef,omitempty"`
+}
+
 // ToolDefinition defines a tool for function calling.
 type ToolDefinition struct {
 	// Name identifies the tool.
@@ -96,6 +114,12 @@ type ToolDefinition struct {
 	// Description explains what the tool does.
 	Description string `json:"description"`
 
+	// Protocol declares the tool invocation protocol.
+	// Values: "function-call", "http", "grpc", "mcp", "utcp"
+	// +optional
+	// +kubebuilder:validation:Enum=function-call;http;grpc;mcp;utcp
+	Protocol string `json:"protocol,omitempty"`
+
 	// InputSchema is the JSON Schema defining the tool's input parameters.
 	// +optional
 	InputSchema string `json:"inputSchema,omitempty"`
@@ -103,6 +127,10 @@ type ToolDefinition struct {
 	// Endpoint is the URL or service address for the tool.
 	// +optional
 	Endpoint string `json:"endpoint,omitempty"`
+
+	// UTCPManualRef references a parent UTCP manual if this tool originates from one.
+	// +optional
+	UTCPManualRef string `json:"utcpManualRef,omitempty"`
 }
 
 // AgentStatus defines the observed state.

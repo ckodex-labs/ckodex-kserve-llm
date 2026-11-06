@@ -5,6 +5,7 @@ import (
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
+	inferenceruntime "github.com/ckodex-labs/kserve-llm-operator/internal/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -22,6 +23,80 @@ func TestApplyEngineSelectionUsesRegisteredVLLMAdapter(t *testing.T) {
 		assert.Contains(t, pod.Containers[0].Args, "--model")
 		assert.Contains(t, pod.Containers[0].Args, "--host")
 	}
+}
+
+func TestApplyEngineSelectionAcceptsVLLMRuntimeAcceptanceImage(t *testing.T) {
+	image := "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
+	service := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			inferenceruntime.RuntimeQualificationAnnotation: "vllm-v0.33.0",
+		}},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "vllm", Model: servingv1alpha2.ModelSpec{Name: "qualification-model"}},
+	}
+	pod := &corev1.PodSpec{Containers: []corev1.Container{{Image: image}}}
+	(&Builder{}).applyEngineSelection(service, pod, HardwareNVIDIA)
+	assert.Equal(t, image, pod.Containers[0].Image)
+	assert.Contains(t, pod.Containers[0].Args, "--model")
+	require.Contains(t, pod.Containers[0].Args, "--disable-fastapi-docs")
+}
+
+func TestApplyEngineSelectionRewritesVLLMRuntimeAcceptanceImageForAirGap(t *testing.T) {
+	const acceptanceImage = "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
+	service := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			inferenceruntime.RuntimeQualificationAnnotation: "vllm-v0.33.0",
+		}},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "vllm"},
+	}
+	pod := &corev1.PodSpec{Containers: []corev1.Container{{Image: acceptanceImage}}}
+	(&Builder{AirGappedMode: true, LocalRegistry: "registry.local"}).applyEngineSelection(service, pod, HardwareNVIDIA)
+	assert.Equal(t, "registry.local/"+acceptanceImage, pod.Containers[0].Image)
+}
+
+func TestApplyEngineSelectionAcceptsDigestPinnedVLLMMirror(t *testing.T) {
+	const acceptanceImage = "registry.local/vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
+	service := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			inferenceruntime.RuntimeQualificationAnnotation: "vllm-v0.33.0",
+		}},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "vllm"},
+	}
+	pod := &corev1.PodSpec{Containers: []corev1.Container{{Image: acceptanceImage}}}
+	(&Builder{}).applyEngineSelection(service, pod, HardwareNVIDIA)
+	assert.Equal(t, acceptanceImage, pod.Containers[0].Image)
+}
+
+func TestApplyEngineSelectionRejectsUnknownOrMismatchedVLLMQualification(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		version string
+		image   string
+	}{
+		{name: "unknown version", version: "vllm-v0.99.0", image: "vllm/vllm-openai:v0.99.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+		{name: "unapproved image", version: "vllm-v0.33.0", image: "vllm/vllm-openai:v0.33.0"},
+		{name: "different digest", version: "vllm-v0.33.0", image: "vllm/vllm-openai:v0.33.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := &servingv1alpha2.LLMInferenceService{
+				ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+					inferenceruntime.RuntimeQualificationAnnotation: test.version,
+				}},
+				Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "vllm"},
+			}
+			pod := &corev1.PodSpec{Containers: []corev1.Container{{Image: test.image, Command: []string{"serve"}, Args: []string{"unsafe"}}}}
+			(&Builder{}).applyEngineSelection(service, pod, HardwareNVIDIA)
+			assert.Empty(t, pod.Containers[0].Image)
+			assert.Empty(t, pod.Containers[0].Command)
+			assert.Empty(t, pod.Containers[0].Args)
+		})
+	}
+}
+
+func TestApplyEngineSelectionKeepsBaselineUnchangedWithoutQualification(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{Spec: servingv1alpha2.LLMInferenceServiceSpec{Engine: "vllm"}}
+	pod := &corev1.PodSpec{Containers: []corev1.Container{{}}}
+	(&Builder{RuntimeImage: api.VLLMImage}).applyEngineSelection(service, pod, HardwareNVIDIA)
+	assert.Equal(t, api.VLLMImage, pod.Containers[0].Image)
 }
 
 func TestApplyEngineSelectionUsesDigestPinnedSGLangAdapter(t *testing.T) {
@@ -83,6 +158,7 @@ func TestApplyLoraAdaptersAddsMountsAndHandlesEmptyPod(t *testing.T) {
 func TestRewriteImageAddsRegistryWithoutChangingPath(t *testing.T) {
 	assert.Equal(t, "registry.local/library/vllm:tag", (&Builder{LocalRegistry: "registry.local"}).rewriteImage("library/vllm:tag"))
 	assert.Equal(t, "image:tag", (&Builder{}).rewriteImage("image:tag"))
+	assert.Equal(t, "registry.local/library/vllm:tag", (&Builder{LocalRegistry: "registry.local"}).rewriteImage("registry.local/library/vllm:tag"))
 }
 
 func TestApplyEngineSelectionVLLMRewritesImageInAirGappedMode(t *testing.T) {

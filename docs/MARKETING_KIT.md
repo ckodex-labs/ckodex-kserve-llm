@@ -32,8 +32,8 @@ CKodex KServe LLM Operator is a hardened control plane for serving LLMs in envir
 
 - The tag-driven release workflow publishes GitHub release artifacts.
 - The tag-driven release workflow is configured to publish container images and provenance artifacts.
-- SBOM export and Lula/OSCAL validation are part of the CI path.
-- Lula validation generates OSCAL assessment results.
+- SBOM export and OSKAL schema validation are available as Dagger functions.
+- Resource checks evaluate snapshots or live Kubernetes resources and emit JSON results.
 - The operator supports air-gap deployment and local-key verification configuration paths.
 
 ## Core Claim

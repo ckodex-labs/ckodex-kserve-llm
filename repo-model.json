@@ -1,0 +1,416 @@
+{
+  "schema": "cfy-comprehend/repo-model@v1",
+  "header": {
+    "repo": "ckodex-kserve-llm",
+    "commit": "845bd53063769815c578ae7412319c2fda66c619",
+    "generated_at": "2026-11-01T21:17:41Z",
+    "adapters": [],
+    "detected_adapters": [
+      "codegraph:cli"
+    ],
+    "coverage": {
+      "files_total": 944,
+      "files_read": 23,
+      "ratio": 0.0244,
+      "scope": "Lower bound of tracked files directly inspected by this author; excludes untracked files and other reviewers. The worktree was dirty, so the commit does not identify all inspected content."
+    },
+    "generator": "ckodex-comprehend artifact schema v1"
+  },
+  "entry_points": [
+    {
+      "name": "manager",
+      "kind": "bin",
+      "evidence": "cmd/manager/main.go:40",
+      "intent": "Start the controller manager, setup and shutdown."
+    },
+    {
+      "name": "LLM reconcile",
+      "kind": "api",
+      "evidence": "internal/controller/llminferenceservice_reconcile.go:49",
+      "intent": "Reconcile a requested LLMInferenceService."
+    },
+    {
+      "name": "admission",
+      "kind": "api",
+      "evidence": "internal/webhook/webhook.go:33",
+      "intent": "Register validators and defaulters when webhook setup is enabled."
+    },
+    {
+      "name": "OSCAL checks",
+      "kind": "cli",
+      "evidence": "hack/oscal-assessment/main.go:28",
+      "intent": "Read snapshot or Kubernetes resources and evaluate checks."
+    },
+    {
+      "name": "Dagger OSCAL",
+      "kind": "ci",
+      "evidence": "dagger/module.go:159",
+      "intent": "Validate component schema and project supplied check results."
+    },
+    {
+      "name": "storage initializer",
+      "kind": "bin",
+      "evidence": "cmd/storage-initializer/main.go:46",
+      "intent": "Process a model URI and destination."
+    }
+  ],
+  "module_graph": {
+    "nodes": [
+      {
+        "id": "api",
+        "path": "api/",
+        "role": "other"
+      },
+      {
+        "id": "manager",
+        "path": "cmd/manager/",
+        "role": "transport"
+      },
+      {
+        "id": "controller",
+        "path": "internal/controller/",
+        "role": "transport"
+      },
+      {
+        "id": "validation",
+        "path": "internal/validation/",
+        "role": "validation"
+      },
+      {
+        "id": "runtime",
+        "path": "internal/runtime/",
+        "role": "other"
+      },
+      {
+        "id": "webhook",
+        "path": "internal/webhook/",
+        "role": "transport"
+      },
+      {
+        "id": "gateway",
+        "path": "internal/gateway/",
+        "role": "transport"
+      },
+      {
+        "id": "scheduler",
+        "path": "internal/scheduler/",
+        "role": "other"
+      },
+      {
+        "id": "oscal-check",
+        "path": "hack/oscal-assessment/",
+        "role": "tool"
+      },
+      {
+        "id": "oscal-projection",
+        "path": "hack/oscal-projection/",
+        "role": "tool"
+      },
+      {
+        "id": "dagger",
+        "path": "dagger/",
+        "role": "infra"
+      }
+    ],
+    "edges": [
+      {
+        "from": "manager",
+        "to": "controller",
+        "kind": "build",
+        "evidence": "cmd/manager/main.go:52"
+      },
+      {
+        "from": "controller",
+        "to": "validation",
+        "kind": "import",
+        "evidence": "internal/controller/llminferenceservice_reconcile.go:74"
+      },
+      {
+        "from": "webhook",
+        "to": "validation",
+        "kind": "import",
+        "evidence": "internal/webhook/llminferenceservice_validation.go:40"
+      },
+      {
+        "from": "controller",
+        "to": "gateway",
+        "kind": "build",
+        "evidence": "internal/controller/llminferenceservice_reconcile_routing.go:17"
+      },
+      {
+        "from": "dagger",
+        "to": "oscal-projection",
+        "kind": "build",
+        "evidence": "dagger/module.go:223"
+      }
+    ],
+    "direction_rules": [
+      "Documented intended dependency direction must be separately verified; this graph records selected observed edges only."
+    ]
+  },
+  "flows": [
+    {
+      "id": "FLOW-001",
+      "name": "LLM reconciliation",
+      "trigger": "Controller receives an LLMInferenceService request",
+      "hops": [
+        {
+          "evidence": "cmd/manager/main.go:50",
+          "intent": "Construct manager and reconciler and register controllers."
+        },
+        {
+          "evidence": "internal/controller/llminferenceservice_setup.go:66",
+          "intent": "Register resource watches."
+        },
+        {
+          "evidence": "internal/controller/llminferenceservice_reconcile.go:59",
+          "intent": "Fetch object and stop if missing or paused."
+        },
+        {
+          "evidence": "internal/controller/llminferenceservice_reconcile.go:74",
+          "intent": "Run engine and shared surface validation before resource setup."
+        },
+        {
+          "evidence": "internal/controller/llminferenceservice_reconcile_workload.go:13",
+          "intent": "Select single-node or multi-node workload reconciliation."
+        },
+        {
+          "evidence": "internal/controller/llminferenceservice_reconcile.go:105",
+          "intent": "Reconcile routing, isolation, governance, identity and status."
+        }
+      ],
+      "hidden": [
+        "Pause annotation skips later stages: internal/controller/llminferenceservice_reconcile.go:63",
+        "AIPack governance errors are logged non-blocking: internal/controller/llminferenceservice_reconcile_governance.go:28"
+      ]
+    },
+    {
+      "id": "FLOW-002",
+      "name": "Webhook validation",
+      "trigger": "Webhook validates a create or update request",
+      "hops": [
+        {
+          "evidence": "internal/webhook/webhook.go:33",
+          "intent": "Register version-specific validators and defaulters."
+        },
+        {
+          "evidence": "internal/webhook/llminferenceservice_v1.go:24",
+          "intent": "Convert stable input and delegate to alpha validator."
+        },
+        {
+          "evidence": "internal/webhook/llminferenceservice_validation.go:25",
+          "intent": "Run shared and webhook validation."
+        },
+        {
+          "evidence": "internal/validation/surface.go:101",
+          "intent": "Reject unsupported configured fields and validate runtime."
+        }
+      ],
+      "hidden": [
+        "Webhook setup is feature-dependent; registration itself is not evidence the webhook is deployed: internal/webhook/webhook.go:33"
+      ]
+    },
+    {
+      "id": "FLOW-003",
+      "name": "OSCAL resource check and projection",
+      "trigger": "Caller invokes resource check and then Dagger projection",
+      "hops": [
+        {
+          "evidence": "hack/oscal-assessment/main.go:28",
+          "intent": "Validate arguments and select a live API or snapshot."
+        },
+        {
+          "evidence": "hack/oscal-assessment/main.go:61",
+          "intent": "Evaluate supplied data and emit JSON; fail if any check fails."
+        },
+        {
+          "evidence": "hack/oscal-assessment/evaluate.go:41",
+          "intent": "Evaluate the requested mapped checks."
+        },
+        {
+          "evidence": "dagger/module.go:198",
+          "intent": "Mount caller-supplied OSKAL source and saved check results."
+        },
+        {
+          "evidence": "hack/oscal-projection/main.go:81",
+          "intent": "Validate supplied inputs and construct resource-check observations."
+        },
+        {
+          "evidence": "dagger/module.go:223",
+          "intent": "Validate projected OSCAL with OSKAL before exporting."
+        }
+      ],
+      "hidden": [
+        "IA-9 context is caller asserted: hack/oscal-assessment/identity_context.go:10",
+        "Checks establish limited resource observations, not enforcement: hack/oscal-assessment/evaluate.go:80"
+      ]
+    },
+    {
+      "id": "FLOW-004",
+      "name": "Hosted CI",
+      "trigger": "Push on main/release branches or pull request",
+      "hops": [
+        {
+          "evidence": ".github/workflows/ci.yml:3",
+          "intent": "Configure push and pull-request triggers."
+        },
+        {
+          "evidence": ".github/workflows/ci.yml:100",
+          "intent": "Run Dagger fast lint and build gate."
+        },
+        {
+          "evidence": ".github/workflows/ci.yml:113",
+          "intent": "Run Dagger test and coverage gate."
+        },
+        {
+          "evidence": ".github/workflows/ci.yml:124",
+          "intent": "Run vulnerability scan."
+        },
+        {
+          "evidence": ".github/workflows/ci.yml:157",
+          "intent": "Run envtest integration gate."
+        }
+      ],
+      "hidden": [
+        "OSKAL functions are documented separately and not in hosted all gate: docs/ci/current-state.md:131"
+      ]
+    }
+  ],
+  "patterns": [
+    {
+      "id": "PAT-001",
+      "name": "Wrapped failures",
+      "description": "Operational stages wrap error context before propagating failures.",
+      "examples": [
+        "internal/controller/llminferenceservice_reconcile_workload.go:33",
+        "internal/controller/llminferenceservice_reconcile_routing.go:15"
+      ]
+    },
+    {
+      "id": "PAT-002",
+      "name": "Explicit caller context",
+      "description": "OSCAL identity mode and plan references come from the caller and are not independently verified by the check.",
+      "examples": [
+        "hack/oscal-assessment/identity_context.go:10",
+        "hack/oscal-projection/main.go:149"
+      ]
+    },
+    {
+      "id": "PAT-003",
+      "name": "Separate receipt assurance",
+      "description": "Controller legacy receipt commitments explicitly identify missing signature and producer binding.",
+      "examples": [
+        "internal/controller/llminferenceservice_reconcile_audit.go:23",
+        "internal/observability/audit_receipts.go:27"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-001",
+      "claim": "Unknown registered-engine names are rejected.",
+      "check": "GOCACHE=/tmp/ckodex-assessment-cache go test -count=1 ./internal/runtime/registry -run ^TestResolveUsesDefaultAndRejectsUnregisteredEngines$",
+      "tier": "auto",
+      "evidence": [
+        "internal/runtime/registry/registry_test.go:9"
+      ],
+      "last_verified": "2026-11-01T21:17:41Z",
+      "status": "green"
+    },
+    {
+      "id": "INV-002",
+      "claim": "IA-9 identity mode validation rejects missing and invalid context.",
+      "check": "GOCACHE=/tmp/ckodex-assessment-cache go test -count=1 ./hack/oscal-assessment -run ^TestIdentityContextValidation$",
+      "tier": "auto",
+      "evidence": [
+        "hack/oscal-assessment/identity_context_test.go:10"
+      ],
+      "last_verified": "2026-11-01T21:17:41Z",
+      "status": "green"
+    },
+    {
+      "id": "INV-003",
+      "claim": "IA-9 registration checks reject wrong namespace and invalid TTL.",
+      "check": "GOCACHE=/tmp/ckodex-assessment-cache go test -count=1 ./hack/oscal-assessment -run ^TestRegistrationNamespaceAndTTL$",
+      "tier": "auto",
+      "evidence": [
+        "hack/oscal-assessment/identity_context_test.go:67"
+      ],
+      "last_verified": "2026-11-01T21:17:41Z",
+      "status": "green"
+    },
+    {
+      "id": "INV-004",
+      "claim": "AC-4 resource check reports its presence-only boundary.",
+      "check": "GOCACHE=/tmp/ckodex-assessment-cache go test -count=1 ./hack/oscal-assessment -run ^TestNetworkPolicyCheckReportsPresenceOnly$",
+      "tier": "auto",
+      "evidence": [
+        "hack/oscal-assessment/evaluate_test.go:75"
+      ],
+      "last_verified": "2026-11-01T21:17:41Z",
+      "status": "green"
+    },
+    {
+      "id": "INV-005",
+      "claim": "Deployment manifest check rejects containers lacking explicit non-root settings.",
+      "check": "GOCACHE=/tmp/ckodex-assessment-cache go test -count=1 ./hack/deployment-assessment -run ^TestDeploymentCheck$",
+      "tier": "auto",
+      "evidence": [
+        "hack/deployment-assessment/main_test.go:10"
+      ],
+      "last_verified": "2026-11-01T21:17:41Z",
+      "status": "green"
+    }
+  ],
+  "discrepancies": [
+    {
+      "id": "DIS-001",
+      "claimed": {
+        "text": "Blocked scheduler reconciliation calls its route fail-closed.",
+        "evidence": "internal/controller/llminferenceservice_reconcile_scheduler.go:72"
+      },
+      "actual": {
+        "text": "HTTPRoute builder defaults to the direct service when SchedulerReady is not true; actual Gateway behavior requires runtime verification.",
+        "evidence": "internal/gateway/httproute_builder.go:34"
+      },
+      "severity": "high",
+      "disposition": "unknown"
+    },
+    {
+      "id": "DIS-002",
+      "claimed": {
+        "text": "CI documentation describes pull requests to main.",
+        "evidence": "docs/ci/current-state.md:41"
+      },
+      "actual": {
+        "text": "Workflow pull_request trigger has no branch filter.",
+        "evidence": ".github/workflows/ci.yml:6"
+      },
+      "severity": "info",
+      "disposition": "fix-docs"
+    }
+  ],
+  "do_not_touch": [
+    {
+      "area": "api/ and generated CRDs",
+      "reason": "Deepcopy and CRD generation can overwrite existing modifications; review generator and diff before regeneration.",
+      "evidence": "Makefile:21"
+    },
+    {
+      "area": "Dagger generated bindings",
+      "reason": "Generated SDK is managed by Dagger code generation.",
+      "evidence": "dagger/dagger.gen.go:1"
+    },
+    {
+      "area": "scheduler routes",
+      "reason": "Direct-service fallback and stated blocked-route semantics need explicit review before behavioral change.",
+      "evidence": "internal/gateway/httproute_builder.go:34"
+    }
+  ],
+  "open_questions": [
+    "What current runtime evidence establishes actual Gateway and EPP behavior when the scheduler is unavailable? internal/gateway/httproute_builder.go:34",
+    "What deployment-specific identity and keys, if any, establish signed receipt production and verification? internal/observability/audit_receipts.go:27",
+    "Which OSKAL source revisions and plan references are approved for hosted use? dagger/module.go:159",
+    "What Kubernetes and accelerator evidence qualifies the image and model profiles in this dirty checkout? internal/runtime/registry/registry.go:24"
+  ]
+}

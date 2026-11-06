@@ -33,7 +33,7 @@ func baseRuntimeSpec() abi.RuntimeSpec {
 	return abi.RuntimeSpec{
 		Descriptor: abi.RuntimeDescriptor{
 			Engine:          abi.EngineVLLM,
-			Version:         "v0.31.0",
+			Version:         "v0.33.0",
 			ImageDigest:     "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 			ConformanceTier: abi.ConformanceTier3,
 		},

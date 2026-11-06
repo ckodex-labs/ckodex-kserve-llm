@@ -1,0 +1,20 @@
+apiVersion: serving.ckodex.com/v1alpha2
+kind: AIPack
+metadata:
+  name: aipack-unlimited-ocr-utcp
+  namespace: default
+  labels:
+    aipack.ckodex.com/kind: UTCPManual
+    aipack.ckodex.com/family: capability
+spec:
+  kind: UTCPManual
+  family: capability
+  source:
+    ref: registry.corp.internal/aipack/unlimited-ocr-utcp@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    mediaType: application/vnd.ai.utcpmanual.v1+json
+
+  tool:
+    protocol: utcp
+    schema: urn:tool:schema:unlimited-ocr:v1
+    idempotent: true
+    sideEffects: read-only

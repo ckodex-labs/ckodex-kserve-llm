@@ -17,7 +17,7 @@ small set of custom resources.
 | Model scientist | Model choice, artifact URI, runtime requirements, acceptance criteria | `LLMInferenceService` manifest and inference endpoint |
 | Platform developer | Cluster, GPU/runtime stack, storage credentials, Gateway API, metrics, feature gates | Helm/Kustomize, operator configuration, Dagger |
 | Operator | Reconciliation from desired state to Kubernetes resources and status | Controllers and status conditions |
-| Security or compliance reviewer | Workload identity, network policy, release evidence, OSCAL results | Kubernetes resources, release artifacts, Lula assessment |
+| Security or compliance reviewer | Workload identity, network policy, release evidence, OSCAL results | Kubernetes resources, release artifacts, resource-check results |
 
 The scientist should not need to understand controller internals. The platform
 developer should not need to rewrite model-serving logic for each model.
@@ -76,7 +76,10 @@ authentication boundary, or promotion gate has passed acceptance; see
 
 ### Core Runtime
 
-- `LLMInferenceService` manages model-serving desired state across admitted engines (`vllm` baseline v0.28.0 and upgraded v0.31.0, `tensorfold` v0.31.0, and `sglang` v0.5.18).
+- `LLMInferenceService` and the vLLM adapter now use the same digest-pinned
+  v0.33.0 release. The CUDA 13.0 image is the default (CUDA 12.9 dropped); GPU driver and runtime
+  acceptance remain pending.
+- TensorFold v0.31.0 and SGLang v0.5.18 remain separate admitted engine adapters.
 - `ModelServingProfile` standardizes hardware, engine parameters, and decision-class policies (e.g. deterministic evaluation, EXL3 quantization, 4x RTX PRO 6000 Ada/Blackwell profiles).
 - HTTP routing uses Gateway API resources.
 - Scaling and scheduler resources are reconciled when enabled.
@@ -90,8 +93,8 @@ authentication boundary, or promotion gate has passed acceptance; see
   paths require feature gates and external cluster dependencies.
 - GPU execution requires compatible nodes, drivers, runtime classes, and model
   images (e.g. 4x RTX PRO 6000 for GLM-5.3-EXL3 workloads).
-- Live Lula assessment requires Kubernetes credentials. Offline policy fixtures
-  only prove policy behavior against test resources.
+- Live resource checks require Kubernetes credentials. Offline fixtures only
+  demonstrate check behavior against test resources.
 
 ### Experimental Boundary
 
@@ -159,7 +162,8 @@ For a platform developer:
 |---|---|
 | Understand the system | This document |
 | Run the local proof | [Getting Started](getting-started.md) |
-| Upgrade to TensorFold & vLLM v0.31.0 | [TensorFold & vLLM Upgrade Runbook](runbooks/tensorfold-vllm-upgrade.md) |
+| TensorFold and historical vLLM upgrade procedure | [TensorFold & vLLM Upgrade Runbook](runbooks/tensorfold-vllm-upgrade.md) |
+| Accept the vLLM v0.33.0 default | [vLLM v0.33.0 Runtime Acceptance](runbooks/vllm-v0.33-qualification.md) |
 | Onboard a model | [Model Onboarding](onboarding-guide.md) |
 | Plan hardware | [Model Capacity](model-capacity.md) |
 | Configure tenants | [Tenant Onboarding](tenant-onboarding.md) |

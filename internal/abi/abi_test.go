@@ -68,7 +68,7 @@ func getPrimaryBackends() []backendTestCase {
 		},
 		{
 			kind:    abi.EngineLLMD,
-			version: "v0.9.0",
+			version: "v1.0.0",
 			tier:    abi.ConformanceTier2,
 			caps: func() abi.CapabilityMatrix {
 				c := fullTier3Capabilities()
@@ -78,7 +78,7 @@ func getPrimaryBackends() []backendTestCase {
 		},
 		{
 			kind:    abi.EngineVLLM,
-			version: "v0.31.0",
+			version: "v0.33.0",
 			tier:    abi.ConformanceTier3,
 			caps:    fullTier3Capabilities(),
 		},

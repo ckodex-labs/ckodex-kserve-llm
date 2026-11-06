@@ -54,7 +54,8 @@ dagger call lint --source=.
 dagger call test --source=.
 dagger call build --source=. --version=dev
 dagger call scan --source=.
-dagger call lula --source=. export --path=assessment-results.yaml
+dagger call oscal-validate --source=. --oskal-source=/path/to/ckx-oskal-001
+dagger call oscal-checks --source=.
 dagger call all --source=.
 ```
 

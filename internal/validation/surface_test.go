@@ -18,6 +18,9 @@ import (
 
 	servingv1 "github.com/ckodex-labs/kserve-llm-operator/api/v1"
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	inferenceruntime "github.com/ckodex-labs/kserve-llm-operator/internal/runtime"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/ptr"
 )
@@ -83,7 +86,7 @@ func TestLLMInferenceServiceSurfaceContractHasExecutableDisposition(t *testing.T
 		switch contract.Disposition {
 		case SurfaceRendered, SurfaceObserved:
 		case SurfaceRefused:
-			if contract.Owner != "ValidateLLMInferenceServiceSurface" && contract.Owner != "convertStableToAlpha" {
+			if contract.Owner != "ValidateLLMInferenceServiceSurface" && contract.Owner != "registered runtime adapter validation" && contract.Owner != "convertStableToAlpha" {
 				t.Errorf("%s %s refusal is not bound to executable validation", contract.Version, contract.Path)
 			}
 		default:
@@ -310,6 +313,95 @@ func TestValidateLLMInferenceServiceSurfaceAdmitsQuantizationMethods(t *testing.
 				t.Fatalf("ValidateLLMInferenceServiceSurface rejected method %q: %v", method, errs)
 			}
 		})
+	}
+}
+
+func TestValidateLLMInferenceServiceSurfaceBindsVLLMQualificationToPinnedImage(t *testing.T) {
+	const acceptanceImage = "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
+	service := &servingv1alpha2.LLMInferenceService{
+		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			inferenceruntime.RuntimeQualificationAnnotation: "vllm-v0.33.0",
+		}},
+		Spec: servingv1alpha2.LLMInferenceServiceSpec{
+			Engine: "vllm",
+			Router: servingv1alpha2.RouterSpec{Gateway: servingv1alpha2.GatewaySpec{ExistingRef: &servingv1alpha2.GatewayRef{Name: "qualification-gateway"}}},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{
+					Image: acceptanceImage,
+					Env: []corev1.EnvVar{{
+						Name: "VLLM_API_KEY",
+						ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "vllm-api-credentials"},
+							Key:                  "api-key",
+						}},
+					}},
+				}},
+			}},
+		},
+	}
+	if errs := ValidateLLMInferenceServiceSurface(service); len(errs) != 0 {
+		t.Fatalf("candidate image rejected: %v", errs)
+	}
+	service.Spec.Template.Spec.Containers[0].Args = []string{"--api-key", "secret-value"}
+	if errs := ValidateLLMInferenceServiceSurface(service); !containsFieldPath(errs, "spec.template.spec.containers[0].args[0]") {
+		t.Fatalf("API key in container args was not rejected: %v", errs)
+	}
+	service.Spec.Template.Spec.Containers[0].Args = nil
+	for _, args := range [][]string{
+		{"--config", "/etc/vllm.yaml"},
+		{"--config=/etc/vllm.yaml"},
+		{"--json-arg", `{"api_key":"plaintext"}`},
+		{"--json-arg.api_key", "plaintext"},
+		{"--json_arg", `{"api_key":"plaintext"}`},
+		{"--json_arg.api_key", "plaintext"},
+		{"--api_key", "plaintext"},
+		{"--api_key=plaintext"},
+		{"--api-ke", "plaintext"},
+		{"--api-ke=plaintext"},
+		{"--trust-remote-code"},
+		{"--trust_remote_code"},
+	} {
+		service.Spec.Template.Spec.Containers[0].Args = args
+		if errs := ValidateLLMInferenceServiceSurface(service); !containsFieldPath(errs, "spec.template.spec.containers[0].args[0]") {
+			t.Fatalf("hidden API key configuration was not rejected for args %v: %v", args, errs)
+		}
+	}
+	service.Spec.Template.Spec.Containers[0].Args = nil
+	service.Spec.Template.Spec.Containers[0].Command = []string{"/bin/sh", "-c", "export VLLM_SERVER_DEV_MODE=1; vllm serve"}
+	if errs := ValidateLLMInferenceServiceSurface(service); !containsFieldPath(errs, "spec.template.spec.containers[0].command") {
+		t.Fatalf("command override was not rejected: %v", errs)
+	}
+	service.Spec.Template.Spec.Containers[0].Command = nil
+	service.Spec.Template.Spec.Containers[0].EnvFrom = []corev1.EnvFromSource{{ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "runtime-config"}}}}
+	if errs := ValidateLLMInferenceServiceSurface(service); !containsFieldPath(errs, "spec.template.spec.containers[0].envFrom") {
+		t.Fatalf("envFrom override was not rejected: %v", errs)
+	}
+	service.Spec.Template.Spec.Containers[0].EnvFrom = nil
+	service.Spec.Template.Spec.Containers[0].Env[0].ValueFrom.SecretKeyRef.Optional = ptr.To(true)
+	if errs := ValidateLLMInferenceServiceSurface(service); !containsFieldPath(errs, "spec.template.spec.containers[0].env") {
+		t.Fatalf("optional API key Secret was not rejected: %v", errs)
+	}
+	service.Spec.Template.Spec.Containers[0].Env[0].ValueFrom.SecretKeyRef.Optional = nil
+
+	service.Spec.Template.Spec.Containers[0].Image = "vllm/vllm-openai:v0.33.0"
+	if errs := ValidateLLMInferenceServiceSurface(service); !containsFieldPath(errs, "spec.template.spec.containers[0].image") {
+		t.Fatalf("tag-only image was not rejected: %v", errs)
+	}
+	service.Spec.Template.Spec.Containers[0].Image = acceptanceImage
+	service.Spec.Template.Spec.Containers[0].Env = nil
+	if errs := ValidateLLMInferenceServiceSurface(service); !containsFieldPath(errs, "spec.template.spec.containers[0].env") {
+		t.Fatalf("candidate without Secret-backed API key was not rejected: %v", errs)
+	}
+	service.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+		Name: "VLLM_API_KEY",
+		ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "vllm-api-credentials"},
+			Key:                  "api-key",
+		}},
+	}}
+	service.Spec.Router.Gateway.Managed = &servingv1alpha2.ManagedGatewaySpec{GatewayClassName: "envoy"}
+	if errs := ValidateLLMInferenceServiceSurface(service); !containsFieldPath(errs, "spec.router.gateway") {
+		t.Fatalf("candidate with a managed plaintext Gateway was not rejected: %v", errs)
 	}
 }
 

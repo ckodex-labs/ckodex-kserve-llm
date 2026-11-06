@@ -1,7 +1,9 @@
 package vllm
 
 import (
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
@@ -96,14 +98,14 @@ func TestAdapterRejectsGGUFWithoutVerifiedRuntimePlugin(t *testing.T) {
 	require.Equal(t, "spec.quantization.method", (Adapter{}).Validate(service)[0].Field)
 }
 
-func TestAdapterImageContractV0310(t *testing.T) {
+func TestAdapterImageContractV0330(t *testing.T) {
 	adapter := Adapter{}
 	image := adapter.Image()
 	require.Equal(t, "vllm/vllm-openai", image.Repository)
-	require.Equal(t, "v0.31.0", image.Tag)
-	require.Equal(t, "sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3", image.Digest)
+	require.Equal(t, "v0.33.0", image.Tag)
+	require.Equal(t, "sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e", image.Digest)
 	require.True(t, image.Valid())
-	require.Equal(t, "vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3", image.Reference())
+	require.Equal(t, "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e", image.Reference())
 }
 
 func TestAdapterRendersNVFP4KVCache(t *testing.T) {
@@ -129,6 +131,26 @@ func TestAdapterRendersModernFeaturesViaAnnotations(t *testing.T) {
 	require.Contains(t, rendered.Args, "--enable-flashmla")
 	require.Contains(t, rendered.Args, "--enable-mega-gate")
 	require.Contains(t, rendered.Args, "--trust-request-mm-kwargs")
+}
+
+func TestAdapterAppliesSecureFrontendDefaults(t *testing.T) {
+	rendered := (Adapter{}).Render(inferenceruntime.RenderRequest{ModelPath: "/models/model"})
+	assertArgumentPair(t, rendered.Args, "--allowed-origins", "[]")
+	require.Equal(t, []string{"GET", "POST"}, jsonListArgumentForTest(t, rendered.Args, "--allowed-methods"))
+	require.Equal(t, []string{"Authorization", "Content-Type", "OpenAI-Organization", "OpenAI-Project", "X-CKodex-Adapter", "X-Request-ID"}, jsonListArgumentForTest(t, rendered.Args, "--allowed-headers"))
+	require.Contains(t, rendered.Args, "--disable-fastapi-docs")
+	require.Contains(t, rendered.Args, "--no-allow-credentials")
+	require.Contains(t, rendered.Args, "--no-trust-remote-code")
+}
+
+func TestAdapterPreservesExplicitCORSOrigin(t *testing.T) {
+	rendered := (Adapter{}).Render(inferenceruntime.RenderRequest{
+		ModelPath:    "/models/model",
+		ExistingArgs: []string{"--allowed-origins", `["https://console.example"]`, "--no-disable-fastapi-docs"},
+	})
+	require.Equal(t, []string{"https://console.example"}, jsonListArgumentForTest(t, rendered.Args, "--allowed-origins"))
+	require.NotContains(t, rendered.Args, "--disable-fastapi-docs")
+	require.Contains(t, rendered.Args, "--no-disable-fastapi-docs")
 }
 
 func TestAdapterPreservesExplicitModernFlags(t *testing.T) {
@@ -187,6 +209,160 @@ func TestAdapterRejectsRemovedTokenizerModeSlowInValidation(t *testing.T) {
 	errsEquals := (Adapter{}).Validate(serviceEquals)
 	require.Len(t, errsEquals, 1)
 	require.Equal(t, "spec.template.spec.containers[0].args", errsEquals[0].Field)
+}
+
+func TestAdapterRejectsRemovedMedusaAndMLPSpeculators(t *testing.T) {
+	for _, method := range []string{"medusa", "mlp", "MEDUSA", "MLP"} {
+		service := &servingv1alpha2.LLMInferenceService{
+			Spec: servingv1alpha2.LLMInferenceServiceSpec{
+				SpeculativeDecoding: &servingv1alpha2.SpeculativeDecodingSpec{
+					Method: method,
+				},
+			},
+		}
+		errs := (Adapter{}).Validate(service)
+		require.Len(t, errs, 1)
+		require.Equal(t, "spec.speculativeDecoding.method", errs[0].Field)
+	}
+}
+
+func TestAdapterRejectsDeprecatedMambaCacheMode(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{}
+	service.Spec.Template.Spec.Containers = []corev1.Container{
+		{Args: []string{"--mamba-cache-mode", "cache"}},
+	}
+	errs := (Adapter{}).Validate(service)
+	require.Len(t, errs, 1)
+	require.Equal(t, "spec.template.spec.containers[0].args[0]", errs[0].Field)
+}
+
+func TestAdapterRejectsWildcardAndMalformedAllowedOrigins(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{name: "wildcard", args: []string{"--allowed-origins", `["*"]`}},
+		{name: "wildcard origin host", args: []string{"--allowed-origins", `["https://*.example"]`}},
+		{name: "wildcard origin underscore alias", args: []string{"--allowed_origins", `["*"]`}},
+		{name: "wildcard origin abbreviation", args: []string{"--allowed-or", `["*"]`}},
+		{name: "valid origin abbreviation", args: []string{"--allowed-o", `["https://console.example"]`}},
+		{name: "missing value", args: []string{"--allowed-origins"}},
+		{name: "malformed JSON", args: []string{"--allowed-origins", "https://console.example"}},
+		{name: "wildcard method", args: []string{"--allowed-methods", `["*"]`}},
+		{name: "invalid origin path", args: []string{"--allowed-origins", `["https://console.example/app"]`}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := &servingv1alpha2.LLMInferenceService{}
+			service.Spec.Template.Spec.Containers = []corev1.Container{{Args: test.args}}
+			require.NotEmpty(t, (Adapter{}).Validate(service))
+		})
+	}
+}
+
+func TestAdapterAcceptsJSONCORSLists(t *testing.T) {
+	service := &servingv1alpha2.LLMInferenceService{}
+	service.Spec.Template.Spec.Containers = []corev1.Container{{Args: []string{
+		"--allowed-origins", `[]`,
+		"--allowed-methods", `["GET","POST"]`,
+		"--allowed-headers", `["Authorization","Content-Type"]`,
+	}}}
+	require.Empty(t, (Adapter{}).Validate(service))
+}
+
+func jsonListArgumentForTest(t *testing.T, args []string, flag string) []string {
+	t.Helper()
+	for index, argument := range args {
+		if argument == flag || strings.HasPrefix(argument, flag+"=") {
+			value, ok := argumentValue(args, index, flag)
+			require.True(t, ok)
+			var values []string
+			require.NoError(t, json.Unmarshal([]byte(value), &values))
+			return values
+		}
+	}
+	t.Fatalf("argument %s not found in %v", flag, args)
+	return nil
+}
+
+func TestAdapterRejectsServerDevelopmentMode(t *testing.T) {
+	for _, value := range []string{"1", "2", "-1"} {
+		service := &servingv1alpha2.LLMInferenceService{}
+		service.Spec.Template.Spec.Containers = []corev1.Container{{Env: []corev1.EnvVar{{Name: "VLLM_SERVER_DEV_MODE", Value: value}}}}
+		require.NotEmpty(t, (Adapter{}).Validate(service), "value %q must be rejected", value)
+	}
+
+	service := &servingv1alpha2.LLMInferenceService{}
+	service.Spec.Template.Spec.Containers = []corev1.Container{{Env: []corev1.EnvVar{{
+		Name:      "VLLM_SERVER_DEV_MODE",
+		ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "dev-mode"}, Key: "enabled"}},
+	}}}}
+	require.NotEmpty(t, (Adapter{}).Validate(service), "the validator cannot establish that a Secret does not enable dev mode")
+
+	service.Spec.Template.Spec.Containers[0].Env[0] = corev1.EnvVar{Name: "VLLM_SERVER_DEV_MODE", Value: "0"}
+	require.Empty(t, (Adapter{}).Validate(service), "explicitly disabled dev mode is allowed")
+}
+
+func TestAdapterBoundsConfiguredSequenceFanOut(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{name: "minimum", value: "1", valid: true},
+		{name: "default maximum", value: "128", valid: true},
+		{name: "zero", value: "0"},
+		{name: "above limit", value: "129"},
+		{name: "invalid", value: "unbounded"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := &servingv1alpha2.LLMInferenceService{}
+			service.Spec.Template.Spec.Containers = []corev1.Container{{Env: []corev1.EnvVar{{Name: "VLLM_MAX_N_SEQUENCES", Value: test.value}}}}
+			errs := (Adapter{}).Validate(service)
+			if test.valid {
+				require.Empty(t, errs)
+			} else {
+				require.NotEmpty(t, errs)
+			}
+		})
+	}
+
+	service := &servingv1alpha2.LLMInferenceService{}
+	service.Spec.Template.Spec.Containers = []corev1.Container{{Env: []corev1.EnvVar{{
+		Name: "VLLM_MAX_N_SEQUENCES",
+		ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "sequence-limit"}, Key: "value",
+		}},
+	}}}}
+	require.NotEmpty(t, (Adapter{}).Validate(service), "secret-backed limits cannot be validated before execution")
+}
+
+func TestAdapterRejectsInsecureRuntimeOverrides(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		env  []corev1.EnvVar
+		cmd  []string
+	}{
+		{name: "command override", cmd: []string{"/bin/sh", "-c", "vllm serve --trust-remote-code"}},
+		{name: "enable docs", args: []string{"--no-disable-fastapi-docs"}},
+		{name: "enable docs alternate spelling", args: []string{"--enable-fastapi-docs"}},
+		{name: "local media path", args: []string{"--allowed-local-media-path", "/"}},
+		{name: "local media path underscore alias", args: []string{"--allowed_local_media_path", "/"}},
+		{name: "local media path abbreviation", args: []string{"--allowed-l", "/"}},
+		{name: "media redirects enabled", env: []corev1.EnvVar{{Name: "VLLM_MEDIA_URL_ALLOW_REDIRECTS", Value: "1"}}},
+		{name: "media redirects from secret", env: []corev1.EnvVar{{
+			Name: "VLLM_MEDIA_URL_ALLOW_REDIRECTS",
+			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "redirects"}, Key: "enabled",
+			}},
+		}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := &servingv1alpha2.LLMInferenceService{}
+			service.Spec.Template.Spec.Containers = []corev1.Container{{Args: test.args, Env: test.env, Command: test.cmd}}
+			require.NotEmpty(t, (Adapter{}).Validate(service))
+		})
+	}
 }
 
 func TestAdapterValidatesKVCacheDtype(t *testing.T) {

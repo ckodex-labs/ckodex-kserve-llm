@@ -139,9 +139,18 @@ not grant mutation authority.
 dagger call all --source=.       # hosted fast gate: lint + compile
 dagger call test --source=.      # race tests + coverage gates
 dagger call scan --source=.      # image vulnerability scan
-dagger call lula --source=. export --path=assessment-results.yaml
+dagger call oscal-validate --source=. --oskal-source=/path/to/ckx-oskal-001
+dagger call oscal-checks --source=. # evaluator conformance tests; no cluster assessment
+go run ./hack/oscal-assessment --live --identity-mode direct
 make console-check
 ```
+
+The assessment command emits JSON even when a check fails, then exits nonzero.
+`oscal-checks` runs tests and does not assess a cluster. To project saved
+results into an OSCAL assessment document, see [CI current state](docs/ci/current-state.md).
+The example asserts a direct deployment. For vcluster mode, use
+`--identity-mode vcluster --host-namespace <physical-namespace>` instead; the
+caller must establish which mode and host namespace apply.
 
 The Dagger functions use dependency and tool cache boundaries so repeated local
 runs reuse unchanged work. Tagged GitHub releases remain the authoritative
@@ -169,9 +178,9 @@ hosted path for published artifacts and provenance.
 
 ## Project Status
 
-- Latest published release: [`v0.19.0`](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.19.0)
+- Latest published release: [`v0.20.0`](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.20.0)
 - Release workflow: [passed](https://github.com/ckodex-labs/ckodex-kserve-llm/actions/workflows/release.yml)
-- Source chart defaults: `0.19.0`; tag-driven packaging injects the release version and image tags
+- Source chart defaults: `0.20.0`; tag-driven packaging injects the release version and image tags
 - Core LLM API schema: stable `serving.ckodex.com/v1`; live v1 admission and
   conversion acceptance remain tracked separately
 - Specialized APIs: `serving.ckodex.com/v1alpha2` where no v1 CRD exists

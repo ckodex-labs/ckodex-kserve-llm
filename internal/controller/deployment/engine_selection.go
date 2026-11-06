@@ -8,6 +8,7 @@ import (
 	"github.com/ckodex-labs/kserve-llm-operator/internal/controller/api"
 	inferenceruntime "github.com/ckodex-labs/kserve-llm-operator/internal/runtime"
 	runtimeregistry "github.com/ckodex-labs/kserve-llm-operator/internal/runtime/registry"
+	vllmruntime "github.com/ckodex-labs/kserve-llm-operator/internal/runtime/vllm"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/storage"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
@@ -51,6 +52,28 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 		c.Args = nil
 		return
 	}
+	if qualification, requested := llmSvc.Annotations[inferenceruntime.RuntimeQualificationAnnotation]; requested {
+		if adapter.Name() != runtimeregistry.DefaultEngine || qualification != vllmruntime.RuntimeAcceptanceVersion {
+			c.Image = ""
+			c.Command = nil
+			c.Args = nil
+			return
+		}
+		image := adapter.Image()
+		if !image.Valid() {
+			c.Image = ""
+			c.Command = nil
+			c.Args = nil
+			return
+		}
+		expected := image.Reference()
+		if c.Image != expected && !strings.HasSuffix(c.Image, "/"+expected) {
+			c.Image = ""
+			c.Command = nil
+			c.Args = nil
+			return
+		}
+	}
 	if adapter.Name() != runtimeregistry.DefaultEngine {
 		// Non-default engines are admitted only against their verified manifest;
 		// a vLLM operator default must not leak across the engine boundary.
@@ -69,7 +92,7 @@ func (b *Builder) applyEngineSelection(llmSvc *servingv1alpha2.LLMInferenceServi
 }
 
 func (b *Builder) rewriteImage(image string) string {
-	if b.LocalRegistry == "" {
+	if b.LocalRegistry == "" || strings.HasPrefix(image, b.LocalRegistry+"/") {
 		return image
 	}
 	return fmt.Sprintf("%s/%s", b.LocalRegistry, strings.Join(strings.Split(image, "/"), "/"))

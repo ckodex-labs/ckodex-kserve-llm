@@ -271,7 +271,25 @@ func (r *MultimodalInferenceServiceReconciler) buildMultimodalDeployment(
 	maps.Copy(podTemplate.Labels, labels)
 
 	serverContainer := r.buildMultimodalContainer(mmSvc)
-	podTemplate.Spec.Containers = append([]corev1.Container{serverContainer}, podTemplate.Spec.Containers...)
+	var remaining []corev1.Container
+	for _, c := range podTemplate.Spec.Containers {
+		if c.Name == serverContainer.Name || c.Name == "vllm" || c.Name == "" {
+			if len(c.Resources.Requests) > 0 || len(c.Resources.Limits) > 0 {
+				serverContainer.Resources = c.Resources
+			}
+			serverContainer.Env = append(serverContainer.Env, c.Env...)
+			serverContainer.VolumeMounts = append(serverContainer.VolumeMounts, c.VolumeMounts...)
+			if c.Image != "" {
+				serverContainer.Image = c.Image
+			}
+			if c.SecurityContext != nil {
+				serverContainer.SecurityContext = c.SecurityContext
+			}
+		} else {
+			remaining = append(remaining, c)
+		}
+	}
+	podTemplate.Spec.Containers = append([]corev1.Container{serverContainer}, remaining...)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -318,8 +336,13 @@ func (r *MultimodalInferenceServiceReconciler) buildMultimodalContainer(
 
 	// Handle task-specific configurations.
 	switch mmSvc.Spec.Task {
-	case servingv1alpha2.MultimodalTaskVisionLanguage:
+	case servingv1alpha2.MultimodalTaskVisionLanguage, servingv1alpha2.MultimodalTaskOCR:
 		args = append(args, "--limit-mm-per-prompt", fmt.Sprintf("image=%d", maxImages))
+		if mmSvc.Spec.Task == servingv1alpha2.MultimodalTaskOCR || strings.Contains(strings.ToLower(modelID), "unlimited-ocr") {
+			args = append(args, "--trust-remote-code")
+		}
+	case servingv1alpha2.MultimodalTaskSegmentation:
+		args = append(args, "--trust-remote-code")
 	case servingv1alpha2.MultimodalTaskTextToSpeech:
 		// LiquidAI Audio models often need trust-remote-code for specialized kernels.
 		if strings.Contains(strings.ToLower(modelID), "liquidai") {
@@ -418,6 +441,10 @@ func multimodalEndpointURL(mmSvc *servingv1alpha2.MultimodalInferenceService) st
 		return base + "/v1/images/generations"
 	case servingv1alpha2.MultimodalTaskTextToSpeech:
 		return base + "/v1/audio/speech"
+	case servingv1alpha2.MultimodalTaskSegmentation:
+		return base + "/v1/images/segmentations"
+	case servingv1alpha2.MultimodalTaskOCR:
+		return base + "/v1/chat/completions"
 	default: // vision-language
 		return base + "/v1/chat/completions"
 	}

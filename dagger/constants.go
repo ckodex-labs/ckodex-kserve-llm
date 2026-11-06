@@ -1,8 +1,8 @@
 package main
 
 const (
-	goBuilderImage      = "golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c"
-	golangciLintVersion = "v2.13.1"
+	goBuilderImage      = "golang:1.27.3-bookworm@sha256:dc0963f32053e4bc451d24d87e3892d42d01021b61f093e98eb95c0352bb84b0"
+	golangciLintVersion = "v2.15.0"
 	trivyVersion        = "0.72.0"
 	cosignVersion       = "v3.1.3"
 	distrolessImage     = "gcr.io/distroless/static:nonroot"

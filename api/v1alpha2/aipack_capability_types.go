@@ -44,9 +44,9 @@ type ToolSpec struct {
 	Schema string `json:"schema,omitempty"`
 
 	// Protocol declares the tool invocation protocol.
-	// Values: "function-call", "http", "grpc", "mcp"
+	// Values: "function-call", "http", "grpc", "mcp", "utcp"
 	// +optional
-	// +kubebuilder:validation:Enum=function-call;http;grpc;mcp
+	// +kubebuilder:validation:Enum=function-call;http;grpc;mcp;utcp
 	Protocol string `json:"protocol,omitempty"`
 
 	// Idempotent declares whether the tool is safe to retry.
@@ -111,4 +111,26 @@ type WorkflowSpec struct {
 	// StepCount is the declared step count in the workflow graph.
 	// +optional
 	StepCount *int32 `json:"stepCount,omitempty"`
+}
+
+// UTCPManualSpec describes an A15 UTCPManual artifact per UTCP v1.0.1.
+// Backed by https://github.com/universal-tool-calling-protocol/utcp-specification
+type UTCPManualSpec struct {
+	// UTCPVersion declares the specification version (e.g., "1.0.1").
+	UTCPVersion string `json:"utcpVersion"`
+
+	// ManualVersion declares the version of the tool provider manual.
+	ManualVersion string `json:"manualVersion"`
+
+	// Endpoint is the discovery URL or base URL serving the manual (e.g. "https://api.example.com/utcp").
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// ManualInline contains the raw JSON string of the UTCP manual.
+	// +optional
+	ManualInline string `json:"manualInline,omitempty"`
+
+	// ToolsCount is the number of declared native tools in the manual.
+	// +optional
+	ToolsCount *int32 `json:"toolsCount,omitempty"`
 }

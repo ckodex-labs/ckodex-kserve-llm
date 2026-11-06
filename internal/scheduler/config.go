@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -23,7 +24,7 @@ import (
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 )
 
-const endpointPickerConfigAPIVersion = "llm-d.ai/v1alpha1"
+const endpointPickerConfigAPIVersion = "llm-d.ai/v1"
 
 // ConfigReconciler reconciles EndpointPickerConfig into a ConfigMap
 // consumed by the EPP container.
@@ -85,11 +86,15 @@ func (r *ConfigReconciler) effectiveConfig(ctx context.Context, llmSvc *servingv
 	}
 	config := llmSvc.Spec.Router.Scheduler.Config
 	if config.Inline != nil {
+		profiles, err := inlineSchedulingProfiles(config.Inline.SchedulingProfiles)
+		if err != nil {
+			return nil, fmt.Errorf("convert inline scheduler weights: %w", err)
+		}
 		data, err := json.Marshal(map[string]interface{}{
 			"apiVersion":         endpointPickerConfigAPIVersion,
 			"kind":               "EndpointPickerConfig",
 			"plugins":            config.Inline.Plugins,
-			"schedulingProfiles": config.Inline.SchedulingProfiles,
+			"schedulingProfiles": profiles,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("marshal inline scheduler config: %w", err)
@@ -114,12 +119,44 @@ func (r *ConfigReconciler) effectiveConfig(ctx context.Context, llmSvc *servingv
 	return r.buildDefaultConfig(llmSvc), nil
 }
 
-// buildDefaultConfig generates the default EPP scheduler plugin pipeline.
-// Matches KServe v0.17: prefix-cache-scorer, queue-scorer, kv-cache-utilization-scorer, max-score-picker.
+type inlineSchedulingProfile struct {
+	Name    string                      `json:"name"`
+	Plugins []inlineSchedulingPluginRef `json:"plugins"`
+}
+
+type inlineSchedulingPluginRef struct {
+	PluginRef string   `json:"pluginRef"`
+	Weight    *float64 `json:"weight,omitempty"`
+}
+
+// inlineSchedulingProfiles preserves the CKODEX v1alpha2 string weight API
+// while emitting the numeric weight required by llm-d Router's v1 config.
+func inlineSchedulingProfiles(profiles []servingv1alpha2.SchedulingProfile) ([]inlineSchedulingProfile, error) {
+	result := make([]inlineSchedulingProfile, len(profiles))
+	for i, profile := range profiles {
+		result[i] = inlineSchedulingProfile{Name: profile.Name, Plugins: make([]inlineSchedulingPluginRef, len(profile.Plugins))}
+		for j, plugin := range profile.Plugins {
+			result[i].Plugins[j].PluginRef = plugin.PluginRef
+			if plugin.Weight == "" {
+				continue
+			}
+			weight, err := strconv.ParseFloat(plugin.Weight, 64)
+			if err != nil {
+				return nil, fmt.Errorf("schedulingProfiles[%d].plugins[%d].weight %q is not numeric: %w", i, j, plugin.Weight, err)
+			}
+			result[i].Plugins[j].Weight = &weight
+		}
+	}
+	return result, nil
+}
+
+// buildDefaultConfig follows the llm-d Router v1.0 chart's standard
+// non-disaggregated scoring pipeline. Keep the config API and plugin pipeline
+// in sync with the pinned EPP image.
 func (r *ConfigReconciler) buildDefaultConfig(llmSvc *servingv1alpha2.LLMInferenceService) map[string]string {
 	return map[string]string{
-		"scheduler.yaml": fmt.Sprintf(`# Auto-generated scheduler config for %s
-apiVersion: %s
+		"scheduler.yaml": fmt.Sprintf(`# llm-d Router v1.0 standard EPP scoring config for %s
+apiVersion: llm-d.ai/v1
 kind: EndpointPickerConfig
 plugins:
 - type: queue-scorer
@@ -140,6 +177,6 @@ schedulingProfiles:
     weight: 2
   - pluginRef: prefix-cache-scorer
     weight: 3
-`, llmSvc.Name, endpointPickerConfigAPIVersion),
+`, llmSvc.Name),
 	}
 }

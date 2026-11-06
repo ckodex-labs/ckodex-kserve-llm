@@ -35,6 +35,13 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 	isQwen3 := func(size string) bool {
 		return containsToken(modelURI, "qwen3") && containsToken(modelURI, size)
 	}
+	isKimiK3 := func() bool {
+		return strings.Contains(strings.ToLower(modelURI), "kimi-k3") || (containsToken(modelURI, "kimi") && (containsToken(modelURI, "k3") || containsToken(modelURI, "k3.1")))
+	}
+	isKimiSpecimen := func() bool {
+		norm := strings.ToLower(modelURI)
+		return strings.Contains(norm, "tiny-random") && strings.Contains(norm, "kimi-k3.1-pro")
+	}
 	qwen3ToolArgs := func() []string {
 		norm := strings.ToLower(modelURI)
 		parser := "hermes"
@@ -297,6 +304,40 @@ func GetWellKnownConfig(modelURI string) *servingv1alpha2.LLMInferenceServiceCon
 	case containsToken(modelURI, "qwen3"):
 		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
 			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{Args: qwen3ToolArgs()},
+		}
+	case isKimiSpecimen():
+		// Tiny specimen model for Kimi K3.1 Pro architecture integration tests.
+		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
+			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
+				Args: append([]string{
+					"--trust-remote-code",
+					"--enforce-eager",
+					"--gpu-memory-utilization", "0.50",
+				}, toolArgs("hermes")...),
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("4Gi"),
+						"nvidia.com/gpu":      resource.MustParse("1"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("4"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+						"nvidia.com/gpu":      resource.MustParse("1"),
+					},
+				},
+			},
+		}
+	case isKimiK3():
+		// Full Kimi K3 / K3.1 Pro MoE model defaults.
+		return &servingv1alpha2.LLMInferenceServiceConfigSpec{
+			VLLMDefaults: &servingv1alpha2.VLLMDefaultsSpec{
+				Args: append([]string{
+					"--trust-remote-code",
+					"--gpu-memory-utilization", "0.95",
+					"--max-model-len", "131072",
+				}, toolArgs("hermes")...),
+			},
 		}
 	}
 

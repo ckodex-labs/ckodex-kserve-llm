@@ -1,8 +1,6 @@
 module github.com/ckodex-labs/kserve-llm-operator
 
-go 1.26.0
-
-toolchain go1.26.7
+go 1.27.1
 
 require (
 	cloud.google.com/go/storage v1.65.1
@@ -10,7 +8,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.40
 	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.3.17
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.108.0
-	github.com/go-jose/go-jose/v4 v4.1.5
+	github.com/ckodex-labs/ckodex-oskal v0.3.1
+	github.com/distribution/reference v0.6.0
+	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/go-logr/logr v1.4.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/go-github/v62 v62.0.0
@@ -44,7 +44,7 @@ require (
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5
 	oras.land/oras-go/v2 v2.6.2
 	sigs.k8s.io/controller-runtime v0.24.1
-	sigs.k8s.io/gateway-api v1.6.1
+	sigs.k8s.io/gateway-api v1.6.2
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -98,7 +98,6 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgraph-io/ristretto/v2 v2.2.0 // indirect
 	github.com/distribution/distribution/v3 v3.1.1 // indirect
-	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/dragonflyoss/model-spec v0.0.6 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
@@ -187,6 +186,7 @@ require (
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/skeema/knownhosts v1.3.2 // indirect
@@ -232,7 +232,7 @@ require (
 	google.golang.org/genproto v0.0.0-20260715232425-e75dac1f907d // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
-	google.golang.org/grpc v1.83.2 // indirect
+	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

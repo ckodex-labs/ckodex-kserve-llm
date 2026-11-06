@@ -144,7 +144,7 @@ func TestBuildMultimodalContainer_VLLMDefaults(t *testing.T) {
 	c := r.buildMultimodalContainer(svc)
 
 	assert.Equal(t, multimodalContainerName, c.Name)
-	assert.Equal(t, "vllm/vllm-openai:v0.28.0", c.Image)
+	assert.Equal(t, "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e", c.Image)
 	assert.Equal(t, int32(servingv1alpha2.MultimodalServerPort), c.Ports[0].ContainerPort)
 
 	// Model ID must be stripped of hf:// prefix.
@@ -231,7 +231,7 @@ func TestMultimodalEndpointURL(t *testing.T) {
 // TestDefaultMultimodalRuntimeImage verifies correct defaults per runtime.
 func TestDefaultMultimodalRuntimeImage(t *testing.T) {
 	assert.Equal(t,
-		"vllm/vllm-openai:v0.28.0",
+		"vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e",
 		servingv1alpha2.DefaultMultimodalRuntimeImage(servingv1alpha2.MultimodalRuntimeVLLM),
 	)
 }
@@ -269,6 +269,40 @@ func TestMultimodalEndpointURL_TTS(t *testing.T) {
 	})
 	url := multimodalEndpointURL(svc)
 	assert.Contains(t, url, "/v1/audio/speech")
+}
+
+// TestMultimodalEndpointURL_OCR_And_Segmentation verifies endpoints for OCR and segmentation tasks.
+func TestMultimodalEndpointURL_OCR_And_Segmentation(t *testing.T) {
+	ocrSvc := newMMSvc("ocr-svc", "ns", func(s *servingv1alpha2.MultimodalInferenceService) {
+		s.Spec.Task = servingv1alpha2.MultimodalTaskOCR
+		s.Spec.Model.URI = "hf://baidu/Unlimited-OCR-2"
+	})
+	assert.Contains(t, multimodalEndpointURL(ocrSvc), "/v1/chat/completions")
+
+	segSvc := newMMSvc("seg-svc", "ns", func(s *servingv1alpha2.MultimodalInferenceService) {
+		s.Spec.Task = servingv1alpha2.MultimodalTaskSegmentation
+		s.Spec.Model.URI = "hf://facebook/sam3"
+	})
+	assert.Contains(t, multimodalEndpointURL(segSvc), "/v1/images/segmentations")
+}
+
+// TestBuildMultimodalContainer_OCR_And_Segmentation verifies container build args.
+func TestBuildMultimodalContainer_OCR_And_Segmentation(t *testing.T) {
+	r := &MultimodalInferenceServiceReconciler{}
+	ocrSvc := newMMSvc("ocr-svc", "ns", func(s *servingv1alpha2.MultimodalInferenceService) {
+		s.Spec.Task = servingv1alpha2.MultimodalTaskOCR
+		s.Spec.Model.URI = "hf://baidu/Unlimited-OCR-2"
+	})
+	cOCR := r.buildMultimodalContainer(ocrSvc)
+	assert.Contains(t, cOCR.Args, "--trust-remote-code")
+	assert.Contains(t, cOCR.Args, "--limit-mm-per-prompt")
+
+	segSvc := newMMSvc("seg-svc", "ns", func(s *servingv1alpha2.MultimodalInferenceService) {
+		s.Spec.Task = servingv1alpha2.MultimodalTaskSegmentation
+		s.Spec.Model.URI = "hf://facebook/sam3"
+	})
+	cSeg := r.buildMultimodalContainer(segSvc)
+	assert.Contains(t, cSeg.Args, "--trust-remote-code")
 }
 
 // TestMultimodalReconcile_InvalidModelURI verifies Ready=False on invalid scheme.

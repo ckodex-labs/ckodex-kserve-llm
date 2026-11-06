@@ -33,7 +33,7 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 * **Keep PRs focused**: One feature or bug fix per PR.
 * **Hardened Contribution Rules**:
   * **Supply-Chain Enforcement**: All code must be pushed to SLSA-compatible build paths; floating tags are prohibited.
-  * **Compliance-as-Code**: PRs introducing security controls (RBAC, NetworkPolicy, DPI) MUST include a corresponding **Lula Validation** in the `lula/` directory.
+  * **Compliance-as-Code**: PRs introducing security controls (RBAC, NetworkPolicy, DPI) must include an appropriate resource check and adverse cases in `hack/oscal-assessment/` and update the OSCAL component definition where applicable.
   * **OIS Instrumentation**: Any new data-plane features must emit **Open Inference Signals (OIS) v0.1** telemetry via OpenTelemetry.
 
 ## Development Setup

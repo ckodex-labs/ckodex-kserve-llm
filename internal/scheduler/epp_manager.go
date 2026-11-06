@@ -28,7 +28,7 @@ const (
 	// EPPImage is the Endpoint Picker Pod container image.
 	// Pinned — :latest is a supply chain risk and air-gapped deployment blocker.
 	// Must match OperatorConfig.Scheduler.Image default.
-	EPPImage = "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:2e516fa1310da7be59b82beb1445362139597d6d553ef04d546716abe3aaaa70"
+	EPPImage = "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:024188e998f516879f68532016ca24fabca00afbdcc2af9a61b17634e197df2c"
 	// EPPPort is the EPP gRPC port (Gateway ExtensionRef).
 	EPPPort int32 = 9002
 	// EPPMetricsPort is the metrics/health port.
@@ -45,16 +45,13 @@ const (
 	EPPServiceAccountLabel = "serving.ckodex.com/epp-rbac"
 )
 
-// EPPManager manages the Endpoint Picker Pod (EPP) deployment
-// for KV-cache aware request routing per KServe v0.17 architecture.
+// EPPManager manages the llm-d Router v1.0 Endpoint Picker Pod (EPP)
+// deployment for KV-cache aware request routing.
 type EPPManager struct {
 	client.Client
 	Scheme *runtime.Scheme
 	Image  string
 }
-
-// +kubebuilder:rbac:groups=inference.networking.x-k8s.io,resources=inferencemodelrewrites;inferenceobjectives,verbs=get;list;watch
-// +kubebuilder:rbac:groups=llm-d.ai,resources=inferencemodelrewrites;inferenceobjectives,verbs=get;list;watch
 
 // Reconcile creates/updates the EPP Deployment and Service.
 func (m *EPPManager) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService) error {

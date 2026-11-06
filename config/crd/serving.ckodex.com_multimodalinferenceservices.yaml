@@ -275,7 +275,7 @@ spec:
               runtimeImage:
                 description: |-
                   RuntimeImage overrides the default container image for the selected runtime.
-                  When omitted, the operator uses vllm/vllm-openai:v0.28.0.
+                  When omitted, the operator uses the digest-pinned vLLM v0.33.0 image.
                 type: string
               scaling:
                 description: Scaling configures autoscaling behaviour (HPA / KEDA).
@@ -368,10 +368,14 @@ spec:
                   - vision-language
                   - image-generation
                   - text-to-speech
+                  - ocr
+                  - segmentation
                 - enum:
                   - vision-language
                   - image-generation
                   - text-to-speech
+                  - ocr
+                  - segmentation
                 default: vision-language
                 description: Task describes the type of multimodal workload. Defaults
                   to vision-language.

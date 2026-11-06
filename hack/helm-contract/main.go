@@ -24,7 +24,7 @@ const (
 	operatorImageRepository    = "ghcr.io/ckodex-labs/ckodex-kserve-llm:"
 	initializerImageRepository = "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:"
 	consoleImageRepository     = "ghcr.io/ckodex-labs/ckodex-kserve-llm-console:"
-	defaultRuntimeImage        = "vllm/vllm-openai:v0.28.0"
+	defaultRuntimeImage        = "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
 )
 
 func main() {

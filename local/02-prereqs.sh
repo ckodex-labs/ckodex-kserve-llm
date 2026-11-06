@@ -14,41 +14,39 @@ kubectl wait --for=condition=Available deployment/cert-manager \
   -n cert-manager --timeout=120s
 
 # ── 2. Gateway API CRDs ──────────────────────────────────────────
-# The v1.5.1 bundle also owns the safety ValidatingAdmissionPolicies. Force field
-# ownership during an intentional version upgrade so a prior Helm-managed
-# bundle does not make the profile non-idempotent.
+# The v1.6.2 bundle aligns with Gateway API Go library v1.6.2, GIE v1.6.2,
+# and Envoy Gateway v1.9.2 / Agent Router v1.2.0. Force field ownership during an
+# intentional version upgrade so a prior Helm-managed bundle does not make
+# the profile non-idempotent.
 kubectl apply --server-side --force-conflicts \
-  -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+  -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.2/standard-install.yaml
 
-# ── 2b. Gateway API Inference Extension CRDs ─────────────────────
-# The operator's optional router.scheduler path reconciles the GA InferencePool
-# API and the digest-pinned llm-d Router EPP. Install the CRDs explicitly; the
-# EPP image alone does not register the APIs with the Kubernetes apiserver.
-kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.5.0/manifests.yaml
-
-# llm-d Router owns the EPP and its request-policy CRDs after the EPP moved out
-# of GIE. Keep the GIE v1.5.0 bundle above for InferencePool and the deprecated
-# request-policy API during the compatibility window.
-kubectl apply --server-side -f https://github.com/llm-d/llm-d-router/releases/download/v0.10.0/manifests.yaml
+# ── 2b. Gateway API Inference Extension and llm-d Router CRDs ─────
+# GIE v1.6.2 supplies the GA InferencePool API. The Router v1.0.0 bundle owns
+# InferenceObjective and InferenceModelRewrite under llm-d.ai. Applying these
+# bundles does not delete legacy CRDs or migrate existing objects on upgrades.
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.6.2/manifests.yaml
+kubectl apply --server-side -f https://github.com/llm-d/llm-d-router/releases/download/v1.0.0/manifests.yaml
 
 # Envoy Gateway keeps its provider-specific CRDs in a separate release asset.
 # Apply them explicitly so upgrades remain correct even when Helm has already
 # installed the release and therefore does not replay its CRD directory.
 kubectl apply --server-side \
-  -f https://github.com/envoyproxy/gateway/releases/download/v1.8.4/envoy-gateway-crds.yaml
+  -f https://github.com/envoyproxy/gateway/releases/download/v1.9.2/envoy-gateway-crds.yaml
 
-# ── 2c. Envoy AI Gateway controller (InferencePool extension manager) ──
+# ── 2c. Agent Router controller (InferencePool extension manager) ──
 # Envoy Gateway does not natively resolve InferencePool backendRefs. The
-# pinned AI Gateway charts provide the extension-manager service and CRDs used
-# by the InferencePool-enabled Envoy Gateway profile below.
+# pinned Agent Router (formerly Envoy AI Gateway) charts provide the extension-manager
+# service and CRDs used by the InferencePool-enabled Envoy Gateway profile below.
+# Baseline release is v1.2.0 (pre-release candidate v1.2.1-rc2 available).
 HELM_REGISTRY_CONFIG=/dev/null helm upgrade --install ai-gateway-crds \
   oci://docker.io/envoyproxy/ai-gateway-crds-helm \
-  --version v1.1.0 \
+  --version v1.2.0 \
   --namespace envoy-ai-gateway-system \
   --create-namespace
 HELM_REGISTRY_CONFIG=/dev/null helm upgrade --install ai-gateway \
   oci://docker.io/envoyproxy/ai-gateway-helm \
-  --version v1.1.0 \
+  --version v1.2.0 \
   --namespace envoy-ai-gateway-system \
   --create-namespace
 kubectl wait --for=condition=Available deployment/ai-gateway-controller \
@@ -59,7 +57,7 @@ kubectl wait --for=condition=Available deployment/ai-gateway-controller \
 # CRD files and its separately templated Gateway API safe-upgrade policy so
 # Helm does not contend with the kubectl-managed upstream bundle.
 HELM_REGISTRY_CONFIG=/dev/null helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm \
-  --version v1.8.4 \
+  --version v1.9.2 \
   --namespace envoy-gateway-system \
   --create-namespace \
   --skip-crds \

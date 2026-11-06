@@ -99,12 +99,8 @@ func clientKey(obj *servingv1alpha2.LLMInferenceService) client.ObjectKey {
 	return client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}
 }
 
-// TestReconcileSchedulerBlocked_RouteFallsBackToService verifies that when the
-// scheduler is blocked (EPP unavailable, InferencePool creation failure, or
-// feature disabled), the HTTPRoute created by Gateway.Reconcile points at the
-// direct Service backend, not at a nonexistent InferencePool. This is the
-// controller-level regression test for the rc.7 incident.
-func TestReconcileSchedulerBlocked_RouteFallsBackToService(t *testing.T) {
+// A blocked scheduler must not leave a direct Service forwarding route.
+func TestReconcileSchedulerBlocked_RouteDoesNotForward(t *testing.T) {
 	scheme := buildLLMScheme(t)
 	llmSvc := makeLLMInferenceService("sched-fail-route", "default")
 	llmSvc.Spec.Router.Scheduler = &servingv1alpha2.SchedulerSpec{}
@@ -117,9 +113,10 @@ func TestReconcileSchedulerBlocked_RouteFallsBackToService(t *testing.T) {
 
 	gwReconciler := &gateway.Reconciler{Client: cl, Scheme: scheme}
 	r := &LLMInferenceServiceReconciler{
-		Client:  cl,
-		Scheme:  scheme,
-		Gateway: gwReconciler,
+		Client:    cl,
+		APIReader: cl,
+		Scheme:    scheme,
+		Gateway:   gwReconciler,
 	}
 
 	blockedCondition := metav1.Condition{
@@ -139,16 +136,10 @@ func TestReconcileSchedulerBlocked_RouteFallsBackToService(t *testing.T) {
 	require.NoError(t, err, "HTTPRoute must be created even when scheduler is blocked")
 
 	require.NotEmpty(t, route.Spec.Rules, "route must have rules")
-	ref := route.Spec.Rules[0].BackendRefs[0].BackendObjectReference
-	assert.Nil(t, ref.Group, "backend group must be nil (direct Service), not InferencePool")
-	assert.Nil(t, ref.Kind, "backend kind must be nil (direct Service), not InferencePool")
-	assert.Equal(t, gwapiv1.ObjectName("sched-fail-route"), ref.Name,
-		"backend name must be the Service name")
-	if ref.Port == nil {
-		t.Fatal("backend port is nil")
+	for _, rule := range route.Spec.Rules {
+		assert.Empty(t, rule.BackendRefs, "blocked route must not forward")
+		assert.Empty(t, rule.Filters, "blocked route must have no filters")
 	}
-	assert.Equal(t, gwapiv1.PortNumber(80), *ref.Port,
-		"backend port must be 80 (direct Service), not 8000 (InferencePool)")
 }
 
 // TestReconcileSchedulerBlocked_SchedulerNotReadyConditionSet verifies that
@@ -167,9 +158,10 @@ func TestReconcileSchedulerBlocked_SchedulerNotReadyConditionSet(t *testing.T) {
 
 	gwReconciler := &gateway.Reconciler{Client: cl, Scheme: scheme}
 	r := &LLMInferenceServiceReconciler{
-		Client:  cl,
-		Scheme:  scheme,
-		Gateway: gwReconciler,
+		Client:    cl,
+		APIReader: cl,
+		Scheme:    scheme,
+		Gateway:   gwReconciler,
 	}
 
 	blockedCondition := metav1.Condition{

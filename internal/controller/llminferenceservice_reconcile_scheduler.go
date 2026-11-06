@@ -44,6 +44,13 @@ func (r *LLMInferenceServiceReconciler) schedulerFeatureDisabled(ctx context.Con
 	return result, true, err
 }
 
+func (r *LLMInferenceServiceReconciler) rejectSchedulerConfiguration(ctx context.Context, llmSvc *servingv1alpha2.LLMInferenceService, reason, message string, fenceErr error) (ctrl.Result, error) {
+	before := llmSvc.DeepCopy()
+	err := errors.New(message)
+	condition := schedulerCondition(llmSvc, metav1.ConditionFalse, reason, message)
+	return r.reconcileSchedulerBlocked(ctx, llmSvc, before, condition, errors.Join(err, fenceErr), 0)
+}
+
 func (r *LLMInferenceServiceReconciler) reconcileEnabledScheduler(ctx context.Context, state *llmInferenceReconcileState) (ctrl.Result, bool, error) {
 	ready, err := r.Scheduler.Reconcile(ctx, state.llmSvc)
 	if err != nil {
@@ -80,8 +87,12 @@ func (r *LLMInferenceServiceReconciler) reconcileSchedulerBlocked(
 	cause error,
 	requeueAfter time.Duration,
 ) (ctrl.Result, error) {
-	meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
-	setSchedulerGateReadyCondition(llmSvc, condition.Message)
+	setSchedulerBlockedConditions(llmSvc, condition)
+	if llmSvc.Spec.Router.Scheduler != nil {
+		if err := r.fenceSchedulerRoutes(ctx, llmSvc); err != nil {
+			cause = errors.Join(cause, err)
+		}
+	}
 	if r.Gateway != nil {
 		if err := r.Gateway.Reconcile(ctx, llmSvc); err != nil {
 			cause = errors.Join(cause, fmt.Errorf("route scheduler fail-closed backend: %w", err))
@@ -94,6 +105,15 @@ func (r *LLMInferenceServiceReconciler) reconcileSchedulerBlocked(
 		return ctrl.Result{}, cause
 	}
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+func setSchedulerBlockedConditions(llmSvc *servingv1alpha2.LLMInferenceService, condition metav1.Condition) {
+	meta.SetStatusCondition(&llmSvc.Status.Conditions, condition)
+	setSchedulerGateReadyCondition(llmSvc, condition.Message)
+	if condition.Reason == "GatewayFeatureDisabled" {
+		ready := meta.FindStatusCondition(llmSvc.Status.Conditions, servingv1alpha2.ConditionReady)
+		ready.Reason = condition.Reason
+	}
 }
 
 func schedulerCondition(llmSvc *servingv1alpha2.LLMInferenceService, status metav1.ConditionStatus, reason, message string) metav1.Condition {

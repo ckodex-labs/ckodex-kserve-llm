@@ -28,6 +28,7 @@ const (
 	KindEval           ArtifactKind = "Eval"           // A12 — assurance family
 	KindWorkflow       ArtifactKind = "Workflow"       // A13 — capability family
 	KindPolicyBundle   ArtifactKind = "PolicyBundle"   // A14 — control family
+	KindUTCPManual     ArtifactKind = "UTCPManual"     // A15 — capability family
 	KindAgent          ArtifactKind = "Agent"          // C1  — composite family
 )
 
@@ -82,6 +83,10 @@ type AIPackComposition struct {
 	// MCPServers are MCP protocol server artifacts.
 	// +optional
 	MCPServers []AIPackRef `json:"mcpServers,omitempty"`
+
+	// UTCPManuals are Universal Tool Calling Protocol manual artifacts.
+	// +optional
+	UTCPManuals []AIPackRef `json:"utcpManuals,omitempty"`
 
 	// SystemPrompt is the PromptTemplate that seeds the agent's system context.
 	// +optional

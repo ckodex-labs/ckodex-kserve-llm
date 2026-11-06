@@ -25,31 +25,59 @@ func TestBuildHTTPRoute_RoutePaths(t *testing.T) {
 		t.Errorf("namespace = %q, want %q", route.Namespace, "default")
 	}
 
-	expectedPaths := []string{
-		"/v2/health/",
-		"/v2/models/",
-		"/v2",
-		"/v1/chat/completions",
-		"/v1/completions",
-		"/v1/embeddings",
-		"/v1/models",
-		// vLLM v0.28.0 Rust frontend endpoints
-		"/version",
-		"/server_info",
-		"/v1/responses",
+	expectedRules := []struct {
+		path    string
+		methods []string
+	}{
+		{path: "/v2/health/", methods: []string{"GET"}},
+		{path: "/v2/models/", methods: []string{"POST"}},
+		{path: "/v2", methods: []string{"GET"}},
+		{path: "/v1/chat/completions", methods: []string{"POST", "OPTIONS"}},
+		{path: "/v1/completions", methods: []string{"POST", "OPTIONS"}},
+		{path: "/v1/embeddings", methods: []string{"POST", "OPTIONS"}},
+		{path: "/v1/models", methods: []string{"GET", "OPTIONS"}},
+		{path: "/v1/responses", methods: []string{"POST", "OPTIONS"}},
+		{path: "/v1/responses/", methods: []string{"GET", "POST", "OPTIONS"}},
 	}
 
-	if len(route.Spec.Rules) != len(expectedPaths) {
-		t.Fatalf("got %d rules, want %d", len(route.Spec.Rules), len(expectedPaths))
+	if len(route.Spec.Rules) != len(expectedRules) {
+		t.Fatalf("got %d rules, want %d", len(route.Spec.Rules), len(expectedRules))
 	}
 
-	for i, expected := range expectedPaths {
+	for i, expected := range expectedRules {
 		rule := route.Spec.Rules[i]
 		if len(rule.Matches) == 0 || rule.Matches[0].Path == nil || rule.Matches[0].Path.Value == nil {
 			t.Fatalf("rule[%d] has no path match", i)
 		}
-		if *rule.Matches[0].Path.Value != expected {
-			t.Errorf("rule[%d] path = %q, want %q", i, *rule.Matches[0].Path.Value, expected)
+		if *rule.Matches[0].Path.Value != expected.path {
+			t.Errorf("rule[%d] path = %q, want %q", i, *rule.Matches[0].Path.Value, expected.path)
+		}
+		if len(rule.Matches) != len(expected.methods) {
+			t.Fatalf("rule[%d] has %d matches, want %d", i, len(rule.Matches), len(expected.methods))
+		}
+		for j, method := range expected.methods {
+			if rule.Matches[j].Method == nil || string(*rule.Matches[j].Method) != method {
+				t.Errorf("rule[%d] match[%d] method = %v, want %q", i, j, rule.Matches[j].Method, method)
+			}
+		}
+	}
+}
+
+func TestBuildHTTPRoute_SetsInferenceResponseSecurityHeaders(t *testing.T) {
+	route := BuildHTTPRoute(baseLLMSvc("test-model"), nil)
+	for index, rule := range route.Spec.Rules {
+		if len(rule.Filters) != 1 || rule.Filters[0].ResponseHeaderModifier == nil {
+			t.Fatalf("rule[%d] response header filter = %v, want one response header modifier", index, rule.Filters)
+		}
+		values := make(map[string]string, len(rule.Filters[0].ResponseHeaderModifier.Set))
+		for _, header := range rule.Filters[0].ResponseHeaderModifier.Set {
+			values[string(header.Name)] = header.Value
+		}
+		if values["Cache-Control"] != "no-store" {
+			t.Errorf("rule[%d] Cache-Control = %q, want no-store", index, values["Cache-Control"])
+		}
+		if values["X-Content-Type-Options"] != "nosniff" {
+			t.Errorf("rule[%d] X-Content-Type-Options = %q, want nosniff", index, values["X-Content-Type-Options"])
 		}
 	}
 }
@@ -89,12 +117,8 @@ func TestBuildHTTPRoute_SchedulerUsesInferencePool(t *testing.T) {
 	}
 }
 
-// TestBuildHTTPRoute_SchedulerNotReady_FallsBackToService reproduces the rc.7
-// incident: when Router.Scheduler is configured but the SchedulerReady
-// condition is False (EPP/InferencePool unavailable), the HTTPRoute must fall
-// back to direct Service routing instead of pointing at a nonexistent
-// InferencePool backend.
-func TestBuildHTTPRoute_SchedulerNotReady_FallsBackToService(t *testing.T) {
+// A requested but unavailable scheduler must not be bypassed by direct routing.
+func TestBuildHTTPRoute_SchedulerNotReadyBlocksForwarding(t *testing.T) {
 	llmSvc := baseLLMSvc("scheduled")
 	llmSvc.Spec.Router.Scheduler = &servingv1alpha2.SchedulerSpec{}
 	meta.SetStatusCondition(&llmSvc.Status.Conditions, metav1.Condition{
@@ -103,34 +127,22 @@ func TestBuildHTTPRoute_SchedulerNotReady_FallsBackToService(t *testing.T) {
 		Reason: "SchedulerReconcileFailed",
 	})
 	route := BuildHTTPRoute(llmSvc, nil)
-	ref := route.Spec.Rules[0].BackendRefs[0].BackendObjectReference
-	if ref.Group != nil {
-		t.Fatalf("backend group = %v, want nil (direct Service)", *ref.Group)
-	}
-	if ref.Kind != nil {
-		t.Fatalf("backend kind = %v, want nil (direct Service)", *ref.Kind)
-	}
-	if string(ref.Name) != "scheduled" {
-		t.Fatalf("backend name = %q, want %q (direct Service)", ref.Name, "scheduled")
-	}
-	if ref.Port == nil || *ref.Port != 80 {
-		t.Fatalf("backend port = %v, want 80 (direct Service)", ref.Port)
+	for _, rule := range route.Spec.Rules {
+		if len(rule.BackendRefs) != 0 || len(rule.Filters) != 0 {
+			t.Fatal("blocked route must have no backends or filters")
+		}
 	}
 }
 
-// TestBuildHTTPRoute_SchedulerNoCondition_FallsBackToService verifies that a
-// scheduler configured with no status condition (never reconciled) also falls
-// back to direct Service routing.
-func TestBuildHTTPRoute_SchedulerNoCondition_FallsBackToService(t *testing.T) {
+// Missing scheduler readiness is not permission to route directly.
+func TestBuildHTTPRoute_SchedulerNoConditionBlocksForwarding(t *testing.T) {
 	llmSvc := baseLLMSvc("scheduled")
 	llmSvc.Spec.Router.Scheduler = &servingv1alpha2.SchedulerSpec{}
 	route := BuildHTTPRoute(llmSvc, nil)
-	ref := route.Spec.Rules[0].BackendRefs[0].BackendObjectReference
-	if ref.Group != nil {
-		t.Fatalf("backend group = %v, want nil (direct Service)", *ref.Group)
-	}
-	if ref.Port == nil || *ref.Port != 80 {
-		t.Fatalf("backend port = %v, want 80 (direct Service)", ref.Port)
+	for _, rule := range route.Spec.Rules {
+		if len(rule.BackendRefs) != 0 || len(rule.Filters) != 0 {
+			t.Fatal("blocked route must have no backends or filters")
+		}
 	}
 }
 
@@ -257,6 +269,17 @@ func TestGatewayRef_Existing(t *testing.T) {
 	}
 	if ref.Namespace == nil || string(*ref.Namespace) != "infra" {
 		t.Errorf("existing ref namespace = %v, want %q", ref.Namespace, "infra")
+	}
+}
+
+func TestGatewayRef_ExistingUsesRouteNamespaceWhenNamespaceOmitted(t *testing.T) {
+	llmSvc := baseLLMSvc("my-model")
+	llmSvc.Spec.Router.Gateway.Managed = nil
+	llmSvc.Spec.Router.Gateway.ExistingRef = &servingv1alpha2.GatewayRef{Name: "shared-gateway"}
+
+	ref := GatewayRef(llmSvc)
+	if ref.Namespace != nil {
+		t.Fatalf("existing ref namespace = %v, want nil to use route namespace", ref.Namespace)
 	}
 }
 

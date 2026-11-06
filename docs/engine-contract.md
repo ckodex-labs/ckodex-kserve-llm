@@ -108,8 +108,13 @@ For each `InferenceReceipt` field, declare the source: native metric, response
 header, sidecar observation, or `not-available`.
 
 - `model_digest`, `runtime_digest`, `container_image_digest`, `quantization`,
-  and `adapters` are **mandatory**. They come from the adapter's own `Image()`
-  and `Render()`, so they cost nothing.
+  and `adapters` are **mandatory**. The adapter contract identifies the allowed
+  runtime image and rendered configuration. The reconciled Deployment image and
+  runtime-reported `imageID` identify what actually ran; never substitute the
+  adapter's `Image()` for a user or operator image override. Qualification
+  vLLM v0.33.0 hardware qualification resolves to the same image digest as the
+  active adapter contract; it records runtime evidence, not a second vLLM
+  version.
 - Token usage, time-to-first-token, and inter-token latency are native or
   sidecar-derived.
 - Content minimization is not negotiable. An adapter may not route raw prompt or

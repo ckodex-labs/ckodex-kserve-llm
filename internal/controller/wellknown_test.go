@@ -115,6 +115,8 @@ func TestGetWellKnownConfigToolCallingDefaults(t *testing.T) {
 		{name: "qwen coder", uri: "hf://Qwen/Qwen3-Coder-480B-A35B-Instruct", parser: "qwen3_coder", reason: true},
 		{name: "qwen thinking", uri: "hf://Qwen/Qwen3-235B-A22B-Thinking", parser: "hermes", reason: true},
 		{name: "llama 4", uri: "hf://meta-llama/Llama-4-Scout-17B-16E-Instruct", parser: "llama4_json"},
+		{name: "kimi specimen", uri: "hf://tiny-random/kimi-k3.1-pro", parser: "hermes"},
+		{name: "kimi k3", uri: "hf://moonshotai/Kimi-K3-Instruct", parser: "hermes"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -182,4 +184,55 @@ func TestApplyConfigToSpecWithOverrides(t *testing.T) {
 
 	assert.Equal(t, "registry.example/vllm:validated", spec.Template.Spec.Containers[0].Image)
 	assert.NotContains(t, spec.Template.Spec.Containers[0].Args, "--enable-turboquant")
+}
+
+func TestGetWellKnownConfig_KimiSpecimen(t *testing.T) {
+	cfg := GetWellKnownConfig("hf://tiny-random/kimi-k3.1-pro")
+	require.NotNil(t, cfg)
+	require.NotNil(t, cfg.VLLMDefaults)
+	require.NotNil(t, cfg.VLLMDefaults.Resources)
+
+	assert.Equal(t, resource.MustParse("2"), cfg.VLLMDefaults.Resources.Requests[corev1.ResourceCPU])
+	assert.Equal(t, resource.MustParse("4Gi"), cfg.VLLMDefaults.Resources.Requests[corev1.ResourceMemory])
+	assert.Equal(t, resource.MustParse("1"), cfg.VLLMDefaults.Resources.Requests["nvidia.com/gpu"])
+
+	args := strings.Join(cfg.VLLMDefaults.Args, " ")
+	assert.Contains(t, args, "--trust-remote-code")
+	assert.Contains(t, args, "--enforce-eager")
+	assert.Contains(t, args, "--enable-auto-tool-choice")
+	assert.Contains(t, args, "--tool-call-parser hermes")
+}
+
+func TestApplyConfigToSpec_KimiSpecimen(t *testing.T) {
+	reconciler := &LLMInferenceServiceReconciler{}
+	cfg := GetWellKnownConfig("hf://tiny-random/kimi-k3.1-pro")
+	require.NotNil(t, cfg)
+
+	spec := &servingv1alpha2.LLMInferenceServiceSpec{
+		Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:  "vllm",
+						Image: "vllm/vllm:v0.33.0",
+						Args:  []string{"--max-model-len", "8192"},
+					},
+				},
+			},
+		},
+	}
+
+	reconciler.ApplyConfigToSpec(spec, cfg)
+
+	c := spec.Template.Spec.Containers[0]
+	assert.Equal(t, "vllm/vllm:v0.33.0", c.Image)
+	args := strings.Join(c.Args, " ")
+	assert.Contains(t, args, "--max-model-len 8192")
+	assert.Contains(t, args, "--trust-remote-code")
+	assert.Contains(t, args, "--enforce-eager")
+	assert.Contains(t, args, "--enable-auto-tool-choice")
+	assert.Contains(t, args, "--tool-call-parser hermes")
+	assert.Equal(t, resource.MustParse("2"), c.Resources.Requests[corev1.ResourceCPU])
+	assert.Equal(t, resource.MustParse("4Gi"), c.Resources.Requests[corev1.ResourceMemory])
+	assert.Equal(t, resource.MustParse("1"), c.Resources.Requests["nvidia.com/gpu"])
 }

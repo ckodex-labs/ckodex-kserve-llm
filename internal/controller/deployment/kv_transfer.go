@@ -22,6 +22,15 @@ func (b *Builder) applyKVTransfer(llmSvc *servingv1alpha2.LLMInferenceService, p
 	extra := parseKVExtraConfig(t.ExtraConfig)
 	addLMCacheExtra(extra, t.LMCache)
 	c := &podSpec.Containers[0]
+	for _, env := range t.Env {
+		if !hasEnv(c.Env, env.Name) {
+			c.Env = append(c.Env, *env.DeepCopy())
+		}
+	}
+	if t.Connector == "lmcache" {
+		setEnvDefault(c, "LMCACHE_TRACK_USAGE", "false")
+		setEnvDefault(c, "DO_NOT_TRACK", "1")
+	}
 	if t.LMCache != nil && t.LMCache.Mode == servingv1alpha2.LMCacheModeMultiprocess && t.LMCache.EngineRef != nil {
 		b.configureMultiprocessCache(c, podSpec, t.LMCache.EngineRef.Name)
 		return
@@ -63,7 +72,7 @@ func addLMCacheExtra(extra map[string]interface{}, cache *servingv1alpha2.LMCach
 func (b *Builder) configureMultiprocessCache(c *corev1.Container, podSpec *corev1.PodSpec, engine string) {
 	configEnv := "CKODEX_LMCACHE_KV_TRANSFER_CONFIG"
 	if !hasEnv(c.Env, configEnv) {
-		c.Env = append(c.Env, corev1.EnvVar{Name: configEnv, ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: engine + "-connection"}, Key: "kv-transfer-config"}}})
+		c.Env = append(c.Env, corev1.EnvVar{Name: configEnv, ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: engine + "-connection"}, Key: "kv-transfer-config.json"}}})
 	}
 	if !hasArg(c.Args, "--kv-transfer-config") {
 		c.Args = append(c.Args, "--kv-transfer-config", "$("+configEnv+")")
@@ -79,11 +88,6 @@ func (b *Builder) configureInlineTransfer(c *corev1.Container, transfer *serving
 	}
 	if !hasArg(c.Args, "--kv-transfer-config") {
 		c.Args = append(c.Args, "--kv-transfer-config", string(cfg))
-	}
-	for _, env := range transfer.Env {
-		if !hasEnv(c.Env, env.Name) {
-			c.Env = append(c.Env, *env.DeepCopy())
-		}
 	}
 	if strings.EqualFold(transfer.Connector, "lmcache") {
 		b.configureLMCacheEnv(c, transfer.LMCache)

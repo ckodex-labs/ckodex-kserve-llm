@@ -143,10 +143,6 @@ spec:
             - name: CKODEX_TENSORFOLD_RUNTIME_IMAGE
               value: {{ .Values.engines.tensorfold.image | quote }}
             {{- end }}
-            {{- if and .Values.engines .Values.engines.vllm .Values.engines.vllm.upgradedImage }}
-            - name: CKODEX_VLLM_UPGRADED_IMAGE
-              value: {{ .Values.engines.vllm.upgradedImage | quote }}
-            {{- end }}
             - name: CKODEX_ENVOY_GATEWAY_NAMESPACE
               value: {{ .Values.gateway.dataPlaneNamespace | quote }}
             - name: CKODEX_AUDIT_LOG_PATH

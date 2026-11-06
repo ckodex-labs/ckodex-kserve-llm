@@ -7,6 +7,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
+	"github.com/ckodex-labs/kserve-llm-operator/internal/gateway"
 	domainvalidation "github.com/ckodex-labs/kserve-llm-operator/internal/validation"
 )
 
@@ -45,6 +47,11 @@ func newLLMInferenceReconcileState(llmSvc *servingv1alpha2.LLMInferenceService) 
 	return &llmInferenceReconcileState{llmSvc: llmSvc, beforePatch: llmSvc.DeepCopy()}
 }
 
+func schedulerNeedsEarlyFence(service *servingv1alpha2.LLMInferenceService, gatewayEnabled, schedulerEnabled bool) bool {
+	return service.Spec.Router.Scheduler != nil &&
+		(!gatewayEnabled || !schedulerEnabled || !gateway.SchedulerReady(service) || service.Spec.Canary != nil)
+}
+
 // Reconcile implements the main reconcile loop.
 func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	logger := log.FromContext(ctx)
@@ -70,6 +77,27 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 			"name", llmSvc.Name, "namespace", llmSvc.Namespace,
 			"annotation", AnnotationPauseReconciliation)
 		return ctrl.Result{}, nil
+	}
+	if llmSvc.Spec.Router.Scheduler != nil {
+		defer func() {
+			if retErr != nil {
+				fenceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				retErr = errors.Join(retErr, r.fenceSchedulerRoutes(fenceCtx, llmSvc))
+			}
+		}()
+		if schedulerNeedsEarlyFence(llmSvc, r.Gateway != nil, r.Scheduler != nil) {
+			fenceErr := r.fenceSchedulerRoutes(ctx, llmSvc)
+			if r.Gateway == nil {
+				return r.rejectSchedulerConfiguration(ctx, llmSvc, "GatewayFeatureDisabled", "scheduler is requested but the gateway feature is disabled", fenceErr)
+			}
+			if llmSvc.Spec.Canary != nil {
+				return r.rejectSchedulerConfiguration(ctx, llmSvc, "SchedulerCanaryUnsupported", "spec.router.scheduler cannot be combined with spec.canary until both InferencePools are explicitly modeled", fenceErr)
+			}
+			if err := fenceErr; err != nil {
+				return ctrl.Result{}, fmt.Errorf("fence scheduler routes before reconciliation: %w", err)
+			}
+		}
 	}
 	if err := domainvalidation.ValidateInferenceEngine(llmSvc.Spec.Engine); err != nil {
 		return ctrl.Result{}, err
@@ -100,6 +128,13 @@ func (r *LLMInferenceServiceReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 	return r.reconcilePostScheduler(ctx, state, logger)
+}
+
+func (r *LLMInferenceServiceReconciler) fenceSchedulerRoutes(ctx context.Context, service *servingv1alpha2.LLMInferenceService) error {
+	if err := gateway.FenceOwnedRoutes(ctx, r.APIReader, r.Client, service); err != nil {
+		return fmt.Errorf("fence scheduler routes: %w", err)
+	}
+	return nil
 }
 
 func (r *LLMInferenceServiceReconciler) reconcilePostScheduler(ctx context.Context, state *llmInferenceReconcileState, logger logr.Logger) (ctrl.Result, error) {

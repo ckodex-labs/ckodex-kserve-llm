@@ -54,6 +54,8 @@ type ImageContract struct {
 	Digest     string
 }
 
+const RuntimeQualificationAnnotation = "serving.ckodex.com/runtime-qualification"
+
 // Reference returns the tag-qualified, digest-pinned image reference.
 func (contract ImageContract) Reference() string {
 	return fmt.Sprintf("%s:%s@%s", contract.Repository, contract.Tag, contract.Digest)

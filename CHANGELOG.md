@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.20.0 — 2026-11-05
+
+### Highlights
+
+- **vLLM v0.33.0 Upgrade**: Upgraded default vLLM runtime to `v0.33.0` with PyTorch 2.14.0, CUDA 13.0, and digest pin `vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e`. Added support for Kimi-K3.1 (KDA SSM), DeepSeek-V4.1 Flash, and FP8/NVFP4 KV caches.
+- **Universal Tool Calling Protocol (UTCP v1.0.1)**: Full protocol support including UTCP manual specifications, A15 `UTCPManual` AIPack artifacts, native Agent integration, and bi-directional MCP/OpenAPI converters (`internal/utcp`).
+- **Foundation Vision & Multimodal Tasks**: Added CRD tasks and admission validation for Baidu Unlimited-OCR-2 (`ocr`) and Meta SAM 3 (`segmentation`) in `MultimodalInferenceService`.
+- **Prefix Caching & LMCache v0.5.6**: Integrated LMCache v0.5.6 with local/distributed KV-cache offload and verified 72.8% TTFT latency reduction under prompt reuse.
+- **Envoy Gateway 1.2.0 Hardening**: Route fencing, TLS termination, and mandatory security headers (`Strict-Transport-Security`, `X-Content-Type-Options`, `Content-Security-Policy`).
+- **Zero-CVE Supply Chain Hardening**: Upgraded builder to Go 1.27.3 (`golang:1.27.3-bookworm`), updated `go.mod` to Go 1.27.1 / `go-jose/v4 v4.1.6`, and updated Hugging Face initializer dependencies with `certifi==2026.10.18` and `filelock==4.2.1`.
+
 ## v0.19.0 — 2026-10-10
 
 ### Highlights

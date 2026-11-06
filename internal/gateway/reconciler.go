@@ -60,8 +60,37 @@ func (r *Reconciler) Reconcile(ctx context.Context, llmSvc *servingv1alpha2.LLMI
 			return fmt.Errorf("reconcile grpcroute: %w", err)
 		}
 		logger.Info("grpcroute reconciled")
+	} else {
+		if err := r.blockExistingGRPCRoute(ctx, llmSvc); err != nil {
+			return fmt.Errorf("block existing grpcroute: %w", err)
+		}
 	}
 
+	return nil
+}
+
+// blockExistingGRPCRoute fences a previously owned route without creating one
+// when gRPC is disabled. Foreign routes are never mutated.
+func (r *Reconciler) blockExistingGRPCRoute(ctx context.Context, service *servingv1alpha2.LLMInferenceService) error {
+	var route gwapiv1.GRPCRoute
+	key := types.NamespacedName{Name: service.Name + "-grpcroute", Namespace: service.Namespace}
+	if err := r.Get(ctx, key, &route); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("get grpcroute %s: %w", key, err)
+	}
+	if service.UID == "" || !metav1.IsControlledBy(&route, service) {
+		return fmt.Errorf("grpcroute %s is not controlled by LLMInferenceService", key)
+	}
+	original := route.DeepCopy()
+	blockGRPCRoute(&route)
+	if apiequality.Semantic.DeepEqual(&route.Spec, &original.Spec) {
+		return nil
+	}
+	if err := r.Patch(ctx, &route, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
+		return fmt.Errorf("patch grpcroute %s: %w", key, err)
+	}
 	return nil
 }
 
@@ -112,6 +141,9 @@ func (r *Reconciler) reconcileGateway(ctx context.Context, llmSvc *servingv1alph
 	if err != nil {
 		return err
 	}
+	if llmSvc.UID == "" || !metav1.IsControlledBy(&existing, llmSvc) {
+		return fmt.Errorf("gateway %s/%s is not controlled by LLMInferenceService", existing.Namespace, existing.Name)
+	}
 
 	original := existing.DeepCopy()
 	existing.Spec = desired.Spec
@@ -119,7 +151,7 @@ func (r *Reconciler) reconcileGateway(ctx context.Context, llmSvc *servingv1alph
 	if apiequality.Semantic.DeepEqual(&existing, original) {
 		return nil
 	}
-	return r.Patch(ctx, &existing, client.MergeFrom(original))
+	return r.Patch(ctx, &existing, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 }
 
 // reconcileHTTPRoute creates or updates the HTTPRoute. When spec.canary is set,
@@ -164,6 +196,9 @@ func (r *Reconciler) reconcileHTTPRoute(ctx context.Context, llmSvc *servingv1al
 	if err != nil {
 		return err
 	}
+	if llmSvc.UID == "" || !metav1.IsControlledBy(&existing, llmSvc) {
+		return fmt.Errorf("HTTPRoute %s/%s is not controlled by LLMInferenceService", existing.Namespace, existing.Name)
+	}
 
 	original := existing.DeepCopy()
 	existing.Spec = httpRoute.Spec
@@ -172,7 +207,7 @@ func (r *Reconciler) reconcileHTTPRoute(ctx context.Context, llmSvc *servingv1al
 	if apiequality.Semantic.DeepEqual(&existing, original) {
 		return nil
 	}
-	return r.Patch(ctx, &existing, client.MergeFrom(original))
+	return r.Patch(ctx, &existing, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 }
 
 // reconcileGRPCRoute creates GRPCRoute with V2 gRPC method matching.
@@ -191,23 +226,27 @@ func (r *Reconciler) reconcileGRPCRoute(ctx context.Context, llmSvc *servingv1al
 	if err != nil {
 		return err
 	}
+	if llmSvc.UID == "" || !metav1.IsControlledBy(&existing, llmSvc) {
+		return fmt.Errorf("GRPCRoute %s/%s is not controlled by LLMInferenceService", existing.Namespace, existing.Name)
+	}
 
 	original := existing.DeepCopy()
 	existing.Spec = grpcRoute.Spec
 	if apiequality.Semantic.DeepEqual(&existing, original) {
 		return nil
 	}
-	return r.Patch(ctx, &existing, client.MergeFrom(original))
+	return r.Patch(ctx, &existing, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 }
 
 // GatewayRef returns the parent reference for routes to use.
 func GatewayRef(llmSvc *servingv1alpha2.LLMInferenceService) gwapiv1.ParentReference {
 	if llmSvc.Spec.Router.Gateway.ExistingRef != nil {
-		ns := gwapiv1.Namespace(llmSvc.Spec.Router.Gateway.ExistingRef.Namespace)
-		return gwapiv1.ParentReference{
-			Name:      gwapiv1.ObjectName(llmSvc.Spec.Router.Gateway.ExistingRef.Name),
-			Namespace: &ns,
+		ref := gwapiv1.ParentReference{Name: gwapiv1.ObjectName(llmSvc.Spec.Router.Gateway.ExistingRef.Name)}
+		if namespace := llmSvc.Spec.Router.Gateway.ExistingRef.Namespace; namespace != "" {
+			ns := gwapiv1.Namespace(namespace)
+			ref.Namespace = &ns
 		}
+		return ref
 	}
 	return gwapiv1.ParentReference{
 		Name: gwapiv1.ObjectName(llmSvc.Name + "-gateway"),

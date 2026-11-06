@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: vllm
-        image: vllm/vllm-openai-cpu:v0.28.0
+        image: vllm/vllm-openai-cpu:v0.33.0@sha256:87167cf0ec6e1e9607bb1cf9bf618a67d04963236a34bd955ac75b7d31a6edf5
         resources:
           requests:
             cpu: "2"

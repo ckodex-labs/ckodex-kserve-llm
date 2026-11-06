@@ -32,7 +32,7 @@ func BuildGRPCRoute(llmSvc *servingv1alpha2.LLMInferenceService) *gwapiv1.GRPCRo
 	// V2 Open Inference Protocol gRPC service name
 	serviceName := "inference.GRPCInferenceService"
 
-	return &gwapiv1.GRPCRoute{
+	route := &gwapiv1.GRPCRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      llmSvc.Name + "-grpcroute",
 			Namespace: llmSvc.Namespace,
@@ -123,5 +123,18 @@ func BuildGRPCRoute(llmSvc *servingv1alpha2.LLMInferenceService) *gwapiv1.GRPCRo
 				},
 			},
 		},
+	}
+	// The gRPC route has no scheduler backend; block every method, including
+	// health and metadata, rather than bypassing a requested scheduler.
+	if llmSvc.Spec.Router.Scheduler != nil {
+		blockGRPCRoute(route)
+	}
+	return route
+}
+
+func blockGRPCRoute(route *gwapiv1.GRPCRoute) {
+	for i := range route.Spec.Rules {
+		route.Spec.Rules[i].BackendRefs = nil
+		route.Spec.Rules[i].Filters = nil
 	}
 }

@@ -172,7 +172,7 @@ func TestBuilder_Build_SelectsHardwareDefaultBeforeRuntimeFallback(t *testing.T)
 	service := newDefaultBuildService()
 	builder := &Builder{
 		Client:       fake.NewClientBuilder().Build(),
-		RuntimeImage: "vllm/vllm-openai:v0.28.0",
+		RuntimeImage: "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e",
 	}
 
 	dep := builder.Build(context.Background(), service, 1, HardwareAppleSilicon, nil)
@@ -199,7 +199,7 @@ func TestBuilder_Build_PreservesExplicitRuntimeImageOnHardwareMismatch(t *testin
 	service.Spec.Template.Spec.Containers[0].Image = "registry.example/custom-vllm:v1"
 	builder := &Builder{
 		Client:       fake.NewClientBuilder().Build(),
-		RuntimeImage: "vllm/vllm-openai:v0.28.0",
+		RuntimeImage: "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e",
 	}
 
 	dep := builder.Build(context.Background(), service, 1, HardwareAppleSilicon, nil)
@@ -209,7 +209,7 @@ func TestBuilder_Build_PreservesExplicitRuntimeImageOnHardwareMismatch(t *testin
 func TestBuilder_Build_RuntimeImageAndMountedModelOverride(t *testing.T) {
 	builder := &Builder{
 		Client:       fake.NewClientBuilder().Build(),
-		RuntimeImage: "registry.example/vllm:v0.28.0",
+		RuntimeImage: "registry.example/vllm:v0.33.0",
 	}
 	llmSvc := &servingv1alpha2.LLMInferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "gemma", Namespace: "default"},
@@ -223,13 +223,13 @@ func TestBuilder_Build_RuntimeImageAndMountedModelOverride(t *testing.T) {
 
 	dep := builder.Build(context.Background(), llmSvc, 1, HardwareNVIDIA, nil)
 	c := dep.Spec.Template.Spec.Containers[0]
-	assert.Equal(t, "registry.example/vllm:v0.28.0", c.Image)
+	assert.Equal(t, "registry.example/vllm:v0.33.0", c.Image)
 	assert.Equal(t, []string{"--model", api.ModelMountPath}, c.Args[:2])
 	assert.Contains(t, c.Args, "--max-model-len")
 }
 
 func TestBuilder_BuildWithRole_ConfiguresLMCacheTransfer(t *testing.T) {
-	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.28.0"}
+	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.33.0"}
 	llmSvc := &servingv1alpha2.LLMInferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "chat", Namespace: "default"},
 		Spec: servingv1alpha2.LLMInferenceServiceSpec{
@@ -253,7 +253,7 @@ func TestBuilder_BuildWithRole_ConfiguresLMCacheTransfer(t *testing.T) {
 }
 
 func TestBuilder_BuildWithRole_LMCachePreservesExplicitExperimentalFlag(t *testing.T) {
-	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.28.0"}
+	builder := &Builder{Client: fake.NewClientBuilder().Build(), RuntimeImage: "vllm:v0.33.0"}
 	llmSvc := &servingv1alpha2.LLMInferenceService{
 		ObjectMeta: metav1.ObjectMeta{Name: "chat", Namespace: "default"},
 		Spec: servingv1alpha2.LLMInferenceServiceSpec{

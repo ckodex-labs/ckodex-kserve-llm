@@ -1,4 +1,4 @@
-# Runbook: Upgrading to TensorFold Runtime & vLLM v0.31.0 for Decision-Class Inference
+# Historical Runbook: TensorFold Runtime & vLLM v0.31.0 Decision-Class Inference
 
 This runbook guides cluster operators and ML platform engineers through upgrading the
 CKodex KServe LLM Operator data-plane stack to support **vLLM v0.31.0** and the **TensorFold
@@ -200,12 +200,17 @@ kubectl get crd modelservingprofiles.serving.ckodex.com llminferenceservices.ser
 
 ### Step 2: Configure and Upgrade Helm Operator Deployment
 
+This is a historical v0.31.0 procedure. `engines.vllm.version` and the former
+`engines.vllm.upgradedImage` value did not select the serving image. The vLLM
+workload and adapter contracts now both use the digest-pinned v0.33.0 release.
+Use the [v0.33.0 runtime acceptance runbook](vllm-v0.33-qualification.md) for
+its hardware and driver acceptance procedure.
+
 Verify the Helm chart values configure admitted engines and hardware options:
 
 ```bash
 helm template ckodex-operator deploy/helm \
   --set engines.tensorfold.enabled=true \
-  --set engines.vllm.version="v0.31.0" \
   --namespace ckodex-system > /tmp/rendered-operator.yaml
 
 helm upgrade --install ckodex-kserve-llm deploy/helm \

@@ -1,6 +1,6 @@
 # Security Architecture: The Governed Trust Loop
 
-The **ckodex-kserve-llm** operator implements a "Governed Trust Loop" to ensure that AI workloads are deployed in a zero-trust environment with automated compliance evidence.
+The **ckodex-kserve-llm** operator provides components intended to support a governed deployment. Which identity, isolation, integrity, and evidence controls apply depends on enabled features and cluster configuration; this document does not assert that every installation enforces them.
 
 ## 1. Zero-Trust Foundations
 
@@ -8,26 +8,26 @@ The architecture is built on three pillars of security: **Identity**, **Isolatio
 
 ### A. Workload Identity (SPIFFE/SPIRE)
 
-Every inference service is issued a unique **SPIFFE ID** based on its Kubernetes ServiceAccount and Model name.
+When the optional SPIRE integration is configured, a registration can define a **SPIFFE ID** for an inference service based on its Kubernetes ServiceAccount and model name.
 
-- **Identity Issuance**: The `SPIREReconciler` manages a node-local SPIRE Agent.
-- **mTLS Enforcement**: Workloads obtain SVIDs via the SPIFFE Workload API (CSI driver), enabling cryptographically verified mTLS for all backend communication.
+- **Identity Integration**: The `SPIREReconciler` can manage a node-local SPIRE Agent when enabled and configured.
+- **Workload Identity**: A valid registration is configuration evidence only; it does not prove SVID issuance, workload authentication, or mTLS enforcement.
 - **NIST Mapping**: **IA-9** (Service Identification and Authentication) — applies to non-person entities (workload SVIDs), not IA-2 which governs organizational user accounts.
 
 ### B. Traffic Isolation (Istio DPI)
 
-The operator automatically generates Istio `ServiceEntry` and `VirtualService` resources for workloads that declare behavioral intent via the `ToolSurface`.
+When the relevant gateway integration is enabled and configured, the operator can generate Istio `ServiceEntry` and `VirtualService` resources for workloads that declare behavioral intent via the `ToolSurface`.
 
-- **Egress Filtering**: Deep Packet Inspection (DPI) ensures that model tools can only reach authorized FQDN targets.
-- **Default Deny**: All model pods are isolated by default via Kubernetes `NetworkPolicies` until their traffic profile is explicitly reconciled.
-- **NIST Mapping**: **AC-4** (Information Flow Enforcement) — egress filtering and default-deny NetworkPolicies enforce information flow policy at the pod level.
+- **Egress Filtering**: Configured Istio policy may restrict declared tool traffic; resource presence alone does not prove effective filtering.
+- **Network Policies**: Deployment-specific `NetworkPolicy` resources may restrict pod traffic. The OSCAL AC-4 check tests for policy presence only, not selection or enforcement.
+- **NIST Mapping**: **AC-4** (Information Flow Enforcement) is a mapping for configured enforcement; the OSCAL resource check alone does not establish it.
 
 ### C. Resource Integrity (OPA Gatekeeper)
 
-Policies are enforced at admission time using **OPA Gatekeeper**.
+Where OPA Gatekeeper and the relevant policies are installed and configured, admission policies can constrain resources.
 
-- **GPU Quotas**: Prevent resource exhaustion and GPU exfiltration.
-- **Image Allowlist**: Ensure only trusted, signed registries (`ckodex`, `vllm`, `lmsysorg`, `kserve`) are used for inference runtimes.
+- **GPU Quotas**: Where corresponding policies are installed, quotas can constrain resource use.
+- **Image Allowlist**: Where an allowlist policy is installed, it can constrain inference runtime images; this document does not establish signature verification.
 
 ## 2. The L|T|R Governance Model
 
@@ -41,43 +41,20 @@ Compliance is tracked via a composite state machine represented as three "State 
 
 ## 3. Evidence-as-Code (OSCAL)
 
-Unlike typical systems which provide "hand-wavy" security claims, this operator generates machine-readable **OSCAL Assessment Results**.
+OSKAL validates the component definition against its embedded OSCAL schema;
+schema validity is not evidence that mapped controls are effective. The
+resource-check command evaluates six mapped controls using a JSON snapshot
+or a live Kubernetes API and emits JSON results. Schema validity is not evidence
+that a control is effective. The AC-4 check detects namespace policy presence;
+other checks inspect status conditions or SPIRE registration data. OSKAL projects
+saved check outcomes into OSCAL observations; the scope, plan reference and
+evaluation time are supplied by the caller and are not independently verified.
+The projected artifact records the input and OSKAL source digests, but not the
+operator source revision. The caller-supplied timestamp is syntax-checked only,
+with no freshness check. The live assessment timeout is 30 seconds; snapshot
+input is limited to 32 MiB and projection input to 1 MiB.
 
-```mermaid
-graph LR
-    WS[Workload Spec] --> RE[Reconciler]
-    RE --> PL[OPA Policy]
-    RE --> TP[Trust Plane]
-    TP --> LULA[Lula Validate]
-    LULA --> EV[assessment-results.yaml]
-```
-
-### Technical Proof: OSCAL Evidence
-
-The following snippet is an actual assessment result for **SI-7 (Software Integrity)**:
-
-```yaml
-# oscal-assessment-results.yaml (Snippet — SI-7 observation)
-observations:
-  - uuid: 66666666-6666-4666-8666-666666666661
-    title: "Software Supply Chain Integrity"
-    description: >-
-      Passes only when the controller has recorded a runtime verification result
-      for signature, provenance, and SBOM attestation on the assessed workload.
-    methods:
-      - EXAMINE
-    subjects:
-      - subject-uuid: 77777777-7777-4777-8777-777777777771
-        type: component
-        title: "LLMInferenceService/gemma-4-e2b"
-        links:
-          - href: "kubernetes://namespaces/default/llminferenceservices/gemma-4-e2b"
-            rel: reference
-        relevant-evidence:
-          - description: "status.conditions[Compliance-SI-7].status == True"
-            href: "kubernetes://namespaces/default/llminferenceservices/gemma-4-e2b"
-            remarks: "condition.reason must equal ProvenanceVerified"
-```
+See [CI current state](ci/current-state.md) for commands and limits.
 
 ## 4. Open Inference Signals (OIS) v0.1
 

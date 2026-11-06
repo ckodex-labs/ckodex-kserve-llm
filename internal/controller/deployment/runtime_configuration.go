@@ -8,6 +8,7 @@ import (
 
 	servingv1alpha2 "github.com/ckodex-labs/kserve-llm-operator/api/v1alpha2"
 	"github.com/ckodex-labs/kserve-llm-operator/internal/observability"
+	inferenceruntime "github.com/ckodex-labs/kserve-llm-operator/internal/runtime"
 )
 
 func (b *Builder) ensureVLLMEnv(llmSvc *servingv1alpha2.LLMInferenceService, podSpec *corev1.PodSpec) {
@@ -23,6 +24,14 @@ func (b *Builder) ensureVLLMEnv(llmSvc *servingv1alpha2.LLMInferenceService, pod
 		engine = "vllm"
 	}
 	envs := map[string]string{"HOME": "/tmp", "VLLM_TARGET_DEVICE": "cpu", "USER": "nonroot", "LOGNAME": "nonroot", "TORCHINDUCTOR_CACHE_DIR": "/tmp", "VLLM_LOGGING_LEVEL": "INFO", "OIS_MODEL_ID": modelID, "OIS_MODEL_URN": observability.URN("model", modelID), "OIS_ENGINE_URN": observability.URN("engine", engine), "OIS_ACTOR_URN": observability.URN("actor", llmSvc.Namespace)}
+	if engine == "vllm" {
+		// vLLM recommends 64 or 128 to bound per-request sequence fan-out.
+		envs["VLLM_MAX_N_SEQUENCES"] = "128"
+		// Never expose vLLM's development-only control endpoints by default.
+		envs["VLLM_SERVER_DEV_MODE"] = "0"
+		// Do not follow redirects after checking an allowed media URL domain.
+		envs["VLLM_MEDIA_URL_ALLOW_REDIRECTS"] = "0"
+	}
 	for name, value := range envs {
 		setEnvDefault(&podSpec.Containers[0], name, value)
 	}
@@ -52,6 +61,9 @@ func (b *Builder) buildAnnotations(llmSvc *servingv1alpha2.LLMInferenceService, 
 	ann := map[string]string{}
 	if len(podSpec.Containers) > 0 {
 		ann["serving.ckodex.com/runtime-image"] = podSpec.Containers[0].Image
+	}
+	if qualification := llmSvc.Annotations[inferenceruntime.RuntimeQualificationAnnotation]; qualification != "" {
+		ann[inferenceruntime.RuntimeQualificationAnnotation] = qualification
 	}
 	if llmSvc.Spec.KVCache != nil && llmSvc.Spec.KVCache.Transfer != nil {
 		b.addKVAnnotations(ann, llmSvc, kvRole)

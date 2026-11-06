@@ -109,7 +109,7 @@ Tag push (v*)
 | golangci-lint | v2.13.1 (source-built in the Go 1.27 Dagger builder) | `dagger/constants.go`, `dagger/bases.go` |
 | Trivy | 0.72.0 | `dagger/constants.go` |
 | Cosign | v3.1.3 | `dagger/constants.go` |
-| Lula | v0.16.0 | `dagger/module.go` |
+| OSKAL | caller-supplied source | `dagger/module.go` |
 | GoReleaser | v2.18.0 | `.github/workflows/ci.yml:53` |
 | Helm | v5.0.1 action | workflows |
 
@@ -128,14 +128,66 @@ Implemented across responsibility-named files in `dagger/` (`module.go`, `build.
 | `build` | `dagger call build --source=. --version=dev` | Container |
 | `scan` | `dagger call scan --source=.` | string (trivy output) |
 | `sbom` | `dagger call sbom --source=. --image-ref=<ref> export --path=sbom.cdx.json` | File |
-| `lula` | `dagger call lula --source=. export --path=assessment-results.yaml` | File |
+| `oscal-validate` | `dagger call oscal-validate --source=. --oskal-source=/path/to/ckx-oskal-001` | schema validation report |
+| `oscal-checks` | `dagger call oscal-checks --source=.` | evaluator conformance tests; does not assess a cluster |
+| `oscal-projection-checks` | `dagger call oscal-projection-checks --source=. --oskal-source=/path/to/ckx-oskal-001` | projection test results and OSKAL source digest |
+| `oscal-project` | `dagger call oscal-project --help` | schema-validated assessment-results file |
 | `publish` | `dagger call publish --source=. --image-ref=... --version=... --registry-username=... --registry-token=env:GITHUB_TOKEN` | string (digest) |
 | `all` | `dagger call all --source=.` | string (hosted fast lint + build-check pass/fail) |
 
-`lula` always lints the linked validation definitions and runs offline positive
-and negative IA-9 fixtures. Its exported OSCAL assessment evaluates the live
-cluster when Kubernetes credentials are available; without them, controls are
-reported as `not-satisfied`.
+OSKAL validates the component definition's schema. The resource checks can
+evaluate a JSON snapshot or query a cluster using
+`go run ./hack/oscal-assessment --live --identity-mode direct` for a direct
+deployment. The live path requires Kubernetes credentials and read access. It
+emits JSON check results. AC-4 checks only for a policy
+in each service namespace; status conditions are not independent proof of the
+controls they describe. The caller must identify and manage the OSKAL source
+revision. These commands are not part of the hosted `all` gate.
+
+A full assessment and an IA-9-only check require explicit identity context.
+For vcluster mode, use `--identity-mode vcluster` with
+`--host-namespace <physical-namespace>` instead. The caller supplies this
+context; the check does not independently verify that it matches the
+deployment. Identity flags are not accepted for checks that do not include IA-9.
+
+For JSON snapshots, `llmServices` must be an explicit non-null array for every
+assessment. `networkPolicies` must also be present as a non-null array when
+running all checks or AC-4; `spireEntries` must be present as a non-null array
+when running all checks or IA-9. Use `[]` to assert that the source was observed
+and contained no resources; omitted or `null` arrays are rejected. AC-4 also
+requires each supplied NetworkPolicy to have a name and namespace, and checks
+only for a named policy in each service namespace, not policy selection or
+enforcement. Snapshot identity mode remains caller-supplied for IA-9.
+
+To project a saved result, provide the scope, assessment plan reference,
+and caller-asserted check evaluation time (RFC3339):
+
+```bash
+dagger call oscal-project --source=. --oskal-source=/path/to/ckx-oskal-001 \
+  --checks=checks.json --subject="$ASSESSMENT_SCOPE" --assessment-plan="$ASSESSMENT_PLAN" \
+  --evaluated-at="$ASSESSMENT_TIME" export --path=assessment-results.json
+```
+
+The adapter uses the OSKAL SDK, validates the document with OSKAL, and retains
+the checks as observations. The plan, scope, timestamp and input are caller
+assertions; the adapter does not verify them or conclude control compliance.
+The timestamp is parsed as RFC3339 but is not checked for freshness or matched
+to the checks' execution time. The exported artifact records the check-input
+digest and the Dagger source content digest for the OSKAL checkout used to
+project and validate it; it does not bind the operator source revision.
+The live assessor has a 30-second request timeout and snapshot input is limited
+to 32 MiB; projection input is limited to 1 MiB.
+
+Treat the supplied OSKAL checkout as executable code: during projection it runs
+with the operator source and check file mounted and can read their contents.
+Only use a reviewed, trusted checkout, and do not supply inputs containing data
+that checkout is not authorized to access. The OSKAL content digest identifies
+the mounted bytes; it does not establish who authorized or reviewed them. Dagger
+may reuse cached outputs for identical inputs, so generated UUIDs or timestamps
+in an artifact do not prove that projection ran anew for each invocation.
+
+The separate command `go run ./hack/deployment-assessment --input <deployment.yaml>`
+checks explicit `runAsNonRoot` settings on every container in a Deployment manifest.
 
 ---
 

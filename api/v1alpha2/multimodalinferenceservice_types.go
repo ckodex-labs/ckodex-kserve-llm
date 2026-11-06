@@ -12,7 +12,7 @@ import (
 
 // MultimodalTask describes the type of multimodal workload.
 //
-// +kubebuilder:validation:Enum=vision-language;image-generation;text-to-speech
+// +kubebuilder:validation:Enum=vision-language;image-generation;text-to-speech;ocr;segmentation
 type MultimodalTask string
 
 const (
@@ -30,6 +30,16 @@ const (
 	// (e.g. LiquidAI/LFM2.5-Audio-1.5B) via a custom audio generation endpoint.
 	// Exposes /v1/audio/speech.
 	MultimodalTaskTextToSpeech MultimodalTask = "text-to-speech"
+
+	// MultimodalTaskOCR serves document OCR and long-horizon visual parsing models
+	// (e.g. baidu/Unlimited-OCR-2) via vision-language interfaces.
+	// Exposes /v1/chat/completions with multi-page image support.
+	MultimodalTaskOCR MultimodalTask = "ocr"
+
+	// MultimodalTaskSegmentation serves promptable concept segmentation foundation models
+	// (e.g. facebook/sam3) for concept-guided segmentation masks and visual tracking.
+	// Exposes /v1/images/segmentations.
+	MultimodalTaskSegmentation MultimodalTask = "segmentation"
 )
 
 // MultimodalRuntime selects the serving runtime for multimodal models.
@@ -49,7 +59,7 @@ const (
 func DefaultMultimodalRuntimeImage(r MultimodalRuntime) string {
 	switch r {
 	case MultimodalRuntimeVLLM:
-		return "vllm/vllm-openai:v0.28.0"
+		return "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
 	default:
 		return ""
 	}
@@ -104,7 +114,7 @@ type MultimodalInferenceServiceSpec struct {
 
 	// Task describes the type of multimodal workload. Defaults to vision-language.
 	// +kubebuilder:default=vision-language
-	// +kubebuilder:validation:Enum=vision-language;image-generation;text-to-speech
+	// +kubebuilder:validation:Enum=vision-language;image-generation;text-to-speech;ocr;segmentation
 	// +optional
 	Task MultimodalTask `json:"task,omitempty"`
 
@@ -115,7 +125,7 @@ type MultimodalInferenceServiceSpec struct {
 	Runtime MultimodalRuntime `json:"runtime,omitempty"`
 
 	// RuntimeImage overrides the default container image for the selected runtime.
-	// When omitted, the operator uses vllm/vllm-openai:v0.28.0.
+	// When omitted, the operator uses the digest-pinned vLLM v0.33.0 image.
 	// +optional
 	RuntimeImage string `json:"runtimeImage,omitempty"`
 

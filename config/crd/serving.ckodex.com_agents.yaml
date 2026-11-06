@@ -17294,8 +17294,44 @@ spec:
                     name:
                       description: Name identifies the tool.
                       type: string
+                    protocol:
+                      description: |-
+                        Protocol declares the tool invocation protocol.
+                        Values: "function-call", "http", "grpc", "mcp", "utcp"
+                      enum:
+                      - function-call
+                      - http
+                      - grpc
+                      - mcp
+                      - utcp
+                      type: string
+                    utcpManualRef:
+                      description: UTCPManualRef references a parent UTCP manual if
+                        this tool originates from one.
+                      type: string
                   required:
                   - description
+                  - name
+                  type: object
+                type: array
+              utcpManuals:
+                description: UTCPManuals lists UTCP manual references for native tool
+                  discovery and invocation.
+                items:
+                  description: UTCPManualRef references a Universal Tool Calling Protocol
+                    manual.
+                  properties:
+                    endpoint:
+                      description: Endpoint is the discovery URL or base URL serving
+                        the manual (GET /utcp).
+                      type: string
+                    name:
+                      description: Name identifies the manual or tool namespace.
+                      type: string
+                    packRef:
+                      description: PackRef references an AIPack containing a UTCPManual.
+                      type: string
+                  required:
                   - name
                   type: object
                 type: array

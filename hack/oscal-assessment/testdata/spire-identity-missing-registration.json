@@ -1,0 +1,13 @@
+{
+  "llmServices": [
+    {
+      "apiVersion": "serving.ckodex.com/v1alpha2",
+      "kind": "LLMInferenceService",
+      "metadata": {
+        "name": "llama3",
+        "namespace": "inference"
+      }
+    }
+  ],
+  "spireEntries": []
+}

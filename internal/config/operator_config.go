@@ -322,12 +322,12 @@ func DefaultOperatorConfig() OperatorConfig {
 		Features: DefaultFeatureGates(),
 		Defaults: DefaultsConfig{
 			// Pinned to a specific version — :latest is a supply chain risk and air-gapped blocker.
-			RuntimeImage:                     "vllm/vllm-openai:v0.28.0",
+			RuntimeImage:                     "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e",
 			KServeMultiNodeRuntime:           "kserve-huggingfaceserver-multinode",
-			SchedulerImage:                   "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:2e516fa1310da7be59b82beb1445362139597d6d553ef04d546716abe3aaaa70",
-			StorageInitializerImage:          "kserve/storage-initializer:v0.20.0",
+			SchedulerImage:                   "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:024188e998f516879f68532016ca24fabca00afbdcc2af9a61b17634e197df2c",
+			StorageInitializerImage:          "kserve/storage-initializer:v0.21.0@sha256:3a3a6a8053478c8d8d90f96fc5e54c1892c07784102dda70104374d4f89a3672",
 			CustomStorageInitializerImage:    "ckodex/storage-initializer:v0.1.0",
-			HuggingFaceInitializerImage:      "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.19.0",
+			HuggingFaceInitializerImage:      "ghcr.io/ckodex-labs/ckodex-kserve-llm-huggingface-initializer:v0.20.0",
 			DefaultReplicas:                  1,
 			VLLMCPURequest:                   "2",
 			VLLMMemoryRequest:                "4Gi",
@@ -369,7 +369,7 @@ func DefaultOperatorConfig() OperatorConfig {
 
 func defaultSchedulerDefaults() SchedulerDefaults {
 	return SchedulerDefaults{
-		Image: "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:2e516fa1310da7be59b82beb1445362139597d6d553ef04d546716abe3aaaa70",
+		Image: "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:024188e998f516879f68532016ca24fabca00afbdcc2af9a61b17634e197df2c",
 		DefaultPlugins: []string{
 			"prefix-cache-scorer", "queue-scorer", "kv-cache-utilization-scorer", "max-score-picker",
 		},

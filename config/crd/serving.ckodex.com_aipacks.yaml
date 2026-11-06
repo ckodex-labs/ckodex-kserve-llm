@@ -377,6 +377,27 @@ spec:
                       - ref
                       type: object
                     type: array
+                  utcpManuals:
+                    description: UTCPManuals are Universal Tool Calling Protocol manual
+                      artifacts.
+                    items:
+                      description: AIPackRef is a pointer to another AIPack artifact
+                        by OCI digest reference.
+                      properties:
+                        kind:
+                          description: |-
+                            Kind is the expected ArtifactKind of the referenced artifact.
+                            Used to validate slot compatibility at admission time.
+                          type: string
+                        ref:
+                          description: Ref is a fully qualified OCI digest reference
+                            (sha256 required).
+                          pattern: ^.+@sha256:[0-9a-f]{64}$
+                          type: string
+                      required:
+                      - ref
+                      type: object
+                    type: array
                   workflow:
                     description: Workflow is the Workflow artifact orchestrating multi-step
                       behaviour.
@@ -956,12 +977,13 @@ spec:
                   protocol:
                     description: |-
                       Protocol declares the tool invocation protocol.
-                      Values: "function-call", "http", "grpc", "mcp"
+                      Values: "function-call", "http", "grpc", "mcp", "utcp"
                     enum:
                     - function-call
                     - http
                     - grpc
                     - mcp
+                    - utcp
                     type: string
                   schema:
                     description: |-

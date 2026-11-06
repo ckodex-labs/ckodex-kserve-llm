@@ -132,8 +132,8 @@ leaderElection:
 # Production registries should mirror and pin the resolved digest after
 # policy/signature verification.
 vllm:
-  # v0.28.0 includes the mixed-dtype NVFP4 correctness fix used by Gemma/Qwen.
-  defaultImage: "vllm/vllm-openai:v0.28.0"
+  # CUDA 13.0 image index digest for vLLM v0.33.0 (linux/amd64 + linux/arm64).
+  defaultImage: "vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e"
   # Purpose-built Xet-aware image; dependencies are installed at image build time.
   huggingFaceInitializerImage: ""
   customStorageInitializerImage: "ckodex/storage-initializer:v0.1.0"
@@ -187,9 +187,6 @@ gemma4:
 engines:
   vllm:
     enabled: true
-    version: "v0.31.0"
-    defaultImage: "vllm/vllm-openai:v0.28.0"
-    upgradedImage: "vllm/vllm-openai:v0.31.0"
     tier: 3
     supportedHardware:
       - nvidia
@@ -208,7 +205,7 @@ engines:
   sglang:
     enabled: true
     version: "v0.5.18"
-    image: "lmsysorg/sglang:v0.5.18@sha256:9e148f48035baec138c29a1a1"
+    image: "lmsysorg/sglang:v0.5.18@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1"
     tier: 2
     supportedHardware:
       - nvidia
@@ -280,7 +277,7 @@ modelServingProfiles:
 
 # EPP Scheduler defaults
 scheduler:
-  image: "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:2e516fa1310da7be59b82beb1445362139597d6d553ef04d546716abe3aaaa70"
+  image: "ghcr.io/llm-d/llm-d-router-endpoint-picker@sha256:024188e998f516879f68532016ca24fabca00afbdcc2af9a61b17634e197df2c"
   replicas: 1
   resources:
     limits:

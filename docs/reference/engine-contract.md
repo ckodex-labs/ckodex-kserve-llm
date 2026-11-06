@@ -4,7 +4,7 @@ This normative specification defines the engineering contract for inference runt
 
 ## Core contract invariant
 
-Every engine adapter in `internal/runtime/` must implement a **total capability function**:
+Every engine adapter in `internal/runtime/` must implement a total capability function:
 
 ```go
 Capabilities() inferenceruntime.CapabilityMatrix
@@ -16,19 +16,19 @@ Admission controllers enforce these declarations: if a custom resource requests 
 
 ## Conformance tiers
 
-Runtimes are categorized into three formal conformance tiers:
+Runtimes are categorized into four formal conformance tiers:
 
 | Tier | Name | Required capabilities | Reference runtime in v0.20.0 |
 |---|---|---|---|
 | **Tier 3** | Governed | Full OpenAI API, health probes, Prometheus metrics, disaggregated prefill/decode, KV-aware scheduling (EndpointPicker), LoRA hot-swap, deterministic replay, execution receipts | **vLLM v0.33.0** (`vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e`) |
 | **Tier 2** | Routed | OpenAI API, health probes, metrics, KV-cache-aware scheduling via EndpointPicker series | Target tier for scheduled engines |
-| **Tier 1** | Served | Standard `/v1/chat/completions` and `/v1/models` endpoints, health probes, basic metrics | **SGLang v0.5.22** (implements `ConformanceTierServed` in current Go adapter contract), **TensorFold v1.0.0** |
+| **Tier 1** | Served | Standard `/v1/chat/completions` and `/v1/models` endpoints, health probes, basic metrics | **SGLang v0.5.22**, **TensorFold v1.0.0**, **llama.cpp** |
 | **Tier 0** | Experimental | Feature-gated development runtimes; rejected in production admission | Untested community runtimes |
 
 ## The eight architectural clauses
 
 ### C0: Identity and provenance
-- The adapter name must be a DNS-label-safe identifier matching `spec.engine` (for example, `vllm`, `sglang`, `tensorfold`).
+- The adapter name must be a DNS-label-safe identifier matching `spec.engine` (for example, `vllm`, `sglang`, `tensorfold`, `llamacpp`).
 - Images must resolve to explicit digests in production manifests, never mutable tags.
 - Missing hardware variants are omitted rather than fabricated. For example, ROCm images without official upstream verification are omitted with an explicit operator error.
 
@@ -44,13 +44,13 @@ Runtimes are categorized into three formal conformance tiers:
 ### C3: OpenAI serving contract
 - The runtime must expose `/v1/chat/completions`, `/v1/completions`, and `/v1/models` on the declared container port (default 8000).
 - Independent probes:
-  - Startup probe: Accommodates large model loading and weight pre-staging (up to 10 minutes without tripping liveness).
+  - Startup probe: Accommodates large model loading and weight pre-staging (up to 15 minutes without tripping liveness).
   - Readiness probe: Signals readiness to receive traffic via Gateway API.
   - Liveness probe: Detects deadlocks or hung processes on `/health`.
 - Graceful termination: Runtimes must intercept `SIGTERM` and drain active inference streams within `terminationGracePeriodSeconds`.
 
 ### C4: Metrics and observability contract
-- Exposes Prometheus metrics on `/metrics` (or declared port/path).
+- Exposes Prometheus metrics on `/metrics` (or declared port and path).
 - Reports the four canonical series for KV-aware scheduling:
   1. `vllm:num_requests_queued`
   2. `vllm:num_requests_running`
@@ -72,7 +72,7 @@ Runtimes are categorized into three formal conformance tiers:
 - Remote code execution requires explicit opt-in (`--trust-remote-code`).
 - CORS parameters reject wildcard (`*`) origins and require explicit trusted domains.
 
-## Modern feature annotations for vLLM v0.33.0
+## Feature annotations for vLLM v0.33.0
 
 The vLLM adapter in `internal/runtime/vllm/adapter.go` recognizes declarative workload annotations:
 

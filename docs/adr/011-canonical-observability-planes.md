@@ -107,4 +107,4 @@ not survive the arrival of a second engine.
 
 - [ADR-010: Runtime engine contract](010-runtime-engine-contract.md)
 - [ADR-012: Model admission planes](012-model-admission-planes.md)
-- [Remediation plan](../remediation-plan.md)
+- [Remediation plan](../archive/remediation-plan.md)

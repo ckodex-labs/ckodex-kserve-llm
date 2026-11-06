@@ -172,5 +172,5 @@ kubectl describe modelonboarding llama-3-8b-promotion -n inference
 | Gate rolls back | Prometheus URL, query data, ready replicas, declared thresholds |
 | Request uses wrong model | Request `model` must equal `spec.model.name` |
 
-Continue with the [Model Deployment Runbook](runbooks/model-deployment.md) for
+Continue with the [Model Deployment Runbook](../runbooks/model-deployment.md) for
 operational troubleshooting.

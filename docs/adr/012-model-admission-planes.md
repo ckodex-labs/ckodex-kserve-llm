@@ -92,4 +92,4 @@ vocabulary rather than inventing a parallel evidence type.
 
 - [ADR-010: Runtime engine contract](010-runtime-engine-contract.md)
 - [ADR-011: Canonical observability planes](011-canonical-observability-planes.md)
-- [Remediation plan](../remediation-plan.md)
+- [Remediation plan](../archive/remediation-plan.md)

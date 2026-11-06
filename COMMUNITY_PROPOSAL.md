@@ -71,6 +71,6 @@ We would value feedback on:
 
 ## References
 
-- [Security Architecture](docs/SECURITY_ARCHITECTURE.md)
-- [API Deprecation Policy](docs/api-deprecation-policy.md)
-- [Enterprise Marketing Kit](docs/MARKETING_KIT.md)
+- [Security Architecture](docs/explanation/security-architecture.md)
+- [API Deprecation Policy](docs/reference/api-deprecation-policy.md)
+- [Enterprise Marketing Kit](docs/archive/MARKETING_KIT.md)

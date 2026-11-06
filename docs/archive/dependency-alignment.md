@@ -15,11 +15,11 @@ GIE, and llm-d Router retain their own compatible release versions.
 | Agent Router (formerly Envoy AI Gateway) | v1.2.0 | InferencePool extension manager and AI routing integration (candidate v1.2.1-rc2) | [release](https://github.com/theagentrouter/agent-router/releases/tag/v1.2.0) |
 | llm-d core | v1.0.0 | Organization-wide unified v1.0.0 release | [release](https://github.com/llm-d/llm-d/releases/tag/v1.0.0) |
 | llm-d Router EPP | v1.0.0 | Operator image pinned to the multi-architecture index digest; EPP config uses llm-d.ai/v1 | [release](https://github.com/llm-d/llm-d-router/releases/tag/v1.0.0), [chart default config](https://github.com/llm-d/llm-d-router/blob/v1.0.0/config/charts/routerlib/templates/_config.yaml) |
-| vLLM runtime and adapter | v0.33.0 | One digest-pinned CUDA 13.0 image contract for both default and adapter; CUDA 12.9 dropped | [release](https://github.com/vllm-project/vllm/releases/tag/v0.33.0), [acceptance runbook](runbooks/vllm-v0.33-qualification.md) |
+| vLLM runtime and adapter | v0.33.0 | One digest-pinned CUDA 13.0 image contract for both default and adapter; CUDA 12.9 dropped | [release](https://github.com/vllm-project/vllm/releases/tag/v0.33.0), [acceptance runbook](../runbooks/vllm-v0.33-qualification.md) |
 | vLLM CPU image | v0.33.0 | Multi-architecture CPU image index, pinned separately from the CUDA image | [CPU install docs](https://docs.vllm.ai/en/v0.33.0/getting_started/installation/cpu/) |
-| Hugging Face Hub / Xet | huggingface-hub==1.28.0, hf-xet==1.6.0 | Hash-pinned in the published initializer image | [requirements](../build/huggingface-initializer-requirements.txt) |
+| Hugging Face Hub / Xet | huggingface-hub==1.28.0, hf-xet==1.6.0 | Hash-pinned in the published initializer image | [requirements](../../build/huggingface-initializer-requirements.txt) |
 | SeaweedFS | 4.47 | External S3/Filer target for seaweedfs:// and swfs://; no chart install | [release](https://github.com/seaweedfs/seaweedfs/releases/tag/4.47) |
-| LMCache | v0.5.7 engine / operator-v0.1.1 | Non-root containers, unified API key auth, native pygrpc/grpc.aio, legacy TCP cache server removed; live acceptance tracked as L-OP-006 | [release](https://github.com/LMCache/LMCache/releases/tag/v0.5.7), [runbook](runbooks/lmcache.md) |
+| LMCache | v0.5.7 engine / operator-v0.1.1 | Non-root containers, unified API key auth, native pygrpc/grpc.aio, legacy TCP cache server removed; live acceptance tracked as L-OP-006 | [release](https://github.com/LMCache/LMCache/releases/tag/v0.5.7), [runbook](../runbooks/lmcache.md) |
 
 ## What was checked
 

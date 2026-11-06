@@ -31,7 +31,7 @@ claim.
 | EPP | `v1.5.0` digest-pinned image | `registry.k8s.io/gateway-api-inference-extension/epp@sha256:86c679b057298e68c6e65ff5603e92066d432e77b11f1f81f0a06399694810bc` |
 | vLLM CPU | `v0.25.1` | `vllm/vllm-openai-cpu:v0.25.1`, manifest `sha256:6b301f040db8152dfb8ff55e06fd348aa5d0d9a311f58118160c7058262c8628` |
 
-The version relationship is recorded in [dependency-alignment.md](../dependency-alignment.md)
+The version relationship is recorded in [dependency-alignment.md](../archive/dependency-alignment.md)
 and [COMPONENTS.md](../../COMPONENTS.md). The local installer is
 [local/02-prereqs.sh](../../local/02-prereqs.sh).
 

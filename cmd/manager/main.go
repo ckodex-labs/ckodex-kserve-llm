@@ -82,7 +82,7 @@ func (d deprecationChecker) Start(ctx context.Context) error {
 	if len(list.Items) > 0 {
 		setupLog.Info("DEPRECATION WARNING: v1alpha2 LLMInferenceService resources detected",
 			"count", len(list.Items),
-			"action", "Migrate to serving.ckodex.com/v1 before the v1alpha2 removal window. See docs/api-deprecation-policy.md",
+			"action", "Migrate to serving.ckodex.com/v1 before the v1alpha2 removal window. See docs/reference/api-deprecation-policy.md",
 		)
 	}
 	return nil

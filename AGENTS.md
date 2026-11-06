@@ -13,7 +13,7 @@ The `ckodex-kserve-llm-operator` is a Kubernetes operator managing large languag
 - `Agent` and `SkillRegistry` (`serving.ckodex.com/v1alpha2`): Autonomous agent identity and UTCP tool manual bindings.
 - `LocalModelCache` (`serving.ckodex.com/v1alpha2`): Node-local model weight pre-staging.
 
-Read `docs/overview.md` before modifying controller logic or CRD schemas.
+Read `docs/explanation/overview.md` before modifying controller logic or CRD schemas.
 
 ## Four spaces architecture
 
@@ -37,7 +37,7 @@ The codebase enforces strict separation across Four Spaces:
 | `charts/ckodex-kserve-llm-operator` | Public chart synchronized via byte-parity contract |
 | `hack/helm-contract/` | Enforces byte parity between Helm charts |
 | `hack/oscal-assessment/` | Evaluates cluster compliance against NIST SP 800-53 controls |
-| `docs/overview.md` | Canonical product narrative and architecture overview |
+| `docs/explanation/overview.md` | Canonical product narrative and architecture overview |
 
 ## CI/CD and verification commands
 

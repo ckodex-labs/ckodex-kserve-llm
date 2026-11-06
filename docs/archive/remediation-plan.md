@@ -86,8 +86,8 @@ Estimated ~2–3 engineer-weeks. Runs in parallel with Phase 2.
 
 ## Phase 2 — The engine seam
 
-See [ADR-010](adr/010-runtime-engine-contract.md) and the normative
-[engine contract](engine-contract.md).
+See [ADR-010](../adr/010-runtime-engine-contract.md) and the normative
+[engine contract](../reference/engine-contract.md).
 
 | ID | Item |
 |---|---|
@@ -127,7 +127,7 @@ Estimated ~2 engineer-weeks for vLLM and SGLang, ~1 for llama.cpp.
 
 ## Phase 4 — CKC-OBS: three planes
 
-See [ADR-011](adr/011-canonical-observability-planes.md).
+See [ADR-011](../adr/011-canonical-observability-planes.md).
 
 | ID | Item |
 |---|---|
@@ -148,7 +148,7 @@ Estimated ~5–6 engineer-weeks. Items 4.4, 4.5, and 4.10 are load-bearing.
 
 ## Phase 5 — Model admission
 
-See [ADR-012](adr/012-model-admission-planes.md).
+See [ADR-012](../adr/012-model-admission-planes.md).
 
 | ID | Item |
 |---|---|
@@ -313,11 +313,11 @@ governed execution into an ungoverned one.
 
 ## References
 
-- [Engine contract (CKC-ENG)](engine-contract.md)
-- [ADR-010: Runtime engine contract](adr/010-runtime-engine-contract.md)
-- [ADR-011: Canonical observability planes](adr/011-canonical-observability-planes.md)
-- [ADR-012: Model admission planes](adr/012-model-admission-planes.md)
-- [ADR-009: KServe 0.19 and llm-d integration boundary](adr/009-kserve-019-and-llm-d-boundary.md)
+- [Engine contract (CKC-ENG)](../reference/engine-contract.md)
+- [ADR-010: Runtime engine contract](../adr/010-runtime-engine-contract.md)
+- [ADR-011: Canonical observability planes](../adr/011-canonical-observability-planes.md)
+- [ADR-012: Model admission planes](../adr/012-model-admission-planes.md)
+- [ADR-009: KServe 0.19 and llm-d integration boundary](../adr/009-kserve-019-and-llm-d-boundary.md)
 - [Open loops](open-loops.md)
 - [KServe releases](https://github.com/kserve/kserve/releases)
 - [llm-d releases](https://github.com/llm-d/llm-d/releases)

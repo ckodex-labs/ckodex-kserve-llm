@@ -77,7 +77,7 @@ kubectl describe llmregistrycheck -A | grep -A10 "Violations:"
 
    ```bash
    # Update the operator's supported deployment configuration through the
-   # deployment pipeline, then roll it out. See docs/operator-defaults.md for
+   # deployment pipeline, then roll it out. See docs/reference/operator-defaults.md for
    # workload defaults; security allowlists are currently compiled defaults.
    ```
 
@@ -179,11 +179,11 @@ cat /tmp/tetragon-forensics.jsonl | \
 
 ---
 
-## Post-Incident
+## Post-incident
 
 Within 24 hours of incident closure:
 
 1. **Audit log export:** `kubectl logs -n ckodex-system deploy/ckodex-kserve-llm-operator --since=24h | grep audit_event > incident-$(date +%Y%m%d).log`
 2. **Policy review:** Was the violated/triggered policy correctly scoped?
 3. **ADR:** Create an ADR in `docs/adr/` if a policy or architecture change is needed.
-4. **Evidence bundle:** Collect logs, Tetragon events, Vault audit logs into a signed bundle per `docs/api-deprecation-policy.md` retention class guidelines.
+4. **Evidence bundle:** Collect logs, Tetragon events, Vault audit logs into a signed bundle per `docs/reference/api-deprecation-policy.md` retention class guidelines.

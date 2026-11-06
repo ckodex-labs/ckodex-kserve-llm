@@ -61,7 +61,7 @@ maintain without a seam.
   the file is deleted. Multi-node continues to delegate to KServe `workerSpec`
   per ADR-009; this ADR does not reintroduce a standalone `LeaderWorkerSet`.
 
-The normative contract is [`docs/engine-contract.md`](../engine-contract.md).
+The normative contract is [`docs/reference/engine-contract.md`](../reference/engine-contract.md).
 
 ## Consequences
 
@@ -81,7 +81,7 @@ The normative contract is [`docs/engine-contract.md`](../engine-contract.md).
 
 ## References
 
-- [Engine contract (CKC-ENG)](../engine-contract.md)
+- [Engine contract (CKC-ENG)](../reference/engine-contract.md)
 - [ADR-009: KServe 0.19 and llm-d integration boundary](009-kserve-019-and-llm-d-boundary.md)
 - [ADR-011: Canonical observability planes](011-canonical-observability-planes.md)
 - [llm-d v0.9.0](https://github.com/llm-d/llm-d/releases/tag/v0.9.0)

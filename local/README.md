@@ -62,5 +62,5 @@ directories into the operator image build.
 
 The local KIND path is sized for repo-native verification. For GLM-5.2 and
 Kimi K2.7 Code, use the static capacity planning notes in
-[`docs/model-capacity.md`](../docs/model-capacity.md) before attempting any
+[`docs/archive/model-capacity.md`](../docs/archive/model-capacity.md) before attempting any
 real cluster sizing work.

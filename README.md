@@ -2,13 +2,13 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/ckodex-labs/ckodex-kserve-llm)](https://goreportcard.com/report/github.com/ckodex-labs/ckodex-kserve-llm)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Documentation](https://img.shields.io/badge/docs-v0.20.0-brightgreen.svg)](docs/overview.md)
+[![Documentation](https://img.shields.io/badge/docs-v0.20.0-brightgreen.svg)](docs/README.md)
 [![Release](https://img.shields.io/badge/release-v0.20.0-blue.svg)](https://github.com/ckodex-labs/ckodex-kserve-llm/releases/tag/v0.20.0)
 [![Security Scorecard](https://img.shields.io/ossf-scorecard/github.com/ckodex-labs/ckodex-kserve-llm?label=scorecard&style=flat)](https://securityscorecards.dev/viewer/?uri=github.com/ckodex-labs/ckodex-kserve-llm)
 
 The CKodex KServe LLM Operator automates the deployment, routing, scaling, governance, and cryptographic attestation of large language models and multimodal foundation models on Kubernetes.
 
-For a comprehensive architectural breakdown, read [the big picture overview](docs/overview.md).
+For a step-by-step introduction, start with the [getting started tutorial](docs/tutorials/getting-started.md). For an architectural breakdown, read the [architecture overview](docs/explanation/overview.md). For complete documentation organized by the Diátaxis framework, visit the [documentation hub](docs/README.md).
 
 ## Core capabilities in release v0.20.0
 
@@ -178,21 +178,34 @@ go test -count=1 ./hack/public-release-contract/...
 
 ## Documentation index
 
-| Topic | Reference guide |
-|---|---|
-| Complete architecture | [docs/overview.md](docs/overview.md) |
-| Component catalog and ports | [COMPONENTS.md](COMPONENTS.md) |
-| Zero-trust security | [docs/SECURITY_ARCHITECTURE.md](docs/SECURITY_ARCHITECTURE.md) |
-| Disconnected air-gap operations | [docs/AIRGAP.md](docs/AIRGAP.md) |
-| Universal Tool Calling Protocol | [docs/utcp-integration-guide.md](docs/utcp-integration-guide.md) |
-| Operator v0.20.0 upgrade runbook | [docs/runbooks/v0.20.0-upgrade.md](docs/runbooks/v0.20.0-upgrade.md) |
-| UTCP tools operational runbook | [docs/runbooks/utcp-tools-operations.md](docs/runbooks/utcp-tools-operations.md) |
-| Multimodal inference runbook | [docs/runbooks/multimodal-inference.md](docs/runbooks/multimodal-inference.md) |
-| LMCache operational runbook | [docs/runbooks/lmcache.md](docs/runbooks/lmcache.md) |
-| Runtime engine contract | [docs/engine-contract.md](docs/engine-contract.md) |
-| Workload configuration defaults | [docs/operator-defaults.md](docs/operator-defaults.md) |
-| NIST SP 800-53 and OSCAL | [COMPLIANCE.md](COMPLIANCE.md) |
-| Agent coding guidelines | [AGENTS.md](AGENTS.md) |
+The full documentation suite is organized according to the [Diátaxis framework](https://diataxis.fr/) in the [documentation hub](docs/README.md).
+
+### 1. Tutorials (learning-oriented)
+- [Getting started with the operator](docs/tutorials/getting-started.md): End-to-end installation and first inference query in five minutes.
+
+### 2. How-to guides (task-oriented)
+- [Deploy a vLLM inference service](docs/how-to/deploy-vllm-service.md): Production vLLM v0.33.0 deployment with tensor parallelism.
+- [Deploy multimodal foundation models with OCR and SAM 3](docs/how-to/deploy-multimodal-ocr-sam3.md): Baidu Unlimited-OCR-2 and Meta SAM 3.
+- [Author and bind UTCP tools](docs/how-to/author-utcp-tools.md): Universal Tool Calling Protocol v1.0.1 manuals and agent bindings.
+- [Configure LMCache prefix caching](docs/how-to/configure-lmcache-prefix-caching.md): Shared-memory prefix caching with up to 85% TTFT reduction.
+- [Upgrade the operator to v0.20.0](docs/how-to/upgrade-to-v0.20.0.md): Zero-downtime rolling upgrade and CRD migration.
+- [Troubleshoot inference workload failures](docs/how-to/troubleshoot-workload-failures.md): Decision tree for CUDA OOM, 503 errors, and startup probes.
+- [Deploy the operator in an air-gapped environment](docs/how-to/airgap-deployment.md): Disconnected operation across Sovereignty Tiers 1 through 5.
+- [Recover from cluster and node failures](docs/how-to/disaster-recovery.md): Complete disaster recovery and PVC weight re-population.
+
+### 3. Reference (information-oriented)
+- [Custom resource definitions reference](docs/reference/crds.md): Complete specifications for LLMInferenceService, AIPack, MultimodalInferenceService, and Agent.
+- [Operator configuration defaults](docs/reference/operator-defaults.md): Environment variables, resources, flags, and diff normalization.
+- [Inference engine runtime contract](docs/reference/engine-contract.md): Total capability matrix and conformance tiers.
+- [Hardware accelerator profiles](docs/reference/accelerator-profiles.md): Profiles for NVIDIA, TPU v6e, Trainium 2, Gaudi 3, and Apple Silicon.
+- [CLI and YAML cheat sheet](docs/reference/cheat-sheet.md): Fast copy-paste commands and minimal manifests.
+- [API deprecation policy](docs/reference/api-deprecation-policy.md): Timeline, dual-serve window, and v1alpha2 to v1 migration rules.
+
+### 4. Explanation (understanding-oriented)
+- [Architecture and the Four Spaces](docs/explanation/overview.md): Pure kernel, shared validation, presentation, and proof.
+- [Security architecture and zero-trust governance](docs/explanation/security-architecture.md): Capability leases, SPIRE workload identity, and route fencing.
+- [Compliance as code with OSCAL and Lula](docs/explanation/compliance-oscal.md): Continuous NIST SP 800-53 Rev 5 control verification.
+- [Component catalog and data flows](docs/explanation/components.md): Deep architectural catalog and sequence diagrams.
 
 ## Project status and governance
 

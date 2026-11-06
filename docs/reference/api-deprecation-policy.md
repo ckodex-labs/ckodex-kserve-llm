@@ -1,4 +1,4 @@
-# API Deprecation Policy
+# API deprecation policy
 
 **Project:** CKodex KServe LLM Operator
 **Group:** `serving.ckodex.com`
@@ -6,7 +6,7 @@
 
 ---
 
-## Guiding Principle
+## Guiding principle
 
 API versions are deprecated only after a stable successor is GA and operators have had
 sufficient time to migrate. Deprecation is signalled in advance, enforced by a timeline,
@@ -14,7 +14,7 @@ and never silent.
 
 ---
 
-## Current API Version Status
+## Current API version status
 
 | API Version | Kind                    | Status            | Storage Version | Notes                          |
 |-------------|-------------------------|-------------------|-----------------|-------------------------------|
@@ -26,7 +26,7 @@ and never silent.
 
 ---
 
-## Deprecation Timeline
+## Deprecation timeline
 
 ```
 v1 GA   ─────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ after v1 reaches General Availability.
 
 ---
 
-## What Changes Between v1alpha2 and v1
+## What changes between v1alpha2 and v1
 
 | Field (v1alpha2)           | Field (v1)                            | Notes                              |
 |----------------------------|---------------------------------------|------------------------------------|
@@ -63,7 +63,7 @@ runtime guarantee and must not be used as beta acceptance evidence.
 
 ---
 
-## Migration Steps for Operators
+## Migration steps for operators
 
 ### 1. Update manifests
 
@@ -112,26 +112,26 @@ All `LLMInferenceService` entries should show `serving.ckodex.com/v1`.
 
 ### 4. Update Helm values (if chart-managed)
 
-No Helm values changes are required — the chart generates v1 manifests automatically
+No Helm values changes are required. The chart generates v1 manifests automatically
 after upgrading to the operator version that introduced v1.
 
 ---
 
-## Deprecation Warning
+## Deprecation warning
 
 The operator emits a startup warning when v1alpha2 resources are detected:
 
 ```
 DEPRECATION WARNING: v1alpha2 LLMInferenceService resources detected
-count=N action="Migrate to serving.ckodex.com/v1 before the v1alpha2 removal window"
+count=N action="Migrate to serving.ckodex.com/v1 before the v1alpha2 removal window. See docs/reference/api-deprecation-policy.md"
 ```
 
-This is **informational only** — the operator continues to reconcile v1alpha2 resources
+This is **informational only**. The operator continues to reconcile v1alpha2 resources
 normally during the supported window.
 
 ---
 
-## Policy for Future API Versions
+## Policy for future API versions
 
 1. **Alpha → Beta:** Promoted when the API is considered functional and test coverage ≥ 80%.
    May contain breaking changes between minor versions.
@@ -151,6 +151,6 @@ normally during the supported window.
 ## References
 
 - [Kubernetes API deprecation policy](https://kubernetes.io/docs/reference/using-api/deprecation-policy/)
-- `api/v1/conversion.go` — Hub marker for v1 (storage version)
-- `api/v1alpha2/conversion.go` — ConvertTo / ConvertFrom spoke implementation
-- `internal/webhook/conversion.go` — Compile-time interface assertions
+- `api/v1/conversion.go`: Hub marker for v1 (storage version)
+- `api/v1alpha2/conversion.go`: ConvertTo and ConvertFrom spoke implementation
+- `internal/webhook/conversion.go`: Compile-time interface assertions

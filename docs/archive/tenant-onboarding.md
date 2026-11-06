@@ -117,5 +117,5 @@ verify an actual SVID through the SPIFFE workload API.
 - optional compliance profiles pass startup validation;
 - an inference request succeeds using the tenant's authorized path.
 
-See [Security Architecture](SECURITY_ARCHITECTURE.md) for the control model and
+See [Security Architecture](../explanation/security-architecture.md) for the control model and
 [Model Onboarding](onboarding-guide.md) for workload creation.

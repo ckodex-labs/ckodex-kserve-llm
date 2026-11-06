@@ -84,19 +84,9 @@ The operator incorporates verifiable supply chain security across all release as
 ## Ingress security with Envoy Gateway 1.2.0
 
 Edge network communication is secured through Envoy Gateway 1.2.0:
-- **TLS termination**: Enforces TLS 1.3 with forward secrecy. Rejects outdated ciphers and SSL/TLS versions.
+- **TLS termination**: Enforces TLS 1.3 with forward secrecy. Outdated ciphers and legacy SSL/TLS protocols are rejected.
 - **Route fencing**: When a workload enters `SAFE_HOLD` or `QUARANTINED`, `internal/gateway/fence.go` modifies the corresponding `HTTPRoute` and `GRPCRoute` within 5 seconds, stripping all backend forwarders while retaining matching rules. This drops external traffic instantly without deleting customer routing objects.
 - **Mandatory security response headers**: HTTPRoute automatically injects `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`, while TLS, HSTS, and frame options are terminated at the edge Gateway layer.
-
-## Compliance as code: OSCAL and Lula
-
-Continuous compliance is verified against NIST SP 800-53 Rev 5:
-- **Component definitions**: `oscal/component-definition.yaml` maps operator controls to NIST controls (AC-4, AU-2, CA-7, IA-9, SC-7, SC-8, SI-4, SI-7, SR-2, SR-4).
-- **Live assessment tool**: `hack/oscal-assessment` evaluates cluster resources against declared control targets and outputs structured JSON observations.
-- **Lula verification**: CI pipelines validate machine-readable evidence using Lula:
-  ```bash
-  dagger call lula --source=. export --path=assessment-results.yaml
-  ```
 
 ## Vector state defensive posture
 
@@ -105,3 +95,9 @@ Defensive posture is tracked continuously as a 6D state vector:
 $$S(e,t) = \langle P, V, C, E, L, \tau \rangle$$
 
 When active exploitation, signature mismatch, or policy contradiction occurs, coherence immediately collapses from `COHERENT` to `DECOHERENT`. The reconciler fences network routes, transitions lifecycle to `QUARANTINED`, and records an immutable receipt in the RFC 9162 Merkle flight recorder for post-incident audit.
+
+## Next steps
+
+- [Understand compliance as code with OSCAL](compliance-oscal.md)
+- [Inspect the component catalog and data flows](components.md)
+- [Review air-gapped deployment procedures](../how-to/airgap-deployment.md)

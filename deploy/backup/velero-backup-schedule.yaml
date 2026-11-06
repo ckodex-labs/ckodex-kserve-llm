@@ -10,7 +10,7 @@
 #   velero backup get --selector velero.io/backup-name=ckodex-daily-<timestamp>
 #   velero schedule describe ckodex-daily
 #
-# Restore procedure: see docs/dr-runbook.md
+# Restore procedure: see docs/how-to/disaster-recovery.md
 ---
 apiVersion: velero.io/v1
 kind: Schedule

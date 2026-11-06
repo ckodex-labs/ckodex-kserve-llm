@@ -346,8 +346,8 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
   renders each registered engine's declared arguments and rejects unsupported
   fields before reconciliation. Live metrics, receipts, GPU health, and higher
   conformance tiers remain acceptance work.
-- **Reference:** [ADR-010](adr/010-runtime-engine-contract.md),
-  [engine-contract.md](engine-contract.md)
+- **Reference:** [ADR-010](../adr/010-runtime-engine-contract.md),
+  [engine-contract.md](../reference/engine-contract.md)
 
 ### L-RT-002 — Remove the unreferenced LWS reconciler
 
@@ -379,7 +379,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
   registry entry, and bidirectional schema/runtime tests. Live SGLang
   readiness, metrics, GPU inference, and EndpointPicker behavior remain open;
   llama.cpp and TensorRT-LLM remain unadmitted until their contracts resolve.
-- **Reference:** [engine-contract.md](engine-contract.md)
+- **Reference:** [engine-contract.md](../reference/engine-contract.md)
 
 ## Observability and evidence
 
@@ -392,7 +392,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
   optional OTLP/HTTP audit-log exporter now batches records with explicit
   endpoint validation, flush, shutdown, and export-error logging. Profile-
   specific graded failure semantics remain open.
-- **Reference:** [ADR-011](adr/011-canonical-observability-planes.md) item 4.10, `docs/evidence/audit-otlp-2026-08-27.md`
+- **Reference:** [ADR-011](../adr/011-canonical-observability-planes.md) item 4.10, `docs/evidence/audit-otlp-2026-08-27.md`
 
 ### L-OBS-002 — No integrity primitives on the evidence path
 
@@ -401,7 +401,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Context:** There is no signature, hash chain, sequence number, or Merkle
   commitment anywhere on the audit path. Producer identity is nearly free —
   SPIRE already issues workload SVIDs.
-- **Reference:** [ADR-011](adr/011-canonical-observability-planes.md) item 4.5
+- **Reference:** [ADR-011](../adr/011-canonical-observability-planes.md) item 4.5
 
 ### L-OBS-003 — Receipt types are content-bearing
 
@@ -431,7 +431,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
   missing, unexpected, duplicate, unsigned, and out-of-sequence receipts. It is
   not yet wired to the runtime evidence plane and does not model broken causal
   edges.
-- **Reference:** [ADR-011](adr/011-canonical-observability-planes.md) item 4.9
+- **Reference:** [ADR-011](../adr/011-canonical-observability-planes.md) item 4.9
 
 ## Admission
 
@@ -450,7 +450,7 @@ Priority: `P0` (release-blocking) | `P1` (GA-quality) | `P2` (improvement) | `P3
 - **Context:** Reaching a terminal onboarding phase changes status but does not
   gate serving. Blocked on L-RT-001 for the capability hook and L-PACK-001 for
   the provenance hook.
-- **Reference:** [ADR-012](adr/012-model-admission-planes.md)
+- **Reference:** [ADR-012](../adr/012-model-admission-planes.md)
 
 ## AIPack
 

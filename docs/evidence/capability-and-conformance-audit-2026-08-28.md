@@ -21,7 +21,7 @@ bidirectional” would be false.
 The engine contract itself is explicitly classified `S`; it says the vLLM and
 SGLang adapters implement only tier-1 subsets and that image, metrics, receipt,
 health, workload extraction, and higher-tier work remain open. See
-[`docs/engine-contract.md`](../engine-contract.md).
+[`docs/reference/engine-contract.md`](../reference/engine-contract.md).
 
 ## What was actually tested bidirectionally
 
@@ -63,11 +63,11 @@ absent.
 
 The operator's own status code says that a configured KV connector is not
 evidence of cache hits and requires live validation. See
-[`internal/controller/status/reconciler.go`](../../internal/controller/status/reconciler.go:139).
+[`internal/controller/status/reconciler.go`](../../internal/controller/status/reconciler.go#L139).
 The beta plan also explicitly excludes automated promotion, LMCache
 performance, cryptographic verification, and unsupported specialized runtime
 claims until acceptance evidence exists. See
-[`docs/beta/plan.md`](../beta/plan.md:14).
+[`docs/beta/plan.md`](../beta/plan.md#L14).
 
 ## Current official upstream boundary
 

@@ -1,4 +1,4 @@
-# Product overview and architecture
+# Architecture and the four spaces
 
 The CKodex KServe LLM Operator coordinates the deployment, routing, scaling, identity, and cryptographic attestation of large language models and multimodal foundation models on Kubernetes.
 
@@ -130,53 +130,8 @@ $$S(e,t) = \langle P, V, C, E, L, \tau \rangle$$
 
 When an anti-invariant occurs (such as an admitted digest mismatching a running container digest), coherence transitions to `DECOHERENT`. The system initiates safe hold or quarantine immediately.
 
-## Release v0.20.0 capabilities
+## Next steps
 
-### vLLM v0.33.0 runtime engine
-The default runtime is pinned to `vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e`.
-- CUDA 13.0 with PyTorch 2.14.0.
-- V1 engine core architecture with chunked prefill.
-- Native architecture support for Kimi-K3 (Kimi Delta Attention / KDA, Gated-DSA, and MoE block sparse routing).
-- Ray 2.45.1 clustering for multinode distributed execution.
-- FP8 and NVFP4 key-value cache datatypes.
-
-### Universal Tool Calling Protocol (UTCP v1.0.1)
-Pure Go domain implementation in `internal/utcp/`.
-- Enables agents to discover and invoke tools over native HTTP, gRPC, and CLI transports without proxy middleware.
-- Declared via `Agent` (`spec.utcpManuals`) and `AIPack` (`kind: UTCPManual`).
-- Provides bidirectional conversion between UTCP manuals, OpenAI tool formats, and Model Context Protocol (MCP) schemas.
-
-### Multimodal foundation models
-Specialized tasks in `MultimodalInferenceService` (`serving.ckodex.com/v1alpha2`):
-- **Baidu Unlimited-OCR-2** (`task: ocr`): Multi-page document OCR and structured parsing using Sparse Reference Sliding Window Attention (SR-SWA).
-- **Meta SAM 3** (`task: segmentation`): Segment Anything Model 3 for promptable concept segmentation masks and visual object tracking.
-
-### LMCache v0.5.6 prefix caching
-High-performance key-value caching fabric:
-- Multiprocess shared memory KV transfer over CUDA IPC and peer-to-peer (P2P) interconnects.
-- Reduces time-to-first-token (TTFT) by up to 85% for shared prompt prefixes.
-
-### Envoy Gateway 1.2.0 integration
-Gateway API integration providing:
-- TLS termination at cluster ingress.
-- Route fencing to sever traffic from compromised or quarantined workloads within 5 seconds.
-- Hardened response headers: HTTPRoute automatically injects `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`, while TLS, HSTS, and frame options are terminated at the edge Gateway layer.
-
-### Reconciler diff normalization (`L-OP-018`)
-Reconciles container fields (`command`, `workingDir`, `ports`, `securityContext`, `probes`, `lifecycle`) and pod fields (`podSecurityContext`, `nodeSelector`, `tolerations`, `topologySpreadConstraints`, `serviceAccountName`) with Kubernetes API server default normalization in `internal/controller/reconciler/diff.go`.
-
-### Consolidated Helm charts (`L-OP-013`)
-The canonical Helm chart resides in `deploy/helm`. Byte parity with `charts/ckodex-kserve-llm-operator` is enforced by `hack/helm-contract` in continuous integration.
-
-## Custom resource map
-
-| Need | Resource | API version |
-|---|---|---|
-| Serve LLM or chat completions | `LLMInferenceService` | `serving.ckodex.com/v1` |
-| Package models, adapters, and tool manuals | `AIPack` | `serving.ckodex.com/v1alpha2` |
-| Deploy OCR or segmentation foundation models | `MultimodalInferenceService` | `serving.ckodex.com/v1alpha2` |
-| Pre-stage weights across cluster nodes | `LocalModelCache` | `serving.ckodex.com/v1alpha2` |
-| Attach LoRA adapters to running services | `LLMLoraAdapter` | `serving.ckodex.com/v1` |
-| Configure autonomous agents and tool manuals | `Agent` | `serving.ckodex.com/v1alpha2` |
-| Catalog reusable agent skills | `SkillRegistry` | `serving.ckodex.com/v1alpha2` |
-| Enforce hardware and engine presets | `ModelServingProfile` | `serving.ckodex.com/v1alpha2` |
+- [Understand security architecture and zero-trust governance](security-architecture.md)
+- [Explore the component catalog and data flows](components.md)
+- [Learn compliance as code with OSCAL](compliance-oscal.md)

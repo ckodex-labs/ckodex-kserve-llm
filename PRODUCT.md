@@ -44,9 +44,9 @@ The product keeps platform policy and evidence in the Kubernetes reconciliation 
 
 ## Evidence on Hand
 
-- Product behavior and boundaries: `docs/overview.md`.
+- Product behavior and boundaries: `docs/explanation/overview.md`.
 - Runtime state adapters: `console/src/lib/kserve.ts` and `console/src/lib/audit.server.ts`.
-- CI and release evidence: `docs/ci/current-state.md`, `docs/release-verification.md`, and tag-driven release artifacts.
+- CI and release evidence: `docs/ci/current-state.md`, `docs/archive/release-verification.md`, and tag-driven release artifacts.
 - No customer testimonials, performance benchmarks, production availability guarantee, or public console image is established by this record.
 
 ## Product Principles

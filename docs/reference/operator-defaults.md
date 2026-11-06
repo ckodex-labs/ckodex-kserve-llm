@@ -1,8 +1,8 @@
-# Operator workload defaults
+# Operator configuration defaults
 
 The CKodex KServe LLM Operator reads default runtime and resource configurations from environment variables at startup. Helm values in both `deploy/helm` and `charts/ckodex-kserve-llm-operator` configure these variables.
 
-Modifying operator defaults requires rolling the operator Deployment. Explicit per-service settings in custom resource manifests always supersede operator defaults.
+Modifying operator defaults requires restarting the operator Deployment. Explicit per-service settings in custom resource manifests supersede operator defaults.
 
 ## Environment variables and default pins
 
@@ -24,7 +24,7 @@ Modifying operator defaults requires rolling the operator Deployment. Explicit p
 
 | Subsystem | Supported baseline | Notes |
 |---|---|---|
-| **Kubernetes** | `1.30` through `1.32+` | Tested on Kind `v1.35.8` / Kubernetes 1.32 |
+| **Kubernetes** | `1.30` through `1.32+` | Tested on Kind `v1.35.8` and Kubernetes 1.32 |
 | **Inference engine** | vLLM `v0.33.0` | CUDA 13.0 only (CUDA 12.9 dropped) |
 | **Clustering runtime** | Ray `2.45.1` | Used for multinode tensor and pipeline parallel execution |
 | **Ingress gateway** | Envoy Gateway `1.2.0` | Supports HTTPRoute and GRPCRoute with route fencing |
@@ -32,10 +32,11 @@ Modifying operator defaults requires rolling the operator Deployment. Explicit p
 | **Prefix cache** | LMCache `v0.5.6` | In-process connector and multiprocess shared memory KV fabric |
 | **Workload identity** | SPIRE `v1.15.4` | Node-local SPIFFE Workload API and automated SVID issuance |
 
-## Reconciler field diff normalization (`L-OP-018`)
+## Reconciler field diff normalization
 
 The reconciler diff engine in `internal/controller/reconciler/diff.go` normalizes Kubernetes API server defaults to avoid spurious reconciliation updates:
-- **Container image pull policy**: Automatically defaults omitted pull policies according to API server conventions (`PullAlways` for `:latest` tags, `PullIfNotPresent` for digest-pinned images).
+
+- **Container image pull policy**: Defaults omitted pull policies according to API server conventions (`PullAlways` for `:latest` tags, `PullIfNotPresent` for digest-pinned images).
 - **Environment variables**: Evaluates environment variable slices as order-insensitive sets (`EnvsEqual`).
 - **Container commands and arguments**: Normalizes command slices and validates long-option parameter syntax.
 - **Security contexts and probes**: Compares container and pod security contexts and probes using semantic equality rather than raw pointer comparisons.
